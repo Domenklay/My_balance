@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#216b58"><title>Мой баланс</title>
+<style>
+:root{font-family:system-ui,-apple-system,Arial,sans-serif;color:#18372f;background:#f4f8f5}*{box-sizing:border-box}body{margin:0}header{background:#216b58;color:white;padding:22px 18px}main{max-width:750px;margin:auto;padding:16px;padding-bottom:90px}h1{margin:0;font-size:26px}h2{font-size:19px;margin:0 0 14px}.sub{opacity:.85;font-size:14px}.card{background:white;border:1px solid #dcebe3;border-radius:18px;padding:18px;margin-bottom:14px;box-shadow:0 2px 10px #153b2a08}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stat{background:#f0f7f3;border-radius:12px;padding:12px}.stat b{display:block;font-size:22px}.muted{color:#60796c;font-size:13px}button,input,select{font:inherit}input,select{width:100%;padding:11px;border:1px solid #c6d9ce;border-radius:10px;background:white}label{display:block;margin:10px 0 5px;font-weight:600;font-size:13px}button{border:0;border-radius:10px;background:#216b58;color:white;padding:12px 16px;font-weight:600;cursor:pointer}button.secondary{background:#edf4ef;color:#235c49}button.danger{background:#fff1ef;color:#9c322b}.actions{display:flex;gap:8px;flex-wrap:wrap}.item{display:flex;gap:10px;align-items:center;justify-content:space-between;border-bottom:1px solid #edf1ee;padding:10px 0}.item:last-child{border:0}.progress{height:12px;border-radius:20px;background:#e6ede8;overflow:hidden;margin:12px 0}.progress>div{height:100%;background:#54a888;transition:width .2s}.tabs{display:flex;gap:6px;overflow-x:auto;margin:0 0 16px}.tabs button{white-space:nowrap;background:#e4eee7;color:#34634d}.tabs button.active{background:#216b58;color:white}.hidden{display:none}.tiny{font-size:12px}.alert{background:#f7f1da;padding:12px;border-radius:12px;color:#6e5318}footer{font-size:12px;text-align:center;color:#668173;padding:20px}input[type=file]{max-width:100%}@media(max-width:450px){main{padding:10px}.card{padding:14px}header{padding:18px 14px}.grid{gap:8px}} 
+</style></head>
+<body><header><h1>🌿 Мой баланс</h1><div class="sub">Дневник питания без строгих запретов</div></header>
+<main>
+<div class="tabs"><button data-tab="diary" class="active">Сегодня</button><button data-tab="foods">Продукты</button><button data-tab="weight">Вес</button><button data-tab="settings">Настройки</button></div>
+<section id="diary">
+<div class="card"><h2>Дневной баланс</h2><label for="date">Дата</label><input id="date" type="date"><div class="progress"><div id="bar"></div></div><div class="grid"><div class="stat"><span class="muted">Съедено</span><b id="eaten">0</b><span class="muted">ккал</span></div><div class="stat"><span class="muted">Осталось</span><b id="remaining">1800</b><span class="muted">ккал</span></div><div class="stat"><span class="muted">Белки</span><b id="protein">0 г</b></div><div class="stat"><span class="muted">Жиры / углеводы</span><b id="fatcarbs">0 / 0</b></div></div><p class="muted">Вечером можно оставить место для полноценного ужина и любимого сладкого.</p></div>
+<div class="card"><h2>Добавить еду</h2><form id="entryForm"><label for="product">Продукт</label><select id="product" required></select><div class="grid"><div><label for="grams">Порция, г</label><input id="grams" type="number" min="1" max="5000" value="100" required></div><div><label for="meal">Приём пищи</label><select id="meal"><option>Завтрак</option><option>Обед</option><option>Перекус</option><option>Ужин</option></select></div></div><p id="preview" class="muted"></p><button type="submit">Добавить в дневник</button></form></div>
+<div class="card"><h2>Записи за день</h2><div id="entries"></div></div>
+</section>
+<section id="foods" class="hidden">
+<div class="card"><h2>Мои продукты</h2><p class="muted">Пищевая ценность на 100 г. Проверяй значения на упаковке: у разных марок они отличаются.</p><form id="foodForm"><label for="foodName">Название</label><input id="foodName" required maxlength="80" placeholder="Например, любимое печенье"><div class="grid"><div><label>Ккал</label><input id="foodKcal" type="number" min="0" max="1000" step=".1" required></div><div><label>Белки, г</label><input id="foodP" type="number" min="0" max="100" step=".1" required></div><div><label>Жиры, г</label><input id="foodF" type="number" min="0" max="100" step=".1" required></div><div><label>Углеводы, г</label><input id="foodC" type="number" min="0" max="100" step=".1" required></div></div><p><button type="submit">Сохранить продукт</button></p></form></div><div class="card"><h2>Каталог</h2><div id="foodList"></div></div>
+</section>
+<section id="weight" class="hidden">
+<div class="card"><h2>История веса</h2><div class="grid"><div class="stat"><span class="muted">Старт</span><b id="startWeight">88 кг</b></div><div class="stat"><span class="muted">Цель</span><b id="goalWeight">65 кг</b></div></div><form id="weightForm"><label for="weightDate">Дата</label><input id="weightDate" type="date" required><label for="weightValue">Вес, кг</label><input id="weightValue" type="number" min="20" max="400" step=".1" required placeholder="88.0"><p><button type="submit">Записать вес</button></p></form></div><div class="card"><h2>Измерения</h2><div id="weights"></div></div>
+</section>
+<section id="settings" class="hidden">
+<div class="card"><h2>Личные настройки</h2><form id="settingsForm"><label for="targetKcal">Калорий в день</label><input id="targetKcal" type="number" min="1000" max="5000" required><div class="grid"><div><label for="initialWeight">Начальный вес, кг</label><input id="initialWeight" type="number" min="20" max="400" step=".1" required></div><div><label for="targetWeight">Целевой вес, кг</label><input id="targetWeight" type="number" min="20" max="400" step=".1" required></div></div><p><button type="submit">Сохранить</button></p></form></div>
+<div class="card"><h2>Резервная копия</h2><div class="actions"><button id="export" type="button">Скачать данные JSON</button><label class="secondary" style="margin:0">Восстановить<input id="import" type="file" accept="application/json,.json"></label></div><p class="alert tiny">Данные хранятся только в браузере на этом устройстве. При очистке данных браузера записи могут исчезнуть. Регулярно скачивай резервную копию.</p></div>
+</section>
+<footer>Это инструмент самоконтроля, а не медицинская рекомендация. Калории и БЖУ продуктов ориентировочные.</footer>
+</main>
+<script>
+"use strict";
+const defaults=[
+["Овсяные хлопья (сухие)",370,13,7,62],["Молоко 2%",50,3.2,2,4.8],["Банан",89,1.1,.3,23],["Яблоко",52,.3,.2,14],["Ягоды",45,.8,.3,10],["Огурцы",15,.7,.1,3.6],["Помидоры",18,.9,.2,3.9],["Овощная смесь",35,2,0.5,6],["Картофель варёный",82,2,.1,19],["Гречка варёная",110,4,1,21],["Рис варёный",130,2.7,.3,28],["Макароны варёные",155,5.8,.9,31],["Куриная грудка готовая",165,31,3.6,0],["Индейка готовая",150,29,3.5,0],["Треска готовая",105,23,.9,0],["Лосось готовый",206,22,12,0],["Яйцо",143,13,10,1],["Творог 5%",121,17,5,2],["Скир натуральный",62,11,.2,4],["Йогурт 2%",65,5,2,6],["Цельнозерновой хлеб",235,9,3.5,43],["Оливковое масло",884,0,100,0],["Молочный шоколад",535,7,30,59],["Печенье",460,6,18,68],["Сладкая булочка",340,7,11,54],["Шоколадные конфеты",500,6,28,59]
+].map((f,i)=>({id:"d"+i,name:f[0],kcal:f[1],p:f[2],f:f[3],c:f[4],builtin:true}));
+const KEY="my_balance_v1";
+const blank=()=>({settings:{kcal:1800,start:88,goal:65},foods:[],entries:[],weights:[]});
+let db;
+try{db=Object.assign(blank(),JSON.parse(localStorage.getItem(KEY)||"{}"));if(!Array.isArray(db.foods)||!Array.isArray(db.entries)||!Array.isArray(db.weights))throw Error("bad")}catch{db=blank()}
+const el=id=>document.getElementById(id);
+const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
+el("date").value=today();el("weightDate").value=today();
+function save(){try{localStorage.setItem(KEY,JSON.stringify(db))}catch{alert("Не удалось сохранить. Экспортируй резервную копию.")}}
+function foods(){return [...defaults,...db.foods]}
+function round(x){return Math.round(x*10)/10}
+function calc(food,grams){return [food.kcal,food.p,food.f,food.c].map(v=>v*grams/100)}
+function safe(s){return String(s).replace(/[&<>"']/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[x]))}
+function foodById(id){return foods().find(f=>f.id===id)}
+function renderFoods(){
+const old=el("product").value;
+el("product").innerHTML=foods().map(f=>'<option value="'+safe(f.id)+'">'+safe(f.name)+'</option>').join("");
+if(foodById(old))el("product").value=old;
+el("foodList").innerHTML=foods().map(f=>'<div class="item"><div><b>'+safe(f.name)+'</b><div class="muted">'+f.kcal+' ккал · Б '+f.p+' · Ж '+f.f+' · У '+f.c+' /100 г</div></div>'+(f.builtin?"":'<button class="danger" data-delete-food="'+safe(f.id)+'">Удалить</button>')+'</div>').join("");
+preview()
+}
+function preview(){const f=foodById(el("product").value);const g=Number(el("grams").value);el("preview").textContent=f&&g>0?"Порция: "+Math.round(f.kcal*g/100)+" ккал":""}
+function renderDiary(){
+let date=el("date").value;let rows=db.entries.filter(e=>e.date===date);
+let sum=[0,0,0,0];for(const e of rows){const f=foodById(e.food);if(!f)continue;const vals=calc(f,e.grams);vals.forEach((v,i)=>sum[i]+=v)}
+el("eaten").textContent=Math.round(sum[0]);el("remaining").textContent=Math.round(db.settings.kcal-sum[0]);el("protein").textContent=Math.round(sum[1])+" г";el("fatcarbs").textContent=Math.round(sum[2])+" / "+Math.round(sum[3])+" г";el("bar").style.width=Math.min(100,sum[0]/db.settings.kcal*100)+"%";
+el("entries").innerHTML=rows.length?["Завтрак","Обед","Перекус","Ужин"].map(meal=>{let group=rows.filter(r=>r.meal===meal);return group.length?'<h3>'+meal+'</h3>'+group.map(r=>{let f=foodById(r.food);if(!f)return "";return '<div class="item"><div><b>'+safe(f.name)+'</b><div class="muted">'+r.grams+' г · '+Math.round(f.kcal*r.grams/100)+' ккал</div></div><button class="danger" data-del-entry="'+safe(r.id)+'">×</button></div>'}).join(""):""}).join(""):'<p class="muted">Пока нет записей. Добавь первый продукт.</p>'
+}
+function renderWeights(){el("startWeight").textContent=db.settings.start+" кг";el("goalWeight").textContent=db.settings.goal+" кг";el("weights").innerHTML=db.weights.length?db.weights.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(r=>'<div class="item"><span>'+safe(r.date)+' — <b>'+round(r.value)+' кг</b></span><button class="danger" data-del-weight="'+safe(r.id)+'">×</button></div>').join(""):'<p class="muted">Нет записей веса.</p>'}
+function renderSettings(){el("targetKcal").value=db.settings.kcal;el("initialWeight").value=db.settings.start;el("targetWeight").value=db.settings.goal}
+function render(){renderFoods();renderDiary();renderWeights();renderSettings()}
+document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-tab]").forEach(t=>t.classList.toggle("active",t===b));document.querySelectorAll("main section").forEach(s=>s.classList.toggle("hidden",s.id!==b.dataset.tab))});
+el("date").onchange=renderDiary;el("product").onchange=preview;el("grams").oninput=preview;
+el("entryForm").onsubmit=e=>{e.preventDefault();let g=Number(el("grams").value);if(!Number.isFinite(g)||g<=0||g>5000)return;db.entries.push({id:String(Date.now())+Math.random().toString(36).slice(2),date:el("date").value,food:el("product").value,grams:g,meal:el("meal").value});save();renderDiary()};
+el("foodForm").onsubmit=e=>{e.preventDefault();let name=el("foodName").value.trim();let nums=["foodKcal","foodP","foodF","foodC"].map(x=>Number(el(x).value));if(!name||nums.some(x=>!Number.isFinite(x)||x<0)||nums[0]>1000||nums.slice(1).some(x=>x>100))return alert("Проверь значения на 100 г");db.foods.push({id:"u"+Date.now()+Math.random().toString(36).slice(2),name,kcal:nums[0],p:nums[1],f:nums[2],c:nums[3]});save();el("foodForm").reset();renderFoods()};
+el("foodList").onclick=e=>{let id=e.target.dataset.deleteFood;if(!id)return;if(db.entries.some(x=>x.food===id))return alert("Продукт используется в дневнике. Сначала удали связанные записи.");db.foods=db.foods.filter(f=>f.id!==id);save();renderFoods()};
+el("entries").onclick=e=>{let id=e.target.dataset.delEntry;if(!id)return;db.entries=db.entries.filter(x=>x.id!==id);save();renderDiary()};
+el("weightForm").onsubmit=e=>{e.preventDefault();let d=el("weightDate").value,v=Number(el("weightValue").value);if(!(v>=20&&v<=400))return;db.weights=db.weights.filter(x=>x.date!==d);db.weights.push({date:d,value:v,id:"w"+d});save();renderWeights();el("weightValue").value=""};
+el("weights").onclick=e=>{let id=e.target.dataset.delWeight;if(!id)return;db.weights=db.weights.filter(x=>x.id!==id);save();renderWeights()};
+el("settingsForm").onsubmit=e=>{e.preventDefault();db.settings={kcal:Number(el("targetKcal").value),start:Number(el("initialWeight").value),goal:Number(el("targetWeight").value)};if(db.settings.kcal<1000||db.settings.kcal>5000||db.settings.start<20||db.settings.goal<20)return;save();render()};
+el("export").onclick=()=>{let blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="moy-balans-"+today()+".json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+el("import").onchange=async e=>{let file=e.target.files[0];if(!file)return;try{let obj=JSON.parse(await file.text());if(!obj.settings||!Array.isArray(obj.foods)||!Array.isArray(obj.entries)||!Array.isArray(obj.weights))throw Error();if(!confirm("Заменить текущие данные данными из резервной копии?"))return;db=obj;save();render()}catch{alert("Некорректный файл резервной копии.")}e.target.value=""};
+render();
+</script></body></html>
