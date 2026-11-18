@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'app/**'
+      - 'index.html'
       - 'build.gradle'
       - 'settings.gradle'
       - 'gradle.properties'
@@ -34,6 +35,14 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Sync latest offline diary
+        run: |
+          mkdir -p app/src/main/assets
+          cp index.html app/src/main/assets/index.html
+      - name: Validate offline asset
+        run: |
+          test -s app/src/main/assets/index.html
+          grep -q 'id="diary"' app/src/main/assets/index.html
       - name: Build debug APK
         run: gradle --no-daemon :app:assembleDebug
       - name: Upload installable APK
