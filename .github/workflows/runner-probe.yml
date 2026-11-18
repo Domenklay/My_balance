@@ -1,0 +1,20 @@
+name: Runner probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/runner-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runner-check:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check runner
+        run: |
+          echo "Runner started"
+          uname -a
