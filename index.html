@@ -10,7 +10,7 @@
 <div class="card"><h2>Мой день</h2><label for="date">Дата</label><input id="date" type="date"><div id="calendarControls" style="display:flex;justify-content:space-between;align-items:center;margin:12px 0"><button type="button" class="secondary" id="prevMonth">‹</button><b id="monthName"></b><button type="button" class="secondary" id="nextMonth">›</button></div><div id="calendar" style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px"></div><div class="progress"><div id="bar"></div></div><div class="grid"><div class="stat"><span class="muted">Съедено</span><b id="eaten">0</b><span class="muted">ккал</span></div><div class="stat"><span class="muted">Осталось</span><b id="remaining">1800</b><span class="muted">ккал</span></div><div class="stat"><span class="muted">Белки</span><b id="protein">0 г</b></div><div class="stat"><span class="muted">Жиры / углеводы</span><b id="fatcarbs">0 / 0</b></div></div><p class="muted">Вечером можно оставить место для полноценного ужина и любимого сладкого.</p></div>
 <div class="card"><h2>Добавить еду</h2><form id="entryForm"><label for="product">Продукт</label><select id="product" required></select><div class="grid"><div><label for="grams">Порция, г</label><input id="grams" type="number" min="1" max="5000" value="100" required></div><div><label for="meal">Приём пищи</label><select id="meal"><option>Завтрак</option><option>Обед</option><option>Перекус</option><option>Ужин</option></select></div></div><p id="preview" class="muted"></p><button type="submit">Добавить в дневник</button></form></div>
 <div class="card"><h2>Движение за день</h2><div class="grid"><div class="stat"><span class="muted">Прогулка</span><b id="todayWalking">0 мин</b></div><div class="stat"><span class="muted">Тренировки</span><b id="todayExercise">0 мин</b></div></div><p class="muted" id="todayActivityText">Добавь прогулку или тренировку на вкладке «Активность».</p><button class="secondary" type="button" id="openActivity">Записать активность</button></div>
-<div class="card"><h2>Записи за день</h2><div id="entries"></div></div>
+<div class="card"><h2>Записи за день</h2><div id="quickRepeat"></div><div id="entries"></div></div>
 <div class="card"><h2>Самочувствие и голод</h2><label for="dayNotes">Как прошёл день? Был ли голод после работы?</label><textarea id="dayNotes" rows="3" maxlength="1000" placeholder="Например: вечером очень хотелось есть, помог сытный ужин"></textarea><p><button class="secondary" id="saveNotes" type="button">Сохранить заметку</button></p></div>
 </section>
 <section id="foods" class="hidden">
@@ -90,10 +90,20 @@ el("todayWalking").textContent=walk+" мин";el("todayExercise").textContent=ex
 el("todayActivityText").textContent=rows.length?rows.length+" записей активности за день":"Добавь прогулку или тренировку на вкладке «Активность».";
 if(document.activeElement!==el("dayNotes"))el("dayNotes").value=db.notes[d]||"";
 }
+function renderQuickRepeat(){
+const last=[...db.entries].reverse().find(e=>e.date!==el("date").value&&(e.nutrition||foodById(e.food)));
+if(!last){el("quickRepeat").innerHTML="";return}
+const f=last.nutrition||foodById(last.food);
+el("quickRepeat").innerHTML='<p class="muted">Быстрый повтор:</p><button type="button" class="secondary" id="repeatFood">+ '+safe(f.name)+' ('+last.grams+' г)</button>';
+el("repeatFood").onclick=()=>{
+db.entries.push({id:"e"+Date.now()+Math.random().toString(36).slice(2),date:el("date").value,food:last.food,grams:last.grams,meal:last.meal,nutrition:{name:f.name,kcal:f.kcal,p:f.p,f:f.f,c:f.c}});
+save();renderDiary();renderCalendar()
+};
+}
 function renderDiary(){
 let date=el("date").value;let rows=db.entries.filter(e=>e.date===date);
 let sum=[0,0,0,0];for(const e of rows){const f=e.nutrition||foodById(e.food);if(!f)continue;const vals=calc(f,e.grams);vals.forEach((v,i)=>sum[i]+=v)}
-el("eaten").textContent=Math.round(sum[0]);el("remaining").textContent=Math.round(db.settings.kcal-sum[0]);el("protein").textContent=Math.round(sum[1])+" г";el("fatcarbs").textContent=Math.round(sum[2])+" / "+Math.round(sum[3])+" г";el("bar").style.width=Math.min(100,sum[0]/db.settings.kcal*100)+"%";renderDailyActivity();
+el("eaten").textContent=Math.round(sum[0]);el("remaining").textContent=Math.round(db.settings.kcal-sum[0]);el("protein").textContent=Math.round(sum[1])+" г";el("fatcarbs").textContent=Math.round(sum[2])+" / "+Math.round(sum[3])+" г";el("bar").style.width=Math.min(100,sum[0]/db.settings.kcal*100)+"%";renderDailyActivity();renderQuickRepeat();
 el("entries").innerHTML=rows.length?["Завтрак","Обед","Перекус","Ужин"].map(meal=>{let group=rows.filter(r=>r.meal===meal);return group.length?'<h3>'+meal+'</h3>'+group.map(r=>{let f=r.nutrition||foodById(r.food);if(!f)return "";return '<div class="item"><div><b>'+safe(f.name)+'</b><div class="muted">'+r.grams+' г · '+Math.round(f.kcal*r.grams/100)+' ккал</div></div><button class="danger" data-edit-entry="'+safe(r.id)+'">✎</button><button class="danger" data-del-entry="'+safe(r.id)+'">×</button></div>'}).join(""):""}).join(""):'<p class="muted">Пока нет записей. Добавь первый продукт.</p>'
 }
 function renderWeights(){el("startWeight").textContent=db.settings.start+" кг";el("goalWeight").textContent=db.settings.goal+" кг";el("weights").innerHTML=db.weights.length?db.weights.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(r=>'<div class="item"><span>'+safe(r.date)+' — <b>'+round(r.value)+' кг</b></span><button class="danger" data-del-weight="'+safe(r.id)+'">×</button></div>').join(""):'<p class="muted">Нет записей веса.</p>'}
