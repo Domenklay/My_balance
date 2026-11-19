@@ -77,6 +77,12 @@ jobs:
         run: |
           set -euo pipefail
           /tmp/godot --headless --editor --path godot --install-android-build-template --quit
+          echo "=== Android source template archive ==="
+          unzip -Z1 "$HOME/.local/share/godot/export_templates/4.6.3.stable/android_source.zip" | sed -n '1,55p'
+          echo "=== Project after template setup ==="
+          find godot/android -maxdepth 4 -type f | sed -n '1,55p' || true
+          echo "=== Root Android directories ==="
+          find . -maxdepth 4 -name build.gradle -o -name AndroidManifest.xml | sed -n '1,55p' || true
           python3 android_scanner/patch_template.py
           find godot/android/build -maxdepth 2 -type f | head -50
       - name: Validate project scripts and import resources
