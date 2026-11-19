@@ -595,7 +595,7 @@ func _food_form(parent: VBoxContainer) -> void:
     var barcode_find = _button(barcode_controls, "Найти", func(): _lookup_barcode(barcode_input.text), true)
     barcode_find.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
     barcode_find.custom_minimum_size.x = 74
-    barcode_message = _label(barcode_panel, "Первый поиск требует интернет; найденные товары сохраняются.", 12, MUTED)
+    barcode_message = _label(barcode_panel, "Встроено " + str(store.bundled_foods.size()) + " товаров с кодами. Другие ищем через интернет.", 12, MUTED)
     parent.add_child(HSeparator.new())
     _label(parent, "Или найди в сохранённых продуктах", 16, GREEN)
     var filtered: Array = []
