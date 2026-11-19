@@ -983,6 +983,7 @@ func _show_recipe_editor() -> void:
     var cooked = _number(toolbar, float(recipe_draft.get("cooked_weight", 500)), 1, 50000, 1)
     _label(toolbar, "На сколько порций разделить", 13, MUTED)
     var portions = _number(toolbar, float(recipe_draft.get("servings", 4)), 1, 100, 1)
+    var preview: Label = null
     var info = _card("Ингредиенты", "tint")
     var parts: Array = recipe_draft.get("ingredients", [])
     if parts.is_empty():
@@ -1037,7 +1038,7 @@ func _show_recipe_editor() -> void:
         _render()
     )
     var preview_card = _card("Расчёт КБЖУ")
-    var preview = _label(preview_card, "", 14, INK)
+    preview = _label(preview_card, "", 14, INK)
     cooked.value_changed.connect(func(_value: float): _recipe_preview(preview, cooked, portions))
     portions.value_changed.connect(func(_value: float): _recipe_preview(preview, cooked, portions))
     _recipe_preview(preview, cooked, portions)
