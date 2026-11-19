@@ -75,5 +75,5 @@ func _draw() -> void:
     draw_string(font, Vector2(left, h - 11), _date_label(str(samples[0]["date"])),
         HORIZONTAL_ALIGNMENT_LEFT, 52, 12, MUTED)
     if count > 1:
-        draw_string(font, Vector2(right, h - 11), _date_label(str(samples[count - 1]["date"])),
+        draw_string(font, Vector2(right - 56, h - 11), _date_label(str(samples[count - 1]["date"])),
             HORIZONTAL_ALIGNMENT_RIGHT, 56, 12, MUTED)
