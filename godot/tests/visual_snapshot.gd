@@ -73,9 +73,14 @@ func _capture() -> void:
     app.store.data["notes"][app.date] = "Вечером захотелось сладкого после прогулки."
     app._render()
     await _snapshot(app, "02-day-filled-top")
+    app.food_form_expanded = true
+    app._render()
+    await process_frame
     if is_instance_valid(app.food_entry_card):
         app.scroll.ensure_control_visible(app.food_entry_card)
         await _snapshot(app, "03-food-entry-barcode")
+    app.food_form_expanded = false
+    app._render()
     app.scroll.scroll_vertical = 0
     app._show_barcode_portion(app.store.bundled_foods[0])
     await _snapshot(app, "05-barcode-result-dialog")
@@ -109,5 +114,9 @@ func _capture() -> void:
         app.tab = page
         app._render()
         await _snapshot(app, "04-"+page)
+    app.tab = "settings"
+    app.settings_page = "foods"
+    app._render()
+    await _snapshot(app, "08-own-products")
     app.queue_free()
     quit(0)
