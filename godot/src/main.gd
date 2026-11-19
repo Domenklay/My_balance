@@ -77,12 +77,18 @@ func _ready() -> void:
     scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
     scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+    scroll.scroll_deadzone = 12
+    scroll.follow_focus = true
+    scroll.mouse_filter = Control.MOUSE_FILTER_STOP
     shell.add_child(scroll)
     body = VBoxContainer.new()
     body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     body.add_theme_constant_override("separation", 12)
     var margins = MarginContainer.new()
     margins.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    margins.mouse_filter = Control.MOUSE_FILTER_PASS
+    body.mouse_filter = Control.MOUSE_FILTER_PASS
     margins.add_theme_constant_override("margin_left", 12)
     margins.add_theme_constant_override("margin_right", 12)
     margins.add_theme_constant_override("margin_top", 12)
@@ -107,6 +113,7 @@ func _label(parent: Node, s: String, size: int = 16, color: Color = INK) -> Labe
     l.add_theme_font_size_override("font_size", size)
     l.add_theme_color_override("font_color", color)
     l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    l.mouse_filter = Control.MOUSE_FILTER_IGNORE
     parent.add_child(l)
     return l
 
@@ -118,6 +125,7 @@ func _nowrap(parent: Node, value: String, font_size: int = 16, color: Color = IN
 
 func _row(parent: Node) -> HBoxContainer:
     var r = HBoxContainer.new()
+    r.mouse_filter = Control.MOUSE_FILTER_PASS
     r.add_theme_constant_override("separation", 8)
     parent.add_child(r)
     return r
@@ -153,6 +161,8 @@ func _style_field(control: Control) -> void:
 func _button(parent: Node, s: String, call: Callable, secondary: bool = false) -> Button:
     var b = Button.new()
     b.text = s
+    # Let a swipe begun over a button reach the parent ScrollContainer.
+    b.mouse_filter = Control.MOUSE_FILTER_PASS
     var compact = s in ["◀", "▶", "‹", "›", "✎", "×", "+"]
     b.custom_minimum_size = Vector2(46 if compact else 0, 45)
     b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER if compact else Control.SIZE_EXPAND_FILL
@@ -181,6 +191,7 @@ func _button(parent: Node, s: String, call: Callable, secondary: bool = false) -
 
 func _card(title: String) -> VBoxContainer:
     var panel = PanelContainer.new()
+    panel.mouse_filter = Control.MOUSE_FILTER_PASS
     panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     var style = StyleBoxFlat.new()
     style.bg_color = WHITE
@@ -194,6 +205,7 @@ func _card(title: String) -> VBoxContainer:
     panel.add_theme_stylebox_override("panel", style)
     body.add_child(panel)
     var content = VBoxContainer.new()
+    content.mouse_filter = Control.MOUSE_FILTER_PASS
     content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     content.add_theme_constant_override("separation", 9)
     panel.add_child(content)
@@ -209,6 +221,7 @@ func _number(parent: Node, value: float, minimum: float, maximum: float, step: f
     spin.value = value
     spin.custom_minimum_size = Vector2(92, 48)
     spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    spin.mouse_filter = Control.MOUSE_FILTER_PASS
     spin.add_theme_font_size_override("font_size", 16)
     _style_field(spin.get_line_edit())
     parent.add_child(spin)
@@ -220,6 +233,7 @@ func _text_input(parent: Node, placeholder: String, text: String = "") -> LineEd
     field.text = text
     field.custom_minimum_size = Vector2(100, 48)
     field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    field.mouse_filter = Control.MOUSE_FILTER_PASS
     field.add_theme_font_size_override("font_size", 15)
     _style_field(field)
     parent.add_child(field)
@@ -232,6 +246,7 @@ func _choice(parent: Node, options: Array) -> OptionButton:
     picker.clip_text = true
     picker.custom_minimum_size = Vector2(105, 48)
     picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    picker.mouse_filter = Control.MOUSE_FILTER_PASS
     picker.add_theme_font_size_override("font_size", 15)
     for mode in ["normal", "hover", "pressed"]:
         picker.add_theme_stylebox_override(mode, _input_style())
@@ -288,6 +303,7 @@ func _style_progress(bar: ProgressBar) -> void:
     var fill = StyleBoxFlat.new()
     fill.bg_color = GREEN
     fill.set_corner_radius_all(9)
+    bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
     bar.add_theme_stylebox_override("background", track)
     bar.add_theme_stylebox_override("fill", fill)
     bar.custom_minimum_size.y = 15
@@ -295,6 +311,7 @@ func _style_progress(bar: ProgressBar) -> void:
 
 func _metric_tile(parent: Node, value: String, caption: String, tone: Color = GREEN) -> void:
     var panel = PanelContainer.new()
+    panel.mouse_filter = Control.MOUSE_FILTER_PASS
     panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     var style = StyleBoxFlat.new()
     style.bg_color = PALE
@@ -591,10 +608,12 @@ func _mobile_sheet(title: String, description: String, accept_label: String, req
     style.content_margin_right = 18
     style.content_margin_top = 18
     style.content_margin_bottom = 18
+    panel.mouse_filter = Control.MOUSE_FILTER_PASS
     panel.add_theme_stylebox_override("panel", style)
     centering.add_child(panel)
 
     var column = VBoxContainer.new()
+    column.mouse_filter = Control.MOUSE_FILTER_PASS
     column.add_theme_constant_override("separation", 10)
     panel.add_child(column)
     _label(column, title, 20, GREEN)
@@ -605,8 +624,13 @@ func _mobile_sheet(title: String, description: String, accept_label: String, req
     scroller.size_flags_vertical = Control.SIZE_EXPAND_FILL
     scroller.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    scroller.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+    scroller.scroll_deadzone = 12
+    scroller.follow_focus = true
+    scroller.mouse_filter = Control.MOUSE_FILTER_STOP
     column.add_child(scroller)
     var fields = VBoxContainer.new()
+    fields.mouse_filter = Control.MOUSE_FILTER_PASS
     fields.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     fields.add_theme_constant_override("separation", 10)
     scroller.add_child(fields)
