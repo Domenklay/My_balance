@@ -417,6 +417,25 @@ func _macro_chip(parent: Node, caption: String, value: float, tint: Color) -> vo
     _label(content, str(roundi(value)) + " г", 19, tint)
 
 
+func _soft_list_row(parent: Node) -> HBoxContainer:
+    var panel = PanelContainer.new()
+    panel.mouse_filter = Control.MOUSE_FILTER_PASS
+    panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    var st = StyleBoxFlat.new()
+    st.bg_color = Color("#f4f9f4")
+    st.set_corner_radius_all(13)
+    st.content_margin_left = 10
+    st.content_margin_right = 8
+    st.content_margin_top = 8
+    st.content_margin_bottom = 8
+    panel.add_theme_stylebox_override("panel", st)
+    parent.add_child(panel)
+    var row = HBoxContainer.new()
+    row.mouse_filter = Control.MOUSE_FILTER_PASS
+    row.add_theme_constant_override("separation", 7)
+    panel.add_child(row)
+    return row
+
 func _number(parent: Node, value: float, minimum: float, maximum: float, step: float = 1.0) -> SpinBox:
     var spin = SpinBox.new()
     spin.min_value = minimum
@@ -747,7 +766,7 @@ func _show_day() -> void:
         _label(foods, meal, 17, GREEN)
         for entry in items:
             var f: Dictionary = store.entry_food(entry)
-            var r = _row(foods)
+            var r = _soft_list_row(foods)
             var caption = _label(r, str(f.get("name", "Продукт")) + "\n" + str(entry.get("grams", 0)) + " г • " + str(roundi(store.entry_kcal(entry))) + " ккал", 14)
             caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
             _button(r, "✎", func(): _edit_entry(entry), true)
@@ -770,7 +789,7 @@ func _show_day() -> void:
                 break
             count += 1
             var old_food = store.entry_food(old)
-            var rr = _row(repeats)
+            var rr = _soft_list_row(repeats)
             var rl = _label(rr, str(old_food.get("name", "Продукт")) + " • " + str(old.get("grams", 0)) + " г", 13)
             rl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
             _button(rr, "+", func():
@@ -1278,7 +1297,7 @@ func _show_activity() -> void:
     if items.is_empty():
         _label(saved, "Пока не было записей.", 14, MUTED)
     for a in items:
-        var r = _row(saved)
+        var r = _soft_list_row(saved)
         var type_name = {"walk":"🚶 Ходьба", "strength":"🏋 Гантели", "other":"Активность"}.get(a.get("type", ""), "Активность")
         var text = str(type_name) + " · " + str(a.get("minutes", 0)) + " мин"
         if str(a.get("detail", "")) != "":
@@ -1362,7 +1381,7 @@ func _show_weight() -> void:
     var history = store.data["weights"].duplicate()
     history.sort_custom(func(a,b): return str(a.get("date", "")) > str(b.get("date", "")))
     for w in history:
-        var r = _row(chart)
+        var r = _soft_list_row(chart)
         var l = _label(r, str(w.get("date", "")) + " · " + str(w.get("value", 0)) + " кг", 14)
         l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         _button(r, "×", func(): _confirm_delete("Удалить запись веса?", func():
@@ -1535,7 +1554,7 @@ func _show_my_foods() -> void:
         _label(manage, "Правки не изменят уже сохранённые дневные записи.", 13, MUTED)
         for saved_food in custom_foods:
             var food: Dictionary = saved_food
-            var line = _row(manage)
+            var line = _soft_list_row(manage)
             var caption = _nowrap(line, str(food.get("name", "Продукт")), 13, INK)
             caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
             _button(line, "✎", func(): _edit_custom_food(food), true)
