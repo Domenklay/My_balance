@@ -3,6 +3,7 @@ extends Control
 const StoreScript = preload("res://src/store.gd")
 const GraphScript = preload("res://src/weight_graph.gd")
 const RingScript = preload("res://src/calorie_ring.gd")
+const RecipeMath = preload("res://src/recipe_math.gd")
 const BarcodeScript = preload("res://src/barcode_lookup.gd")
 const AppearanceScript = preload("res://src/appearance.gd")
 const PatternScript = preload("res://src/theme_pattern.gd")
@@ -65,6 +66,9 @@ var note_status_label: Label
 var calendar_expanded: bool = false
 var food_form_expanded: bool = false
 var settings_page: String = "main"
+var recipe_editor_open: bool = false
+var recipe_draft: Dictionary = {}
+var recipe_search_text: String = ""
 var _rendered_view: String = ""
 var _scroll_memory: Dictionary = {}
 var _render_serial: int = 0
@@ -660,17 +664,18 @@ func _make_tabs() -> void:
     bar.add_child(row)
     var tabs = [
         ["◉", "День", "day"],
+        ["♨", "Рецепты", "recipes"],
         ["✦", "Спорт", "activity"],
         ["◇", "Вес", "weight"],
         ["▥", "Итоги", "stats"],
-        ["☷", "Ещё", "settings"]
+        ["♙", "Профиль", "profile"]
     ]
     for item in tabs:
         var target: String = item[2]
         var b = _button(row, item[0] + "\n" + item[1], func(): _navigate_to_tab(target), true)
         b.custom_minimum_size.y = 59
         b.clip_text = true
-        b.add_theme_font_size_override("font_size", 13)
+        b.add_theme_font_size_override("font_size", 12)
         b.add_theme_constant_override("h_separation", 3)
         tab_buttons[target] = b
     _update_tabs()
@@ -678,7 +683,7 @@ func _make_tabs() -> void:
 func _update_tabs() -> void:
     for key in tab_buttons:
         var b: Button = tab_buttons[key]
-        var active = key == tab
+        var active = key == tab or (key == "profile" and tab == "settings")
         var box_style = StyleBoxFlat.new()
         box_style.bg_color = GREEN if active else CARD_BG
         box_style.set_corner_radius_all(14)
@@ -755,6 +760,8 @@ func _render(reset_position: bool = false) -> void:
         child.queue_free()
     match tab:
         "day": _show_day()
+        "recipes": _show_recipes()
+        "profile": _show_profile()
         "activity": _show_activity()
         "weight": _show_weight()
         "stats": _show_stats()
@@ -1604,6 +1611,8 @@ func _show_settings() -> void:
         , true)
         _show_my_foods()
         return
+    var back_to_profile = _card("Настройки приложения")
+    _button(back_to_profile, "← К личной странице", func(): _navigate_to_tab("profile"), true)
     var card = _card("Личные настройки")
     _label(card, "Калории в сутки")
     var kcal = _number(card, float(store.data["settings"]["kcal"]), 1000, 5000)
