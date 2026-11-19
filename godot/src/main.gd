@@ -511,6 +511,9 @@ func _show_settings() -> void:
         _render()
     )
     var backup = _card("Резервная копия и перенос")
+    _label(backup, "Сохрани файл JSON вне приложения, чтобы восстановить данные после удаления или переустановки.", 13, MUTED)
+    _button(backup, "Сохранить JSON в файл", func(): _pick_backup_file(true))
+    _button(backup, "Импортировать JSON из файла", func(): _pick_backup_file(false), true)
     _label(backup, "Можно скопировать JSON в буфер обмена и восстановить его позже. Буфер обмена может быть доступен другим приложениям: не оставляй в нём личные данные.", 13, MUTED)
     _button(backup, "Скопировать резервную копию", func():
         DisplayServer.clipboard_set(store.export_json())
@@ -527,6 +530,67 @@ func _show_settings() -> void:
             _message("Неверная резервная копия JSON.")
     )
     _label(backup, "Записи хранятся в памяти приложения без регистрации и интернета. При удалении приложения данные могут исчезнуть.", 13, MUTED)
+
+func _pick_backup_file(exporting: bool) -> void:
+    var picker = FileDialog.new()
+    picker.use_native_dialog = true
+    picker.access = FileDialog.ACCESS_FILESYSTEM
+    picker.file_mode = FileDialog.FILE_MODE_SAVE_FILE if exporting else FileDialog.FILE_MODE_OPEN_FILE
+    picker.filters = PackedStringArray(["*.json;Резервная копия;application/json"])
+    if exporting:
+        picker.current_file = "MyBalance-" + Time.get_date_string_from_system() + ".json"
+    add_child(picker)
+    picker.file_selected.connect(func(path: String):
+        if exporting:
+            _write_backup_file(path)
+        else:
+            _read_backup_file(path)
+        picker.queue_free()
+    )
+    picker.canceled.connect(func(): picker.queue_free())
+    picker.popup_file_dialog()
+
+func _write_backup_file(path: String) -> void:
+    var file = FileAccess.open(path, FileAccess.WRITE)
+    if file == null:
+        _message("Не удалось открыть файл для сохранения. Выбери другое расположение.")
+        return
+    file.store_string(store.export_json())
+    file.flush()
+    var status = file.get_error()
+    file.close()
+    if status == OK:
+        _message("Резервная копия сохранена. Храни её вне приложения.")
+    else:
+        _message("Ошибка записи резервной копии: " + str(status))
+
+func _read_backup_file(path: String) -> void:
+    var file = FileAccess.open(path, FileAccess.READ)
+    if file == null:
+        _message("Не удалось открыть JSON-файл.")
+        return
+    if file.get_length() > 5000000:
+        file.close()
+        _message("Размер резервной копии превышает 5 МБ.")
+        return
+    var raw = file.get_as_text()
+    file.close()
+    var confirmation = ConfirmationDialog.new()
+    confirmation.title = "Восстановление данных"
+    confirmation.dialog_text = "Заменить текущие записи данными из файла? Перед импортом сохрани резервную копию."
+    add_child(confirmation)
+    confirmation.confirmed.connect(func():
+        if store.import_json(raw):
+            date = Time.get_date_string_from_system()
+            month_shown = date.substr(0, 7)
+            _render()
+            _message("Дневник восстановлен из JSON.")
+        else:
+            _message("Файл повреждён или несовместим.")
+        confirmation.queue_free()
+    )
+    confirmation.canceled.connect(func(): confirmation.queue_free())
+    confirmation.popup_centered(Vector2i(365, 210))
 
 func _confirm_delete(prompt: String, action: Callable) -> void:
     var dialog = ConfirmationDialog.new()
