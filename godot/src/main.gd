@@ -435,7 +435,7 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
     )
     var query = search.text.strip_edges().to_lower()
     for item in all:
-        if not str(item.get("name", "")).to_lower().contains(query):
+        if not query.is_empty() and not str(item.get("name", "")).to_lower().contains(query):
             continue
         if favorite_only.button_pressed and not store.is_favorite(str(item.get("id", ""))):
             continue
