@@ -1049,6 +1049,27 @@ func _show_settings() -> void:
             else:
                 _message("Не удалось привязать код. Возможно, он уже принадлежит другому продукту.")
         , true)
+    if not custom_foods.is_empty():
+        var manage = _card("Мои продукты · изменить или удалить")
+        _label(manage, "Правки не изменят уже сохранённые дневные записи.", 13, MUTED)
+        for saved_food in custom_foods:
+            var food: Dictionary = saved_food
+            var line = _row(manage)
+            var caption = _nowrap(line, str(food.get("name", "Продукт")), 13, INK)
+            caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            _button(line, "✎", func(): _edit_custom_food(food), true)
+            _button(line, "×", func():
+                _confirm_delete("Удалить свой продукт «" + str(food.get("name", "")) + "» из каталога? История питания останется.", func():
+                    if store.delete_custom_food(str(food.get("id", ""))):
+                        _render()
+                    else:
+                        _message("Не удалось удалить продукт.")
+                )
+            , true)
+    var catalog_card = _card("Каталог продуктов")
+    _label(catalog_card, "Встроено " + str(store.bundled_foods.size()) + " проверенных штрихкодов из Open Food Facts.", 14, INK)
+    _button(catalog_card, "Обновить список товаров через интернет", func(): _request_catalog_update(), true)
+    _label(catalog_card, "Обновление загружается из публичного GitHub-репозитория и не затрагивает личные записи. Новые товары появляются только после публикации проверенного списка.", 12, MUTED)
     _label(foods_card, "Сведения Open Food Facts: © contributors, Open Database License (ODbL). Проверяй КБЖУ на упаковке.", 12, MUTED)
     var backup = _card("Резервная копия и перенос")
     _label(backup, "Сохрани файл JSON вне приложения, чтобы восстановить данные после удаления или переустановки.", 13, MUTED)
@@ -1070,6 +1091,41 @@ func _show_settings() -> void:
             _message("Неверная резервная копия JSON.")
     )
     _label(backup, "Записи хранятся в памяти приложения без регистрации и интернета. При удалении приложения данные могут исчезнуть.", 13, MUTED)
+
+func _edit_custom_food(food: Dictionary) -> void:
+    var dialog = ConfirmationDialog.new()
+    dialog.title = "Редактировать продукт"
+    dialog.ok_button_text = "Сохранить изменения"
+    add_child(dialog)
+    var fields = VBoxContainer.new()
+    dialog.add_child(fields)
+    _label(fields, "Название", 13, MUTED)
+    var name = _text_input(fields, "Название", str(food.get("name", "")))
+    _label(fields, "Штрихкод (необязательно)", 13, MUTED)
+    var code = _text_input(fields, "EAN / UPC", str(food.get("barcode", "")))
+    code.max_length = 14
+    code.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+    _label(fields, "Калории на 100 г", 13, MUTED)
+    var kcal = _number(fields, float(food.get("kcal", 0)), 0, 1000, 0.1)
+    _label(fields, "Белки • Жиры • Углеводы на 100 г", 13, MUTED)
+    var r = _row(fields)
+    var p = _number(r, float(food.get("p", 0)), 0, 100, 0.1)
+    var f = _number(r, float(food.get("f", 0)), 0, 100, 0.1)
+    var c = _number(r, float(food.get("c", 0)), 0, 100, 0.1)
+    dialog.confirmed.connect(func():
+        var changes = {
+            "name": name.text.strip_edges(),
+            "barcode": code.text.strip_edges(),
+            "kcal": kcal.value, "p": p.value, "f": f.value, "c": c.value
+        }
+        if store.update_custom_food(str(food.get("id", "")), changes):
+            _render()
+        else:
+            _message("Не удалось сохранить. Проверь название, цифры штрихкода или его уникальность.")
+        dialog.queue_free()
+    )
+    dialog.canceled.connect(func(): dialog.queue_free())
+    dialog.popup_centered(Vector2i(395, 560))
 
 func _pick_backup_file(exporting: bool) -> void:
     var picker = FileDialog.new()
