@@ -1196,6 +1196,14 @@ func _show_stats() -> void:
     chart.add_child(g)
 
 func _show_settings() -> void:
+    if settings_page == "foods":
+        var nav = _card("Мои продукты")
+        _button(nav, "← Назад к настройкам", func():
+            settings_page = "main"
+            _render()
+        , true)
+        _show_my_foods()
+        return
     var card = _card("Личные настройки")
     _label(card, "Калории в сутки")
     var kcal = _number(card, float(store.data["settings"]["kcal"]), 1000, 5000)
@@ -1208,6 +1216,34 @@ func _show_settings() -> void:
         store.save()
         _render()
     )
+    var my_foods_link = _card("Мои продукты и штрихкоды")
+    _label(my_foods_link, "Создание и редактирование продуктов, привязка штрихкодов, обновление каталога.", 13, MUTED)
+    _button(my_foods_link, "Открыть мои продукты", func():
+        settings_page = "foods"
+        _render()
+    , true)
+    var backup = _card("Резервная копия и перенос")
+    _label(backup, "Сохрани файл JSON вне приложения, чтобы восстановить данные после удаления или переустановки.", 13, MUTED)
+    _button(backup, "Сохранить JSON в файл", func(): _pick_backup_file(true))
+    _button(backup, "Импортировать JSON из файла", func(): _pick_backup_file(false), true)
+    _label(backup, "Можно скопировать JSON в буфер обмена и восстановить его позже. Буфер обмена может быть доступен другим приложениям: не оставляй в нём личные данные.", 13, MUTED)
+    _button(backup, "Скопировать резервную копию", func():
+        DisplayServer.clipboard_set(store.export_json())
+        _message("JSON скопирован. Сохрани его в надёжном месте.")
+    )
+    _button(backup, "Восстановить JSON из буфера", func():
+        var text = DisplayServer.clipboard_get()
+        if store.import_json(text):
+            date = Time.get_date_string_from_system()
+            month_shown = date.substr(0, 7)
+            _message("Данные восстановлены")
+            _render()
+        else:
+            _message("Неверная резервная копия JSON.")
+    )
+    _label(backup, "Записи хранятся в памяти приложения без регистрации и интернета. При удалении приложения данные могут исчезнуть.", 13, MUTED)
+
+func _show_my_foods() -> void:
     var foods_card = _card("Добавить свой продукт · на 100 г")
     _label(foods_card, "Штрихкод поможет найти свой продукт повторно, даже без интернета.", 13, MUTED)
     var name = _text_input(foods_card, "Название продукта")
@@ -1290,26 +1326,7 @@ func _show_settings() -> void:
     _button(catalog_card, "Обновить список товаров через интернет", func(): _request_catalog_update(), true)
     _label(catalog_card, "Обновление загружается из публичного GitHub-репозитория и не затрагивает личные записи. Новые товары появляются только после публикации проверенного списка.", 12, MUTED)
     _label(foods_card, "Сведения Open Food Facts: © contributors, Open Database License (ODbL). Проверяй КБЖУ на упаковке.", 12, MUTED)
-    var backup = _card("Резервная копия и перенос")
-    _label(backup, "Сохрани файл JSON вне приложения, чтобы восстановить данные после удаления или переустановки.", 13, MUTED)
-    _button(backup, "Сохранить JSON в файл", func(): _pick_backup_file(true))
-    _button(backup, "Импортировать JSON из файла", func(): _pick_backup_file(false), true)
-    _label(backup, "Можно скопировать JSON в буфер обмена и восстановить его позже. Буфер обмена может быть доступен другим приложениям: не оставляй в нём личные данные.", 13, MUTED)
-    _button(backup, "Скопировать резервную копию", func():
-        DisplayServer.clipboard_set(store.export_json())
-        _message("JSON скопирован. Сохрани его в надёжном месте.")
-    )
-    _button(backup, "Восстановить JSON из буфера", func():
-        var text = DisplayServer.clipboard_get()
-        if store.import_json(text):
-            date = Time.get_date_string_from_system()
-            month_shown = date.substr(0, 7)
-            _message("Данные восстановлены")
-            _render()
-        else:
-            _message("Неверная резервная копия JSON.")
-    )
-    _label(backup, "Записи хранятся в памяти приложения без регистрации и интернета. При удалении приложения данные могут исчезнуть.", 13, MUTED)
+
 
 func _edit_custom_food(food: Dictionary) -> void:
     var sheet = _mobile_sheet("Редактировать продукт", "На 100 г. Ранее внесённые блюда сохранят свои КБЖУ.", "Сохранить", 540.0)
