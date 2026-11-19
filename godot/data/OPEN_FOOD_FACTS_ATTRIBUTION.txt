@@ -1,0 +1,16 @@
+Data attribution for the bundled barcode_catalog.json
+
+The offline product names, barcodes and nutrition facts were retrieved from
+Open Food Facts (https://world.openfoodfacts.org) on 2026-11-19.
+
+Open Food Facts data is available under the Open Database License (ODbL) 1.0.
+License: https://opendatacommons.org/licenses/odbl/1-0/
+Original service: https://world.openfoodfacts.org
+Project data and source: https://github.com/Domenklay/My_balance
+
+The embedded subset may contain incomplete or incorrect contributor-entered
+information. Please always check the product label and portion units before
+using a food entry. Products can change their recipes without changing barcode.
+
+User-entered food diary entries are stored separately and are not uploaded
+to Open Food Facts.
