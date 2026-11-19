@@ -20,6 +20,15 @@ func _find_button(node: Node, text: String) -> Button:
             return result
     return null
 
+func _find_input(node: Node, placeholder: String) -> LineEdit:
+    if node is LineEdit and node.placeholder_text == placeholder:
+        return node
+    for child in node.get_children():
+        var found = _find_input(child, placeholder)
+        if found != null:
+            return found
+    return null
+
 func _run() -> void:
     var store = StoreScript.new()
     store.data = store.default_data()
@@ -129,6 +138,48 @@ func _run() -> void:
     if not app.recipe_editor_open or _find_button(app, "+ Добавить ингредиент") == null:
         _fail("recipe editor not accessible")
         return
+    _find_button(app, "+ Ввести ингредиент вручную").pressed.emit()
+    await process_frame
+    var ingredient_name = _find_input(app, "Название ингредиента")
+    if ingredient_name == null:
+        _fail("manual ingredient form is missing")
+        return
+    ingredient_name.text = "Тестовые овощи"
+    _find_button(app, "Добавить в состав").pressed.emit()
+    await process_frame
+    if app.recipe_draft["ingredients"].size() != 1:
+        _fail("ingredient not attached to draft")
+        return
+    var dish_name = _find_input(app, "Название блюда")
+    if dish_name == null:
+        _fail("recipe name input missing")
+        return
+    dish_name.text = "Овощное блюдо"
+    _find_button(app, "Сохранить рецепт").pressed.emit()
+    await process_frame
+    if app.store.data["recipes"].size() != 1 or app.recipe_editor_open:
+        _fail("recipe editor did not save and close")
+        return
+    var log_button = _find_button(app, "+ Добавить порцию в дневник")
+    if log_button == null:
+        _fail("saved recipe has no diary action")
+        return
+    log_button.pressed.emit()
+    await process_frame
+    var modal = app.get_node_or_null("ProductSheet")
+    if modal == null:
+        _fail("recipe portion sheet not displayed")
+        return
+    var commit: Button = modal.find_child("ProductSheetConfirm", true, false)
+    if commit == null:
+        _fail("portion sheet missing confirm button")
+        return
+    commit.pressed.emit()
+    await process_frame
+    if app.tab != "day" or app.store.day_entries(app.date).size() != 1:
+        _fail("recipe portion was not added to diary via UI")
+        return
+    print("PASS: recipe UI manual ingredient, save, portion sheet and diary entry")
     print("PASS: recipe math with cooked weight, CRUD, historical snapshots, profile persistence and six-tab UI")
     app.queue_free()
     quit(0)
