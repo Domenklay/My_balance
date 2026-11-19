@@ -25,6 +25,8 @@ var note_save_timer: Timer
 var calendar_expanded: bool = false
 var tab_buttons: Dictionary = {}
 var barcode_http: HTTPRequest
+var catalog_http: HTTPRequest
+var diary_food_card: VBoxContainer
 var barcode_scanner: Object = null
 var barcode_input: LineEdit
 var barcode_message: Label
@@ -37,6 +39,10 @@ func _ready() -> void:
     barcode_http.timeout = 15.0
     add_child(barcode_http)
     barcode_http.request_completed.connect(_on_barcode_http_completed)
+    catalog_http = HTTPRequest.new()
+    catalog_http.timeout = 25.0
+    add_child(catalog_http)
+    catalog_http.request_completed.connect(_on_catalog_http_completed)
     if OS.has_feature("android") and Engine.has_singleton("MyBalanceBarcode"):
         barcode_scanner = Engine.get_singleton("MyBalanceBarcode")
         if barcode_scanner.has_signal("barcode_scanned"):
@@ -416,6 +422,7 @@ func _show_day() -> void:
     _food_form(add)
 
     var foods = _card("Дневник питания")
+    diary_food_card = foods
     var existing = store.day_entries(date)
     if existing.is_empty():
         _label(foods, "Сегодня ещё нет записей. Выбери продукт выше или повтори блюдо со вчера.", 14, MUTED)
@@ -470,6 +477,15 @@ func _jump_to_food() -> void:
     if is_instance_valid(food_entry_card):
         scroll.ensure_control_visible(food_entry_card)
 
+func _jump_to_diary() -> void:
+    if is_instance_valid(diary_food_card):
+        scroll.ensure_control_visible(diary_food_card)
+
+func _barcode_add_success() -> void:
+    tab = "day"
+    _render()
+    call_deferred("_jump_to_diary")
+
 func _barcode_message(value: String) -> void:
     if is_instance_valid(barcode_message):
         barcode_message.text = value
@@ -488,21 +504,20 @@ func _on_barcode_scan_cancelled() -> void:
 func _lookup_barcode(raw: String) -> void:
     var code = BarcodeScript.normalize_code(raw)
     if code.is_empty():
-        _barcode_message("Укажи 8–14 цифр штрихкода без пробелов.")
+        _barcode_message("Неверный штрихкод: проверь число цифр и контрольную цифру EAN/UPC.")
         return
     if barcode_http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
         _barcode_message("Дождись завершения предыдущего поиска.")
         return
     var cached = store.food_by_barcode(code)
     if not cached.is_empty():
-        selected_barcode_food = str(cached.get("name", ""))
-        _barcode_message("Найден в памяти телефона: " + selected_barcode_food)
-        _render()
+        _barcode_message("Найден товар: " + str(cached.get("name", "")))
+        _show_barcode_portion(cached)
         return
     pending_barcode = code
     _barcode_message("Поиск товара " + code + " в Open Food Facts…")
     var headers = PackedStringArray([
-        "User-Agent: MyBalance/0.5.4 (+https://github.com/Domenklay/My_balance)",
+        "User-Agent: MyBalance/0.5.7 (+https://github.com/Domenklay/My_balance)",
         "Accept: application/json"
     ])
     var error = barcode_http.request(BarcodeScript.product_url(code), headers, HTTPClient.METHOD_GET)
@@ -512,12 +527,18 @@ func _lookup_barcode(raw: String) -> void:
 
 func _on_barcode_http_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
     if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
-        _barcode_message("Сервис временно недоступен. Попробуй позже или введи продукт вручную.")
+        var code = pending_barcode
         pending_barcode = ""
+        _barcode_message("Интернет недоступен или товар не найден. Введи данные с упаковки.")
+        if not code.is_empty():
+            _confirm_barcode_product(_manual_barcode_product(code), true)
         return
     if body.size() > 1000000:
-        _barcode_message("Ответ сервиса слишком большой.")
+        var code = pending_barcode
         pending_barcode = ""
+        _barcode_message("Сервис прислал слишком большой ответ. Введи товар вручную.")
+        if not code.is_empty():
+            _confirm_barcode_product(_manual_barcode_product(code), true)
         return
     var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
     var searched_code = pending_barcode
@@ -525,19 +546,53 @@ func _on_barcode_http_completed(result: int, response_code: int, _headers: Packe
     pending_barcode = ""
     if outcome.has("error"):
         _barcode_message(str(outcome["error"]) + " Можно внести товар с упаковки.")
-        _confirm_barcode_product({
-            "barcode": searched_code, "name": "", "kcal": 0.0,
-            "p": 0.0, "f": 0.0, "c": 0.0,
-            "source": "Пользователь"
-        }, true)
+        _confirm_barcode_product(_manual_barcode_product(searched_code), true)
         return
     _confirm_barcode_product(outcome)
+
+func _manual_barcode_product(code: String) -> Dictionary:
+    return {"barcode": code, "name": "", "kcal": 0.0,
+        "p": 0.0, "f": 0.0, "c": 0.0, "source": "Пользователь"}
+
+func _show_barcode_portion(food: Dictionary) -> void:
+    var dialog = ConfirmationDialog.new()
+    dialog.title = "Продукт найден"
+    dialog.ok_button_text = "Добавить в дневник"
+    add_child(dialog)
+    var panel = VBoxContainer.new()
+    panel.add_theme_constant_override("separation", 8)
+    dialog.add_child(panel)
+    _label(panel, str(food.get("name", "")), 18, GREEN)
+    _label(panel, str(food.get("barcode", "")) + " • " + str(food.get("source", "Локальный каталог")), 12, MUTED)
+    _label(panel, "На 100 г: " + str(food.get("kcal", 0)) + " ккал • Б " + str(food.get("p", 0))
+        + " • Ж " + str(food.get("f", 0)) + " • У " + str(food.get("c", 0)), 13, INK)
+    var warning = BarcodeScript.nutrition_warning(food)
+    if not warning.is_empty():
+        _label(panel, "Проверь упаковку: " + warning, 13, ACCENT)
+    _label(panel, "Вес порции, г", 14, MUTED)
+    var grams = _number(panel, 100, 1, 5000)
+    _label(panel, "Приём пищи", 14, MUTED)
+    var meal = _choice(panel, ["Завтрак", "Обед", "Перекус", "Ужин"])
+    var calculated = _label(panel, "", 16, GREEN)
+    var refresh = func(): calculated.text = str(roundi(float(food.get("kcal", 0)) * grams.value / 100.0)) + " ккал за порцию"
+    grams.value_changed.connect(func(_v: float): refresh.call())
+    refresh.call()
+    dialog.confirmed.connect(func():
+        if store.add_food_entry(food, grams.value, meal.get_item_text(meal.selected), date):
+            _barcode_add_success()
+        else:
+            _message("Не удалось сохранить порцию.")
+        dialog.queue_free()
+    )
+    dialog.canceled.connect(func(): dialog.queue_free())
+    dialog.popup_centered(Vector2i(395, 435))
 
 func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void:
     var dialog = ConfirmationDialog.new()
     dialog.title = "Добавить товар по штрихкоду" if manual else "Товар найден по штрихкоду"
-    dialog.dialog_text = ("Товар не найден. Впиши данные с этикетки на 100 г / мл." if manual
-        else "Open Food Facts • значения на 100 г / мл.\nСверь КБЖУ с упаковкой перед сохранением.")
+    dialog.ok_button_text = "Сохранить и добавить"
+    dialog.dialog_text = ("Внеси данные с этикетки на 100 г / мл." if manual
+        else "Open Food Facts: сверь КБЖУ с упаковкой.")
     add_child(dialog)
     var fields = VBoxContainer.new()
     dialog.add_child(fields)
@@ -549,27 +604,71 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
     var protein = _number(nutrition_row, float(product.get("p", 0)), 0, 100, 0.1)
     var fat = _number(nutrition_row, float(product.get("f", 0)), 0, 100, 0.1)
     var carbs = _number(nutrition_row, float(product.get("c", 0)), 0, 100, 0.1)
-    dialog.confirmed.connect(func():
-        var record = product.duplicate()
+    _label(fields, "Вес порции, г", 13, MUTED)
+    var grams = _number(fields, 100, 1, 5000, 1)
+    _label(fields, "Приём пищи", 13, MUTED)
+    var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
+    var helper = _label(fields, "После сохранения продукт будет доступен без интернета.", 12, MUTED)
+    var note = BarcodeScript.nutrition_warning(product)
+    if not note.is_empty() and not manual:
+        helper.text = "Проверь упаковку: " + note
+    var commit_record = func(add_to_diary: bool):
+        var record: Dictionary = product.duplicate(true)
         record["name"] = name.text.strip_edges()
-        if record["name"].is_empty():
-            _message("Введите название продукта с упаковки.")
-            dialog.queue_free()
-            return
         record["kcal"] = kcal.value
         record["p"] = protein.value
         record["f"] = fat.value
         record["c"] = carbs.value
-        var id = store.save_barcode_food(record)
-        if id.is_empty():
-            _message("Не удалось сохранить товар. Проверь место на устройстве.")
+        if record["name"].is_empty():
+            _message("Нужно указать название товара.")
+            return
+        if manual and kcal.value == 0.0 and protein.value == 0.0 and fat.value == 0.0 and carbs.value == 0.0:
+            _message("Внеси КБЖУ с упаковки, пустые данные сохранять нельзя.")
+            return
+        var saved_id = store.save_barcode_food(record)
+        if saved_id.is_empty():
+            _message("Не удалось сохранить товар. Проверь код или место на устройстве.")
+            return
+        var food = store.food_by_id(saved_id)
+        if add_to_diary:
+            if not store.add_food_entry(food, grams.value, meal.get_item_text(meal.selected), date):
+                _message("Не удалось сохранить порцию.")
+                return
+            _barcode_add_success()
         else:
-            selected_barcode_food = record["name"]
+            _message("Продукт сохранён в локальном каталоге.")
             _render()
         dialog.queue_free()
-    )
+    var save_only = _button(fields, "Сохранить товар без записи", func(): commit_record.call(false), true)
+    save_only.custom_minimum_size.y = 43
+    dialog.confirmed.connect(func(): commit_record.call(true))
     dialog.canceled.connect(func(): dialog.queue_free())
-    dialog.popup_centered(Vector2i(395, 470))
+    dialog.popup_centered(Vector2i(395, 670))
+
+func _on_catalog_http_completed(result: int, status: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+    if result != HTTPRequest.RESULT_SUCCESS or status != 200:
+        _message("Не удалось получить обновление каталога. Проверь интернет.")
+        return
+    if body.size() > 4000000:
+        _message("Обновление каталога слишком большое.")
+        return
+    if store.update_catalog_json(body.get_string_from_utf8()):
+        _render()
+        _message("Каталог обновлён: " + str(store.bundled_foods.size()) + " товаров.")
+    else:
+        _message("Недостоверный или повреждённый каталог. Старые данные сохранены.")
+
+func _request_catalog_update() -> void:
+    if catalog_http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+        _message("Каталог уже обновляется.")
+        return
+    var url = "https://raw.githubusercontent.com/Domenklay/My_balance/main/godot/data/barcode_catalog.json"
+    var headers = PackedStringArray(["User-Agent: MyBalance/0.5.7", "Accept: application/json"])
+    if catalog_http.request(url, headers) != OK:
+        _message("Не удалось начать обновление. Проверь интернет.")
+    else:
+        _message("Загрузка проверенного каталога из GitHub запущена.")
+
 
 func _food_form(parent: VBoxContainer) -> void:
     var barcode_panel = VBoxContainer.new()
