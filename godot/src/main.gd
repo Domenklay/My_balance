@@ -94,7 +94,8 @@ func _button(parent: Node, s: String, call: Callable, secondary: bool = false) -
     b.add_theme_color_override("font_color", GREEN if secondary else WHITE)
     b.add_theme_color_override("font_hover_color", GREEN if secondary else WHITE)
     b.add_theme_color_override("font_pressed_color", GREEN if secondary else WHITE)
-    b.pressed.connect(call)
+    if call.is_valid():
+        b.pressed.connect(call)
     parent.add_child(b)
     return b
 
@@ -366,7 +367,6 @@ func _jump_to_food() -> void:
         scroll.ensure_control_visible(food_entry_card)
 
 func _food_form(parent: VBoxContainer) -> void:
-    var available = store.all_foods()
     var filtered: Array = []
     var search = _text_input(parent, "Поиск продукта по названию")
     search.clear_button_enabled = true
@@ -380,7 +380,8 @@ func _food_form(parent: VBoxContainer) -> void:
     var meal = _choice(parent, ["Завтрак", "Обед", "Перекус", "Ужин"])
     var preview = _label(parent, "", 14, MUTED)
     var controls = _row(parent)
-    var star = _button(controls, "☆ В избранное", func():
+    var star = _button(controls, "☆ В избранное", Callable(), true)
+    star.pressed.connect(func():
         if picker.selected < 0 or picker.selected >= filtered.size():
             return
         var food: Dictionary = filtered[picker.selected]
@@ -388,7 +389,7 @@ func _food_form(parent: VBoxContainer) -> void:
             _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star)
         else:
             _message("Не удалось сохранить избранное.")
-    , true)
+    )
     _button(controls, "+ Добавить", func():
         if picker.selected < 0 or picker.selected >= filtered.size():
             _message("Выбери продукт. При необходимости отключи фильтр избранного.")
