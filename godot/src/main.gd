@@ -3,15 +3,18 @@ extends Control
 const StoreScript = preload("res://src/store.gd")
 const GraphScript = preload("res://src/weight_graph.gd")
 const BarcodeScript = preload("res://src/barcode_lookup.gd")
-const GREEN = Color("#226b55")
-const INK = Color("#233c34")
-const MUTED = Color("#71877a")
-const PALE = Color("#f1f7f3")
+const GREEN = Color("#195b4a")
+const DEEP = Color("#123f36")
+const MINT = Color("#cdebd8")
+const INK = Color("#263a32")
+const MUTED = Color("#678376")
+const PALE = Color("#f2f7f2")
 const WHITE = Color("#ffffff")
-const ACCENT = Color("#b57a27")
-const INPUT_BG = Color("#f7faf7")
-const BORDER = Color("#d3e2d7")
-const SECONDARY = Color("#e3f0e8")
+const ACCENT = Color("#bf7e43")
+const SOFT_GOLD = Color("#f8e8c9")
+const INPUT_BG = Color("#fbfdfb")
+const BORDER = Color("#dfeae1")
+const SECONDARY = Color("#e8f3e9")
 
 var store = StoreScript.new()
 var date: String = Time.get_date_string_from_system()
@@ -67,7 +70,7 @@ func _ready() -> void:
         if barcode_scanner.has_signal("barcode_cancelled"):
             barcode_scanner.connect("barcode_cancelled", Callable(self, "_on_barcode_scan_cancelled"))
     var backdrop = ColorRect.new()
-    backdrop.color = Color("#edf4ef")
+    backdrop.color = Color("#f0f6f1")
     backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     add_child(backdrop)
     shell = VBoxContainer.new()
@@ -76,18 +79,36 @@ func _ready() -> void:
     add_child(shell)
     var title = PanelContainer.new()
     var head_style = StyleBoxFlat.new()
-    head_style.bg_color = GREEN
-    head_style.content_margin_left = 16
-    head_style.content_margin_right = 16
+    head_style.bg_color = DEEP
+    head_style.content_margin_left = 21
+    head_style.content_margin_right = 19
     head_style.content_margin_top = 14
-    head_style.content_margin_bottom = 14
+    head_style.content_margin_bottom = 16
     title.add_theme_stylebox_override("panel", head_style)
     shell.add_child(title)
-    var heading = VBoxContainer.new()
-    heading.add_theme_constant_override("separation", 1)
+    var heading = HBoxContainer.new()
+    heading.add_theme_constant_override("separation", 8)
     title.add_child(heading)
-    _label(heading, "Мой баланс", 24, WHITE)
-    _label(heading, "Питание  •  движение  •  прогресс", 12, Color("#d9efe2"))
+    var brand = VBoxContainer.new()
+    brand.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    brand.add_theme_constant_override("separation", 3)
+    heading.add_child(brand)
+    _label(brand, "Мой баланс", 25, WHITE)
+    _label(brand, "Забота о себе каждый день", 12, Color("#c8e4d4"))
+    var insignia = PanelContainer.new()
+    insignia.custom_minimum_size = Vector2(46, 46)
+    var logo_style = StyleBoxFlat.new()
+    logo_style.bg_color = Color("#2e7160")
+    logo_style.set_corner_radius_all(15)
+    logo_style.content_margin_left = 11
+    logo_style.content_margin_right = 11
+    logo_style.content_margin_top = 7
+    logo_style.content_margin_bottom = 5
+    insignia.add_theme_stylebox_override("panel", logo_style)
+    heading.add_child(insignia)
+    var symbol = _label(insignia, "✦", 26, SOFT_GOLD)
+    symbol.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    symbol.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     scroll = ScrollContainer.new()
     scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
     scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -99,15 +120,15 @@ func _ready() -> void:
     shell.add_child(scroll)
     body = VBoxContainer.new()
     body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    body.add_theme_constant_override("separation", 12)
+    body.add_theme_constant_override("separation", 13)
     var margins = MarginContainer.new()
     margins.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     margins.mouse_filter = Control.MOUSE_FILTER_PASS
     body.mouse_filter = Control.MOUSE_FILTER_PASS
-    margins.add_theme_constant_override("margin_left", 12)
-    margins.add_theme_constant_override("margin_right", 12)
-    margins.add_theme_constant_override("margin_top", 12)
-    margins.add_theme_constant_override("margin_bottom", 16)
+    margins.add_theme_constant_override("margin_left", 14)
+    margins.add_theme_constant_override("margin_right", 14)
+    margins.add_theme_constant_override("margin_top", 14)
+    margins.add_theme_constant_override("margin_bottom", 22)
     scroll.add_child(margins)
     margins.add_child(body)
     note_save_timer = Timer.new()
@@ -289,7 +310,7 @@ func _input_style() -> StyleBoxFlat:
     st.bg_color = INPUT_BG
     st.border_color = BORDER
     st.set_border_width_all(1)
-    st.set_corner_radius_all(11)
+    st.set_corner_radius_all(13)
     st.content_margin_left = 12
     st.content_margin_right = 12
     st.content_margin_top = 11
@@ -320,7 +341,7 @@ func _button(parent: Node, s: String, call: Callable, secondary: bool = false) -
     # Let a swipe begun over a button reach the parent ScrollContainer.
     b.mouse_filter = Control.MOUSE_FILTER_PASS
     var compact = s in ["◀", "▶", "‹", "›", "✎", "×", "+"]
-    b.custom_minimum_size = Vector2(46 if compact else 0, 45)
+    b.custom_minimum_size = Vector2(46 if compact else 0, 47)
     b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER if compact else Control.SIZE_EXPAND_FILL
     b.add_theme_font_size_override("font_size", 14)
     for mode in ["normal", "hover", "pressed"]:
@@ -330,7 +351,7 @@ func _button(parent: Node, s: String, call: Callable, secondary: bool = false) -
             st.bg_color = Color("#cfebd8") if secondary else Color("#195a46")
         elif mode == "pressed":
             st.bg_color = Color("#c2dfcc") if secondary else Color("#164d3c")
-        st.set_corner_radius_all(11)
+        st.set_corner_radius_all(13)
         st.content_margin_left = 10
         st.content_margin_right = 10
         st.content_margin_top = 7
@@ -348,29 +369,52 @@ func _button(parent: Node, s: String, call: Callable, secondary: bool = false) -
     parent.add_child(b)
     return b
 
-func _card(title: String) -> VBoxContainer:
+func _card(title: String, variant: String = "plain") -> VBoxContainer:
     var panel = PanelContainer.new()
     panel.mouse_filter = Control.MOUSE_FILTER_PASS
     panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     var style = StyleBoxFlat.new()
-    style.bg_color = WHITE
-    style.set_corner_radius_all(18)
-    style.shadow_color = Color(0.12, 0.22, 0.16, 0.08)
-    style.shadow_size = 3
-    style.content_margin_left = 16
-    style.content_margin_right = 16
-    style.content_margin_top = 16
-    style.content_margin_bottom = 16
+    style.bg_color = DEEP if variant == "hero" else (Color("#eaf5e9") if variant == "tint" else WHITE)
+    style.set_corner_radius_all(22)
+    style.border_color = Color("#dfe9df") if variant == "plain" else style.bg_color
+    style.set_border_width_all(1)
+    style.shadow_color = Color(0.06, 0.17, 0.11, 0.08)
+    style.shadow_size = 5 if variant == "hero" else 3
+    style.shadow_offset = Vector2(0, 3)
+    style.content_margin_left = 17
+    style.content_margin_right = 17
+    style.content_margin_top = 17
+    style.content_margin_bottom = 17
     panel.add_theme_stylebox_override("panel", style)
     body.add_child(panel)
     var content = VBoxContainer.new()
     content.mouse_filter = Control.MOUSE_FILTER_PASS
     content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    content.add_theme_constant_override("separation", 9)
+    content.add_theme_constant_override("separation", 11)
     panel.add_child(content)
     if not title.is_empty():
-        _label(content, title, 20, INK)
+        _label(content, title, 18, WHITE if variant == "hero" else INK)
     return content
+
+func _macro_chip(parent: Node, caption: String, value: float, tint: Color) -> void:
+    var panel = PanelContainer.new()
+    panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    var style = StyleBoxFlat.new()
+    style.bg_color = Color("#286453")
+    style.set_corner_radius_all(12)
+    style.content_margin_left = 9
+    style.content_margin_right = 7
+    style.content_margin_top = 9
+    style.content_margin_bottom = 9
+    panel.add_theme_stylebox_override("panel", style)
+    parent.add_child(panel)
+    var content = VBoxContainer.new()
+    content.add_theme_constant_override("separation", 3)
+    panel.add_child(content)
+    _label(content, caption, 11, Color("#cee4d6"))
+    _label(content, str(roundi(value)) + " г", 19, tint)
+
 
 func _number(parent: Node, value: float, minimum: float, maximum: float, step: float = 1.0) -> SpinBox:
     var spin = SpinBox.new()
@@ -425,25 +469,34 @@ func _choice(parent: Node, options: Array) -> OptionButton:
 
 func _make_tabs() -> void:
     var bar = PanelContainer.new()
+    bar.name = "BottomNavigation"
     var st = StyleBoxFlat.new()
     st.bg_color = WHITE
-    st.content_margin_left = 5
-    st.content_margin_right = 5
+    st.border_color = BORDER
+    st.border_width_top = 1
+    st.content_margin_left = 7
+    st.content_margin_right = 7
     st.content_margin_top = 7
-    st.content_margin_bottom = 8
+    st.content_margin_bottom = 7
     bar.add_theme_stylebox_override("panel", st)
     shell.add_child(bar)
     var row = HBoxContainer.new()
+    row.add_theme_constant_override("separation", 2)
     bar.add_child(row)
     var tabs = [
-        ["День", "day"], ["Спорт", "activity"], ["Вес", "weight"],
-        ["Итоги", "stats"], ["Ещё", "settings"]
+        ["◉", "День", "day"],
+        ["✦", "Спорт", "activity"],
+        ["◇", "Вес", "weight"],
+        ["▥", "Итоги", "stats"],
+        ["☷", "Ещё", "settings"]
     ]
     for item in tabs:
-        var target: String = item[1]
-        var b = _button(row, item[0], func(): _navigate_to_tab(target), true)
-        b.custom_minimum_size.y = 48
+        var target: String = item[2]
+        var b = _button(row, item[0] + "\n" + item[1], func(): _navigate_to_tab(target), true)
+        b.custom_minimum_size.y = 59
+        b.clip_text = true
         b.add_theme_font_size_override("font_size", 13)
+        b.add_theme_constant_override("h_separation", 3)
         tab_buttons[target] = b
     _update_tabs()
 
@@ -453,12 +506,13 @@ func _update_tabs() -> void:
         var active = key == tab
         var box_style = StyleBoxFlat.new()
         box_style.bg_color = GREEN if active else WHITE
-        box_style.set_corner_radius_all(12)
+        box_style.set_corner_radius_all(14)
         for state in ["normal", "hover", "pressed"]:
             b.add_theme_stylebox_override(state, box_style)
         var color = WHITE if active else MUTED
         for state in ["font_color", "font_hover_color", "font_pressed_color"]:
             b.add_theme_color_override(state, color)
+
 
 func _style_progress(bar: ProgressBar) -> void:
     var track = StyleBoxFlat.new()
@@ -470,7 +524,7 @@ func _style_progress(bar: ProgressBar) -> void:
     bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
     bar.add_theme_stylebox_override("background", track)
     bar.add_theme_stylebox_override("fill", fill)
-    bar.custom_minimum_size.y = 15
+    bar.custom_minimum_size.y = 13
     bar.show_percentage = false
 
 func _metric_tile(parent: Node, value: String, caption: String, tone: Color = GREEN) -> void:
