@@ -111,9 +111,11 @@ func import_json(raw: String, persist: bool = true) -> bool:
             return false
         if float(grams) <= 0.0 or float(grams) > 5000.0:
             return false
+    var original_data = data
     data = obj
-    if persist:
-        save()
+    if persist and not save():
+        data = original_data
+        return false
     return true
 
 func export_json() -> String:
