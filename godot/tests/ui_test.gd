@@ -121,6 +121,12 @@ func _run() -> void:
         push_error("FAILED: barcode product card has no visible add button")
         quit(1)
         return
+    var button_rect = confirm_button.get_global_rect()
+    var screen = app.get_viewport_rect().size
+    if button_rect.position.x < 0 or button_rect.position.y < 0 or button_rect.end.x > screen.x + 1.0 or button_rect.end.y > screen.y + 1.0:
+        push_error("FAILED: barcode action button is clipped by mobile viewport")
+        quit(1)
+        return
     confirm_button.pressed.emit()
     await process_frame
     var after_scan = app.store.day_entries(app.date)
