@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "godot/**"
+      - "android_scanner/**"
       - ".github/workflows/godot-android.yml"
   workflow_dispatch:
 
@@ -14,7 +15,7 @@ permissions:
 jobs:
   export-apk:
     runs-on: ${{ vars.GODOT_RUNNER || 'ubuntu-latest' }}
-    timeout-minutes: 35
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - name: Java 17
@@ -71,10 +72,19 @@ jobs:
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$SIGNING_DIR/debug.keystore" >> "$GITHUB_ENV"
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey" >> "$GITHUB_ENV"
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android" >> "$GITHUB_ENV"
+      - name: Install Gradle template and Google Code Scanner
+        shell: bash
+        run: |
+          set -euo pipefail
+          /tmp/godot --headless --editor --path godot --install-android-build-template --quit
+          python3 android_scanner/patch_template.py
+          find godot/android/build -maxdepth 2 -type f | head -50
       - name: Validate project scripts and import resources
         run: /tmp/godot --headless --editor --path godot --quit --verbose
       - name: Verify journal save and restore
         run: /tmp/godot --headless --path godot --script res://tests/storage_test.gd
+      - name: Test barcode parsing and offline nutrition cache
+        run: /tmp/godot --headless --path godot --script res://tests/barcode_test.gd
       - name: Test food search, favorites and quick-add UI
         run: /tmp/godot --headless --path godot --script res://tests/ui_test.gd
       - name: Smoke test app startup
