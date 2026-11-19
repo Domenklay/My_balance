@@ -617,8 +617,8 @@ func _show_day() -> void:
     _metric_tile(activity_stats, str(exercise) + " мин", "Тренировки")
     var shortcuts = _row(overview)
     _button(shortcuts, "+ Еда", func(): _jump_to_food())
-    _button(shortcuts, "+ Спорт", func(): tab = "activity"; _render(), true)
-    _button(shortcuts, "+ Вес", func(): tab = "weight"; _render(), true)
+    _button(shortcuts, "+ Спорт", func(): _navigate_to_tab("activity"), true)
+    _button(shortcuts, "+ Вес", func(): _navigate_to_tab("weight"), true)
 
     var add = _card("Добавить еду")
     food_entry_card = add
@@ -662,6 +662,7 @@ func _show_day() -> void:
             _button(r, "×", func(): _confirm_delete("Удалить запись питания?", func():
                 if store.delete_saved_record("entries", entry):
                     _render()
+                    _notify_saved("Запись питания удалена")
                 else:
                     _message("Не удалось удалить запись питания.")
             ), true)
@@ -683,6 +684,7 @@ func _show_day() -> void:
             _button(rr, "+", func():
                 if store.repeat_entry(old, date):
                     _render()
+                    _notify_saved("Блюдо повторено")
                 else:
                     _message("Не удалось повторить запись. Проверь сохранение.")
             )
@@ -717,6 +719,7 @@ func _jump_to_diary() -> void:
 func _barcode_add_success() -> void:
     tab = "day"
     _render()
+    _notify_saved("Порция добавлена в дневник")
     call_deferred("_jump_to_diary")
 
 func _barcode_message(value: String) -> void:
@@ -946,7 +949,7 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
             var root_control: Control = sheet["root"]
             root_control.queue_free()
             _render()
-            _message("Продукт сохранён в локальном каталоге.")
+            _notify_saved("Продукт сохранён в каталоге")
 
     var save_only = _button(fields, "Сохранить без записи в дневник", func(): commit_record.call(false), true)
     save_only.custom_minimum_size.y = 43
@@ -962,7 +965,7 @@ func _on_catalog_http_completed(result: int, status: int, _headers: PackedString
         return
     if store.update_catalog_json(body.get_string_from_utf8()):
         _render()
-        _message("Каталог обновлён: " + str(store.bundled_foods.size()) + " товаров.")
+        _notify_saved("Каталог обновлён: " + str(store.bundled_foods.size()) + " товаров")
     else:
         _message("Недостоверный или повреждённый каталог. Старые данные сохранены.")
 
@@ -1041,6 +1044,7 @@ func _food_form(parent: VBoxContainer) -> void:
         var f: Dictionary = filtered[picker.selected]
         if store.add_food_entry(f, grams.value, meal.get_item_text(meal.selected), date):
             _render()
+            _notify_saved("Продукт добавлен в дневник")
         else:
             _message("Ошибка сохранения. Запись не добавлена; проверь свободное место.")
     )
@@ -1144,6 +1148,7 @@ func _edit_entry(entry: Dictionary) -> void:
         var root_control: Control = sheet["root"]
         root_control.queue_free()
         _render()
+        _notify_saved("Запись питания изменена")
     )
 
 func _show_activity() -> void:
@@ -1165,6 +1170,7 @@ func _show_activity() -> void:
         store.data["activities"].append(activity)
         if store.save():
             _render()
+            _notify_saved("Активность сохранена")
         else:
             store.data["activities"].erase(activity)
             _message("Не удалось сохранить активность. Проверь память устройства.")
@@ -1187,6 +1193,7 @@ func _show_activity() -> void:
         _button(r, "×", func(): _confirm_delete("Удалить активность?", func():
             if store.delete_saved_record("activities", a):
                 _render()
+                _notify_saved("Активность удалена")
             else:
                 _message("Не удалось удалить активность.")
         ), true)
@@ -1219,6 +1226,7 @@ func _edit_activity(activity: Dictionary) -> void:
         if store.save():
             dialog.queue_free()
             _render()
+            _notify_saved("Активность изменена")
         else:
             activity.clear()
             activity.merge(previous_activity, true)
@@ -1243,6 +1251,7 @@ func _show_weight() -> void:
         store.data["weights"].append({"id": "w" + date, "date": date, "value": value.value})
         if store.save():
             _render()
+            _notify_saved("Вес записан")
         else:
             store.data["weights"] = previous_weights
             _message("Не удалось сохранить вес. Предыдущие данные восстановлены.")
@@ -1261,6 +1270,7 @@ func _show_weight() -> void:
         _button(r, "×", func(): _confirm_delete("Удалить запись веса?", func():
             if store.delete_saved_record("weights", w):
                 _render()
+                _notify_saved("Запись веса удалена")
             else:
                 _message("Не удалось удалить запись веса.")
         ), true)
@@ -1330,6 +1340,7 @@ func _show_settings() -> void:
         store.data["settings"] = {"kcal": kcal.value, "start": start.value, "goal": goal.value}
         if store.save():
             _render()
+            _notify_saved("Настройки сохранены")
         else:
             store.data["settings"] = previous_settings
             _message("Не удалось сохранить настройки. Прежние значения оставлены.")
@@ -1354,8 +1365,8 @@ func _show_settings() -> void:
         if store.import_json(text):
             date = Time.get_date_string_from_system()
             month_shown = date.substr(0, 7)
-            _message("Данные восстановлены")
             _render()
+            _notify_saved("Дневник восстановлен")
         else:
             _message("Неверная резервная копия JSON.")
     )
@@ -1398,6 +1409,7 @@ func _show_my_foods() -> void:
                 _message("Не удалось сохранить продукт. Проверь введённые КБЖУ и место на устройстве.")
                 return
         _render()
+        _notify_saved("Продукт сохранён")
     )
     var custom_foods: Array = store.data["foods"].filter(func(item): return item is Dictionary)
     if not custom_foods.is_empty():
@@ -1415,8 +1427,8 @@ func _show_my_foods() -> void:
                 _message("Штрихкод должен содержать 8–14 цифр.")
                 return
             if store.link_barcode_to_food(str(item.get("id", "")), link_code.text.strip_edges()):
-                _message("Штрихкод сохранён. Теперь товар можно находить сканером без интернета.")
                 _render()
+                _notify_saved("Штрихкод привязан к продукту")
             else:
                 _message("Не удалось привязать код. Возможно, он уже принадлежит другому продукту.")
         , true)
@@ -1433,6 +1445,7 @@ func _show_my_foods() -> void:
                 _confirm_delete("Удалить свой продукт «" + str(food.get("name", "")) + "» из каталога? История питания останется.", func():
                     if store.delete_custom_food(str(food.get("id", ""))):
                         _render()
+                        _notify_saved("Продукт удалён")
                     else:
                         _message("Не удалось удалить продукт.")
                 )
@@ -1468,6 +1481,7 @@ func _edit_custom_food(food: Dictionary) -> void:
             var root_control: Control = sheet["root"]
             root_control.queue_free()
             _render()
+            _notify_saved("Продукт обновлён")
         else:
             _sheet_error(sheet, "Проверь название, штрихкод и пищевую ценность.")
     )
@@ -1501,7 +1515,7 @@ func _write_backup_file(path: String) -> void:
     var status = file.get_error()
     file.close()
     if status == OK:
-        _message("Резервная копия сохранена. Храни её вне приложения.")
+        _notify_saved("Резервная копия сохранена")
     else:
         _message("Ошибка записи резервной копии: " + str(status))
 
@@ -1525,7 +1539,7 @@ func _read_backup_file(path: String) -> void:
             date = Time.get_date_string_from_system()
             month_shown = date.substr(0, 7)
             _render()
-            _message("Дневник восстановлен из JSON.")
+            _notify_saved("Дневник восстановлен из JSON")
         else:
             _message("Файл повреждён или несовместим.")
         confirmation.queue_free()
