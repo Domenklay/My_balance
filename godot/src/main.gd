@@ -194,6 +194,10 @@ func _calendar(parent: Node) -> void:
     for d in range(1, end_day + 1):
         var value = month_shown + "-" + str(d).pad_zeros(2)
         var recorded = not store.day_entries(value).is_empty() or not store.day_activities(value).is_empty()
+        for item in store.data["weights"]:
+            if item is Dictionary and str(item.get("date", "")) == value:
+                recorded = true
+                break
         var selected = value == date
         var label = str(d) + ("•" if recorded else "")
         _button(grid, label, func(): date = value; _render(), not selected)
@@ -333,9 +337,32 @@ func _show_activity() -> void:
         var text = str(type_name) + " · " + str(a.get("minutes", 0)) + " мин"
         if str(a.get("detail", "")) != "":
             text += "\n" + str(a.get("detail", ""))
+        if str(a.get("type", "")) == "walk" and float(a.get("distance", 0)) > 0:
+            text += " · " + str(a.get("distance", 0)) + " км"
         var l = _label(r, text, 14)
         l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        _button(r, "✎", func(): _edit_activity(a), true)
         _button(r, "×", func(): store.data["activities"].erase(a); store.save(); _render(), true)
+
+func _edit_activity(activity: Dictionary) -> void:
+    var dialog = ConfirmationDialog.new()
+    dialog.title = "Изменить тренировку"
+    dialog.dialog_text = "Продолжительность в минутах:"
+    add_child(dialog)
+    var minutes = SpinBox.new()
+    minutes.min_value = 1
+    minutes.max_value = 1440
+    minutes.step = 1
+    minutes.value = float(activity.get("minutes", 30))
+    dialog.add_child(minutes)
+    dialog.confirmed.connect(func():
+        activity["minutes"] = minutes.value
+        store.save()
+        dialog.queue_free()
+        _render()
+    )
+    dialog.canceled.connect(func(): dialog.queue_free())
+    dialog.popup_centered(Vector2i(350, 180))
 
 func _show_weight() -> void:
     var card = _card("История веса")
