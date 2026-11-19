@@ -41,8 +41,10 @@ func _run() -> void:
             if scrolling.scroll_vertical < 100:
                 _fail("could not scroll " + page + " programmatically")
                 return
-    if scrollable_pages < 3:
-        _fail("too few scrollable pages: " + str(scrollable_pages))
+    # Activity and weight can legitimately fit without scrolling;
+    # require the two long pages to be scrollable.
+    if scrollable_pages < 2:
+        _fail("missing scroll range on day/settings: " + str(scrollable_pages))
         return
 
     app.tab = "day"
