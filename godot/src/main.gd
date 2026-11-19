@@ -7,6 +7,7 @@ const INK = Color("#233c34")
 const MUTED = Color("#71877a")
 const PALE = Color("#f1f7f3")
 const WHITE = Color("#ffffff")
+const ACCENT = Color("#e7a948")
 
 var store = StoreScript.new()
 var date: String = Time.get_date_string_from_system()
@@ -17,6 +18,8 @@ var body: VBoxContainer
 var scroll: ScrollContainer
 var food_entry_card: VBoxContainer
 var note_save_timer: Timer
+var calendar_expanded: bool = false
+var tab_buttons: Dictionary = {}
 
 func _ready() -> void:
     month_shown = date.substr(0, 7)
@@ -37,7 +40,7 @@ func _ready() -> void:
     head_style.content_margin_bottom = 14
     title.add_theme_stylebox_override("panel", head_style)
     shell.add_child(title)
-    _label(title, "🌿 Мой баланс", 24, WHITE)
+    _label(title, "🌿 Мой баланс   •   личный дневник", 21, WHITE)
     scroll = ScrollContainer.new()
     scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
     scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -101,6 +104,8 @@ func _card(title: String) -> VBoxContainer:
     var style = StyleBoxFlat.new()
     style.bg_color = WHITE
     style.set_corner_radius_all(18)
+    style.shadow_color = Color(0.12, 0.22, 0.16, 0.08)
+    style.shadow_size = 3
     style.content_margin_left = 14
     style.content_margin_right = 14
     style.content_margin_top = 14
@@ -162,9 +167,44 @@ func _make_tabs() -> void:
     ]
     for item in tabs:
         var target: String = item[1]
-        _button(row, item[0], func(): tab = target; _render(), true)
+        var b = _button(row, item[0], func(): tab = target; _render(), true)
+        b.custom_minimum_size.y = 48
+        b.add_theme_font_size_override("font_size", 13)
+        tab_buttons[target] = b
+    _update_tabs()
+
+func _update_tabs() -> void:
+    for key in tab_buttons:
+        var b: Button = tab_buttons[key]
+        var active = key == tab
+        var box_style = StyleBoxFlat.new()
+        box_style.bg_color = GREEN if active else WHITE
+        box_style.set_corner_radius_all(12)
+        for state in ["normal", "hover", "pressed"]:
+            b.add_theme_stylebox_override(state, box_style)
+        var color = WHITE if active else MUTED
+        for state in ["font_color", "font_hover_color", "font_pressed_color"]:
+            b.add_theme_color_override(state, color)
+
+func _metric_tile(parent: Node, value: String, caption: String, tone: Color = GREEN) -> void:
+    var panel = PanelContainer.new()
+    panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    var style = StyleBoxFlat.new()
+    style.bg_color = PALE
+    style.set_corner_radius_all(13)
+    style.content_margin_left = 12
+    style.content_margin_right = 12
+    style.content_margin_top = 12
+    style.content_margin_bottom = 11
+    panel.add_theme_stylebox_override("panel", style)
+    parent.add_child(panel)
+    var inner = VBoxContainer.new()
+    panel.add_child(inner)
+    _label(inner, value, 25, tone)
+    _label(inner, caption, 12, MUTED)
 
 func _render() -> void:
+    _update_tabs()
     for child in body.get_children():
         body.remove_child(child)
         child.queue_free()
@@ -229,60 +269,96 @@ func _shift_month(delta: int) -> void:
     _render()
 
 func _show_day() -> void:
-    var overview = _card("Сегодня · мой дневник")
+    var overview = _card("Мой день")
     _date_nav(overview)
-    _calendar(overview)
+    _button(overview, "▾  Скрыть календарь" if calendar_expanded else "▸  Открыть календарь", func():
+        calendar_expanded = not calendar_expanded
+        _render()
+    , true)
+    if calendar_expanded:
+        _calendar(overview)
     var total = store.day_calories(date)
     var target = float(store.data["settings"]["kcal"])
-    _label(overview, str(roundi(total)) + " / " + str(roundi(target)) + " ккал", 27, GREEN)
+    var stats = _row(overview)
+    _metric_tile(stats, str(roundi(total)), "Съедено, ккал")
+    _metric_tile(stats, str(roundi(maxf(0.0, target - total))), "Осталось, ккал", ACCENT)
     var bar = ProgressBar.new()
     bar.min_value = 0.0
     bar.max_value = maxf(1.0, target)
     bar.value = minf(total, target)
     bar.show_percentage = false
-    bar.custom_minimum_size.y = 18
+    bar.custom_minimum_size.y = 16
     overview.add_child(bar)
-    _label(overview, "Осталось: " + str(roundi(target - total)) + " ккал", 16)
-    _label(overview, "Б " + str(roundi(store.day_macro(date, "p"))) + " г  ·  Ж " + str(roundi(store.day_macro(date, "f"))) + " г  ·  У " + str(roundi(store.day_macro(date, "c"))) + " г", 14, MUTED)
-    var walk = 0
-    var other = 0
+    if total > target:
+        _label(overview, "Сверх ориентира: " + str(roundi(total - target)) + " ккал", 14, MUTED)
+    _label(overview, "Б: " + str(roundi(store.day_macro(date, "p"))) + " г     Ж: " + str(roundi(store.day_macro(date, "f"))) + " г     У: " + str(roundi(store.day_macro(date, "c"))) + " г", 14, MUTED)
+    var walking = 0
+    var exercise = 0
     for a in store.day_activities(date):
         if str(a.get("type", "")) == "walk":
-            walk += int(a.get("minutes", 0))
+            walking += int(a.get("minutes", 0))
         else:
-            other += int(a.get("minutes", 0))
-    _label(overview, "🚶 " + str(walk) + " мин ходьбы    🏋 " + str(other) + " мин упражнений", 15)
-    var quick = _row(overview)
-    _button(quick, "+ Еда", func(): _jump_to_food(), true)
-    _button(quick, "+ Спорт", func(): tab = "activity"; _render(), true)
-    _button(quick, "+ Вес", func(): tab = "weight"; _render(), true)
+            exercise += int(a.get("minutes", 0))
+    var activity_stats = _row(overview)
+    _metric_tile(activity_stats, str(walking) + " мин", "Прогулки")
+    _metric_tile(activity_stats, str(exercise) + " мин", "Тренировки")
+    var shortcuts = _row(overview)
+    _button(shortcuts, "+ Еда", func(): _jump_to_food())
+    _button(shortcuts, "+ Спорт", func(): tab = "activity"; _render(), true)
+    _button(shortcuts, "+ Вес", func(): tab = "weight"; _render(), true)
 
-    var foods = _card("Что я ела")
+    var add = _card("Быстро добавить еду")
+    food_entry_card = add
+    _food_form(add)
+
+    var foods = _card("Дневник питания")
     var existing = store.day_entries(date)
     if existing.is_empty():
-        _label(foods, "Пока нет записей. Добавь завтрак, обед, перекус или ужин.", 14, MUTED)
+        _label(foods, "Сегодня ещё нет записей. Выбери продукт выше или повтори блюдо со вчера.", 14, MUTED)
     for meal in ["Завтрак", "Обед", "Перекус", "Ужин"]:
         var items = existing.filter(func(e): return str(e.get("meal", "")) == meal)
         if items.is_empty():
             continue
-        _label(foods, meal, 16, GREEN)
+        _label(foods, meal, 17, GREEN)
         for entry in items:
             var f: Dictionary = store.entry_food(entry)
             var r = _row(foods)
-            var caption = _label(r, str(f.get("name", "Продукт")) + "\n" + str(entry.get("grams", 0)) + " г · " + str(roundi(store.entry_kcal(entry))) + " ккал", 13)
+            var caption = _label(r, str(f.get("name", "Продукт")) + "\n" + str(entry.get("grams", 0)) + " г • " + str(roundi(store.entry_kcal(entry))) + " ккал", 14)
             caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
             _button(r, "✎", func(): _edit_entry(entry), true)
             _button(r, "×", func(): _confirm_delete("Удалить запись питания?", func(): store.data["entries"].erase(entry); store.save(); _render()), true)
-    var add = _card("Добавить продукт")
-    food_entry_card = add
-    _food_form(add)
-    var notes_card = _card("Как прошёл день?")
+
+    var yesterday = store.change_date(date, -1)
+    var previous = store.day_entries(yesterday)
+    if not previous.is_empty():
+        var repeats = _card("Повторить со вчера · " + yesterday)
+        _label(repeats, "Нажми «+», чтобы добавить такую же порцию на выбранный день.", 13, MUTED)
+        var count = 0
+        for old in previous:
+            if count >= 8:
+                break
+            count += 1
+            var old_food = store.entry_food(old)
+            var rr = _row(repeats)
+            var rl = _label(rr, str(old_food.get("name", "Продукт")) + " • " + str(old.get("grams", 0)) + " г", 13)
+            rl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            _button(rr, "+", func():
+                if store.repeat_entry(old, date):
+                    _render()
+                else:
+                    _message("Не удалось повторить запись. Проверь сохранение.")
+            )
+
+    var notes_card = _card("Заметка о дне")
     var notes = TextEdit.new()
     notes.custom_minimum_size.y = 92
     notes.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
-    notes.placeholder_text = "Был ли голод после работы? Что помогло почувствовать сытость?"
+    notes.placeholder_text = "Как прошёл день? Голод, настроение, самочувствие…"
     notes.text = str(store.data["notes"].get(date, ""))
-    notes.text_changed.connect(func(): store.data["notes"][date] = notes.text; note_save_timer.start())
+    notes.text_changed.connect(func():
+        store.data["notes"][date] = notes.text
+        note_save_timer.start()
+    )
     notes_card.add_child(notes)
 
 func _jump_to_food() -> void:
@@ -290,22 +366,104 @@ func _jump_to_food() -> void:
         scroll.ensure_control_visible(food_entry_card)
 
 func _food_form(parent: VBoxContainer) -> void:
-    _label(parent, "Продукт")
     var available = store.all_foods()
-    var picker = _choice(parent, available.map(func(f): return f.get("name", "")))
-    var quantities = _row(parent)
-    var grams = _number(quantities, 100, 1, 5000, 1)
-    var meal = _choice(quantities, ["Завтрак", "Обед", "Перекус", "Ужин"])
-    _button(parent, "Добавить в дневник", func():
-        var f: Dictionary = available[picker.selected]
+    var filtered: Array = []
+    var search = _text_input(parent, "Поиск продукта по названию")
+    search.clear_button_enabled = true
+    var favorite_only = CheckButton.new()
+    favorite_only.text = "Только избранные"
+    parent.add_child(favorite_only)
+    var picker = _choice(parent, [])
+    var values = _row(parent)
+    _label(values, "Граммы", 13, MUTED)
+    var grams = _number(values, 100, 1, 5000)
+    var meal = _choice(parent, ["Завтрак", "Обед", "Перекус", "Ужин"])
+    var preview = _label(parent, "", 14, MUTED)
+    var controls = _row(parent)
+    var star = _button(controls, "☆ В избранное", func():
+        if picker.selected < 0 or picker.selected >= filtered.size():
+            return
+        var food: Dictionary = filtered[picker.selected]
+        if store.toggle_favorite(str(food.get("id", ""))):
+            _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star)
+        else:
+            _message("Не удалось сохранить избранное.")
+    , true)
+    _button(controls, "+ Добавить", func():
+        if picker.selected < 0 or picker.selected >= filtered.size():
+            _message("Выбери продукт. При необходимости отключи фильтр избранного.")
+            return
+        var f: Dictionary = filtered[picker.selected]
         var snap = {"name": f["name"], "kcal": f["kcal"], "p": f["p"], "f": f["f"], "c": f["c"]}
         store.data["entries"].append({
-            "id": str(Time.get_ticks_usec()), "date": date, "food": f["id"],
-            "nutrition": snap, "grams": grams.value, "meal": meal.get_item_text(meal.selected)
+            "id": str(Time.get_ticks_usec()) + "_" + str(store.data["entries"].size()),
+            "date": date, "food": f["id"], "nutrition": snap,
+            "grams": grams.value, "meal": meal.get_item_text(meal.selected)
         })
-        store.save()
+        if not store.save():
+            _message("Ошибка сохранения. Проверь свободное место на устройстве.")
         _render()
     )
+    search.text_changed.connect(func(_value: String):
+        _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star)
+    )
+    favorite_only.toggled.connect(func(_value: bool):
+        _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star)
+    )
+    picker.item_selected.connect(func(_value: int):
+        _update_food_preview(picker, filtered, grams, preview, star)
+    )
+    grams.value_changed.connect(func(_value: float):
+        _update_food_preview(picker, filtered, grams, preview, star)
+    )
+    _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star)
+
+func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only: CheckButton,
+        filtered: Array, grams: SpinBox, preview: Label, star: Button) -> void:
+    var previous_id = ""
+    if picker.selected >= 0 and picker.selected < filtered.size():
+        previous_id = str(filtered[picker.selected].get("id", ""))
+    filtered.clear()
+    var all = store.all_foods()
+    all.sort_custom(func(a, b):
+        var a_favorite = store.is_favorite(str(a.get("id", "")))
+        var b_favorite = store.is_favorite(str(b.get("id", "")))
+        if a_favorite != b_favorite:
+            return a_favorite
+        return str(a.get("name", "")).nocasecmp_to(str(b.get("name", ""))) < 0
+    )
+    var query = search.text.strip_edges().to_lower()
+    for item in all:
+        if not str(item.get("name", "")).to_lower().contains(query):
+            continue
+        if favorite_only.button_pressed and not store.is_favorite(str(item.get("id", ""))):
+            continue
+        filtered.append(item)
+    picker.clear()
+    var selection = 0
+    for i in range(filtered.size()):
+        var f: Dictionary = filtered[i]
+        var id = str(f.get("id", ""))
+        var label = ("★ " if store.is_favorite(id) else "") + str(f.get("name", "Продукт"))
+        picker.add_item(label)
+        if id == previous_id:
+            selection = i
+    if not filtered.is_empty():
+        picker.select(selection)
+    _update_food_preview(picker, filtered, grams, preview, star)
+
+func _update_food_preview(picker: OptionButton, filtered: Array, grams: SpinBox,
+        preview: Label, star: Button) -> void:
+    if picker.selected < 0 or picker.selected >= filtered.size():
+        preview.text = "Нет подходящих продуктов."
+        star.text = "☆ В избранное"
+        star.disabled = true
+        return
+    var f: Dictionary = filtered[picker.selected]
+    var amount = grams.value / 100.0
+    preview.text = str(roundi(float(f.get("kcal", 0)) * amount)) + " ккал  •  Б " + str(snappedf(float(f.get("p", 0)) * amount, 0.1)) + "  Ж " + str(snappedf(float(f.get("f", 0)) * amount, 0.1)) + "  У " + str(snappedf(float(f.get("c", 0)) * amount, 0.1))
+    star.disabled = false
+    star.text = "★ В избранном" if store.is_favorite(str(f.get("id", ""))) else "☆ В избранное"
 
 func _edit_entry(entry: Dictionary) -> void:
     var dialog = ConfirmationDialog.new()
