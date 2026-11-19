@@ -79,8 +79,22 @@ func import_json(raw: String, persist: bool = true) -> bool:
     var settings: Dictionary = obj["settings"]
     if not (settings.has("kcal") and settings.has("start") and settings.has("goal")):
         return false
+    for name in ["kcal", "start", "goal"]:
+        if not (settings[name] is float or settings[name] is int):
+            return false
     if float(settings["kcal"]) < 1000.0 or float(settings["kcal"]) > 5000.0:
         return false
+    if float(settings["start"]) < 20.0 or float(settings["start"]) > 400.0:
+        return false
+    if float(settings["goal"]) < 20.0 or float(settings["goal"]) > 400.0:
+        return false
+    if obj["foods"].size() > 10000 or obj["entries"].size() > 50000 or obj["weights"].size() > 5000 or obj["activities"].size() > 50000:
+        return false
+    for entry in obj["entries"]:
+        if not (entry is Dictionary and entry.get("grams", 0) is float or entry is Dictionary and entry.get("grams", 0) is int):
+            return false
+        if float(entry.get("grams", 0)) <= 0.0 or float(entry.get("grams", 0)) > 5000.0:
+            return false
     data = obj
     if persist:
         save()
