@@ -128,7 +128,7 @@ func _run() -> void:
     if bundled.bundled_foods.size() < 100:
         _fail("bad catalog update erased the last known-good catalog")
         return
-    var saved_id = str(bundled.data["foods"][0]["id"])
+    var saved_id = "my_favorite"
     var changed = {"name": "Йогурт с упаковки", "barcode": actual_code, "kcal": 150.0,
         "p": 5.5, "f": 4.5, "c": 20.0}
     if not bundled.update_custom_food(saved_id, changed):
