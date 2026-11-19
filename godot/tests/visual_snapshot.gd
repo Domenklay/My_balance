@@ -23,6 +23,7 @@ func _snapshot(app: Control, filename: String) -> void:
 
 func _capture() -> void:
     DisplayServer.window_set_size(Vector2i(420, 900))
+    root.gui_embed_subwindows = true
     DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://screenshots"))
     var packed: PackedScene = load("res://main.tscn")
     if packed == null:
@@ -75,6 +76,24 @@ func _capture() -> void:
     if is_instance_valid(app.food_entry_card):
         app.scroll.ensure_control_visible(app.food_entry_card)
         await _snapshot(app, "03-food-entry-barcode")
+    app.scroll.scroll_vertical = 0
+    app._show_barcode_portion(app.store.bundled_foods[0])
+    await _snapshot(app, "05-barcode-result-dialog")
+    for child in app.get_children():
+        if child is ConfirmationDialog:
+            child.queue_free()
+    await process_frame
+    app._confirm_barcode_product({
+        "barcode": "3017624010701",
+        "name": "Пример продукта",
+        "kcal": 220.0, "p": 5.0, "f": 8.0, "c": 30.0,
+        "source": "Open Food Facts"
+    })
+    await _snapshot(app, "06-new-product-dialog")
+    for child in app.get_children():
+        if child is ConfirmationDialog:
+            child.queue_free()
+    await process_frame
     for page in ["activity", "weight", "stats", "settings"]:
         app.tab = page
         app._render()
