@@ -552,22 +552,27 @@ func _food_form(parent: VBoxContainer) -> void:
     var barcode_panel = VBoxContainer.new()
     barcode_panel.add_theme_constant_override("separation", 6)
     parent.add_child(barcode_panel)
-    _label(barcode_panel, "По штрихкоду товара", 16, GREEN)
-    _label(barcode_panel, "Сканер распознаёт код камерой. Для нового товара нужен интернет.", 12, MUTED)
-    var barcode_controls = _row(barcode_panel)
-    barcode_input = _text_input(barcode_controls, "EAN / UPC — 8–14 цифр")
-    barcode_input.max_length = 14
-    barcode_input.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
-    _button(barcode_controls, "Найти", func(): _lookup_barcode(barcode_input.text))
-    var camera_button = _button(barcode_panel, "▣ Сканировать камерой", func():
+    _label(barcode_panel, "Найти продукт по штрихкоду", 17, GREEN)
+    var camera_button = _button(barcode_panel, "▣  Сканировать штрихкод", func():
         if barcode_scanner != null:
             _barcode_message("Открываю сканер штрихкодов…")
             barcode_scanner.scanBarcode()
         else:
-            _barcode_message("Камера недоступна на этом устройстве. Введи цифры под штрихкодом.")
+            _barcode_message("Сканер камеры работает на Android с Google Play Services. Введи номер ниже.")
     )
-    camera_button.disabled = barcode_scanner == null
-    barcode_message = _label(barcode_panel, "Если товар не найден, его можно добавить вручную.", 12, MUTED)
+    camera_button.custom_minimum_size.y = 60
+    camera_button.add_theme_font_size_override("font_size", 17)
+    if barcode_scanner == null:
+        camera_button.tooltip_text = "Сканер камеры доступен при запуске Android APK"
+    _label(barcode_panel, "Или введи номер с упаковки", 13, MUTED)
+    var barcode_controls = _row(barcode_panel)
+    barcode_input = _text_input(barcode_controls, "EAN / UPC — 8–14 цифр")
+    barcode_input.max_length = 14
+    barcode_input.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+    var barcode_find = _button(barcode_controls, "Найти", func(): _lookup_barcode(barcode_input.text), true)
+    barcode_find.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+    barcode_find.custom_minimum_size.x = 74
+    barcode_message = _label(barcode_panel, "Первый поиск требует интернет; найденные товары сохраняются.", 12, MUTED)
     parent.add_child(HSeparator.new())
     _label(parent, "Или найди в сохранённых продуктах", 16, GREEN)
     var filtered: Array = []
@@ -578,6 +583,8 @@ func _food_form(parent: VBoxContainer) -> void:
     search.clear_button_enabled = true
     var favorite_only = CheckButton.new()
     favorite_only.text = "Только избранные"
+    favorite_only.add_theme_color_override("font_color", GREEN)
+    favorite_only.add_theme_font_size_override("font_size", 13)
     parent.add_child(favorite_only)
     var picker = _choice(parent, [])
     _label(parent, "Вес порции, г", 14, MUTED)
