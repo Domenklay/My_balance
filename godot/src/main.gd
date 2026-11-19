@@ -70,6 +70,7 @@ var recipe_editor_open: bool = false
 var profile_edit_open: bool = false
 var recipe_draft: Dictionary = {}
 var recipe_search_text: String = ""
+var recipe_manual_open: bool = false
 var _rendered_view: String = ""
 var _scroll_memory: Dictionary = {}
 var _render_serial: int = 0
@@ -930,6 +931,7 @@ func _show_profile() -> void:
 func _begin_recipe_editor(recipe: Dictionary = {}) -> void:
     recipe_editor_open = true
     recipe_search_text = ""
+    recipe_manual_open = false
     if recipe.is_empty():
         recipe_draft = {
             "id": "", "name": "", "cooked_weight": 500.0,
@@ -1037,6 +1039,39 @@ func _show_recipe_editor() -> void:
         recipe_draft["ingredients"].append(item)
         _render()
     )
+    var manual = _card("Нет ингредиента в каталоге?")
+    _button(manual, "▴ Свернуть ручной ввод" if recipe_manual_open else "+ Ввести ингредиент вручную", func():
+        _recipe_sync_form(name, cooked, portions)
+        recipe_manual_open = not recipe_manual_open
+        _render()
+    , true)
+    if recipe_manual_open:
+        var manual_name = _text_input(manual, "Название ингредиента")
+        _label(manual, "Сырой вес, г", 13, MUTED)
+        var manual_grams = _number(manual, 100, 1, 10000, 1)
+        _label(manual, "Калории на 100 г", 13, MUTED)
+        var manual_kcal = _number(manual, 100, 0, 1000, 0.1)
+        _label(manual, "Белки / Жиры / Углеводы на 100 г", 13, MUTED)
+        var manual_row = _row(manual)
+        var manual_p = _number(manual_row, 0, 0, 100, 0.1)
+        var manual_f = _number(manual_row, 0, 0, 100, 0.1)
+        var manual_c = _number(manual_row, 0, 0, 100, 0.1)
+        _button(manual, "Добавить в состав", func():
+            if manual_name.text.strip_edges().is_empty():
+                _message("Введи название ингредиента.")
+                return
+            if recipe_draft["ingredients"].size() >= 40:
+                _message("Слишком много ингредиентов для одного рецепта.")
+                return
+            _recipe_sync_form(name, cooked, portions)
+            recipe_draft["ingredients"].append({
+                "id": "", "name": manual_name.text.strip_edges(),
+                "grams": manual_grams.value, "kcal": manual_kcal.value,
+                "p": manual_p.value, "f": manual_f.value, "c": manual_c.value
+            })
+            recipe_manual_open = false
+            _render()
+        )
     var preview_card = _card("Расчёт КБЖУ")
     preview = _label(preview_card, "", 14, INK)
     cooked.value_changed.connect(func(_value: float): _recipe_preview(preview, cooked, portions))
