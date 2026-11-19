@@ -271,6 +271,18 @@ func _update_tabs() -> void:
         for state in ["font_color", "font_hover_color", "font_pressed_color"]:
             b.add_theme_color_override(state, color)
 
+func _style_progress(bar: ProgressBar) -> void:
+    var track = StyleBoxFlat.new()
+    track.bg_color = Color("#e1ece4")
+    track.set_corner_radius_all(9)
+    var fill = StyleBoxFlat.new()
+    fill.bg_color = GREEN
+    fill.set_corner_radius_all(9)
+    bar.add_theme_stylebox_override("background", track)
+    bar.add_theme_stylebox_override("fill", fill)
+    bar.custom_minimum_size.y = 15
+    bar.show_percentage = false
+
 func _metric_tile(parent: Node, value: String, caption: String, tone: Color = GREEN) -> void:
     var panel = PanelContainer.new()
     panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -378,8 +390,7 @@ func _show_day() -> void:
     bar.min_value = 0.0
     bar.max_value = maxf(1.0, target)
     bar.value = minf(total, target)
-    bar.show_percentage = false
-    bar.custom_minimum_size.y = 16
+    _style_progress(bar)
     overview.add_child(bar)
     if total > target:
         _label(overview, "Сверх ориентира: " + str(roundi(total - target)) + " ккал", 14, MUTED)
@@ -841,7 +852,8 @@ func _show_stats() -> void:
         bar.min_value = 0
         bar.max_value = float(store.data["settings"]["kcal"]) * 1.5
         bar.value = store.day_calories(d)
-        bar.show_percentage = false
+        _style_progress(bar)
+        bar.custom_minimum_size.y = 11
         line.add_child(bar)
         var daily_value = _nowrap(line, str(roundi(store.day_calories(d))) if not store.day_entries(d).is_empty() else "—", 13)
         daily_value.custom_minimum_size.x = 35
