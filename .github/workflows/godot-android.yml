@@ -46,11 +46,17 @@ jobs:
           unzip -q /tmp/templates.tpz -d /tmp/godot-templates
           cp /tmp/godot-templates/templates/* "/home/runner/.local/share/godot/export_templates/4.6.3.stable/"
           /tmp/godot --headless --version
+      - name: Restore stable test signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/mybalance-signing
+          key: mybalance-godot-debug-key-v1
       - name: Configure Godot Android exporter
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$HOME/.config/godot" "$RUNNER_TEMP"
+          SIGNING_DIR="$HOME/.local/share/mybalance-signing"
+          mkdir -p "$HOME/.config/godot" "$SIGNING_DIR"
           cat > "$HOME/.config/godot/editor_settings-4.tres" <<SETTINGS
           [gd_resource type="EditorSettings" format=3]
 
@@ -58,8 +64,11 @@ jobs:
           export/android/android_sdk_path = "$ANDROID_HOME"
           export/android/java_sdk_path = "$JAVA_HOME"
           SETTINGS
-          keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/debug.keystore" -storepass android -alias androiddebugkey -keypass android -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
-          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$RUNNER_TEMP/debug.keystore" >> "$GITHUB_ENV"
+          if [ ! -f "$SIGNING_DIR/debug.keystore" ]; then
+            echo "::warning::Creating an initial debug key. Existing 0.5.1 APK signatures cannot be reused."
+            keytool -genkeypair -noprompt -keystore "$SIGNING_DIR/debug.keystore" -storepass android -alias androiddebugkey -keypass android -dname "CN=MyBalance Test,O=MyBalance,C=US" -keyalg RSA -keysize 2048 -validity 10000
+          fi
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$SIGNING_DIR/debug.keystore" >> "$GITHUB_ENV"
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey" >> "$GITHUB_ENV"
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android" >> "$GITHUB_ENV"
       - name: Validate project scripts and import resources
