@@ -77,6 +77,7 @@ def fetch(country):
 def main():
     products = {}
     successes = 0
+    countries_loaded = []
     for country in COUNTRIES:
         try:
             raw = fetch(country)
@@ -88,6 +89,7 @@ def main():
                     accepted += 1
             print(f"{country}: {len(raw)} products returned, {accepted} validated and added")
             successes += 1
+            countries_loaded.append(country)
         except Exception as exc:
             print(f"WARNING: {country} source unavailable: {type(exc).__name__}: {exc}")
         time.sleep(1)
@@ -98,7 +100,7 @@ def main():
         "license": "ODbL-1.0",
         "attribution_url": "https://world.openfoodfacts.org",
         "retrieved_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "countries": list(COUNTRIES),
+        "countries": countries_loaded,
         "products": sorted(products.values(), key=lambda p: p["name"].casefold())
     }
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
