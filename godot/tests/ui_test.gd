@@ -46,6 +46,13 @@ func _run() -> void:
         push_error("FAILED: mobile bottom navigation incomplete")
         quit(1)
         return
+    var expand_button: Button = _find_button(app, "Найти продукт или ввести штрихкод")
+    if expand_button == null:
+        push_error("FAILED: compact day screen has no search expansion action")
+        quit(1)
+        return
+    expand_button.pressed.emit()
+    await process_frame
     var search: LineEdit = _find_search(app)
     if search == null:
         push_error("FAILED: food search input missing")
