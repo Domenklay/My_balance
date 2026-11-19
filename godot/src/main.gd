@@ -440,6 +440,7 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
         if favorite_only.button_pressed and not store.is_favorite(str(item.get("id", ""))):
             continue
         filtered.append(item)
+    print("DEBUG FOOD FILTER: all=", all.size(), " query=", query, " favorite_only=", favorite_only.button_pressed, " filtered=", filtered.size())
     picker.clear()
     var selection = 0
     for i in range(filtered.size()):
