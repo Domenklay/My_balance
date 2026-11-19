@@ -118,5 +118,24 @@ func _capture() -> void:
     app.settings_page = "foods"
     app._render()
     await _snapshot(app, "08-own-products")
+    # Capture each installed appearance variant for side-by-side review.
+    for variant in ["forest", "mint", "sand", "dark"]:
+        app.store.data["settings"]["theme"] = variant
+        app.store.data["settings"]["patterns"] = true
+        app._refresh_appearance()
+        app.tab = "day"
+        app.settings_page = "main"
+        app.scroll.scroll_vertical = 0
+        app._render()
+        await _snapshot(app, "09-" + variant + "-day")
+        app.tab = "settings"
+        app._render()
+        await _snapshot(app, "10-" + variant + "-settings")
+    app.store.data["settings"]["theme"] = "dark"
+    app.store.data["settings"]["patterns"] = false
+    app._refresh_appearance()
+    app.tab = "day"
+    app._render()
+    await _snapshot(app, "11-dark-no-patterns")
     app.queue_free()
     quit(0)
