@@ -2,10 +2,10 @@ extends Control
 
 var samples: Array = []
 var goal: float = 65.0
-const GREEN = Color("#226b55")
-const GRID = Color("#dce8df")
-const MUTED = Color("#71877a")
-const GOLD = Color("#b57a27")
+const GREEN = Color("#195b4a")
+const GRID = Color("#e2ece5")
+const MUTED = Color("#678376")
+const GOLD = Color("#bf7e43")
 
 func set_points(weight_entries: Array, target: float) -> void:
     goal = target
@@ -68,8 +68,16 @@ func _draw() -> void:
         var y = lerpf(bottom, top, (float(samples[i]["value"]) - minimum) / range_y)
         positions.append(Vector2(x, y))
     if positions.size() > 1:
-        draw_polyline(positions, GREEN, 3.0, true)
+        # A subtle area under the curve creates an easier-to-read trend.
+        var fill_area = PackedVector2Array()
+        fill_area.append(Vector2(positions[0].x, bottom))
+        for point in positions:
+            fill_area.append(point)
+        fill_area.append(Vector2(positions[positions.size() - 1].x, bottom))
+        draw_colored_polygon(fill_area, Color("#dcefe4"))
+        draw_polyline(positions, GREEN, 3.5, true)
     for point in positions:
+        draw_circle(point, 7.0, Color("#e0f0e4"))
         draw_circle(point, 4.2, Color.WHITE)
         draw_arc(point, 4.2, 0, TAU, 16, GREEN, 2.0, true)
     draw_string(font, Vector2(left, h - 11), _date_label(str(samples[0]["date"])),
