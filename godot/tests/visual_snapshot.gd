@@ -80,7 +80,7 @@ func _capture() -> void:
     app._show_barcode_portion(app.store.bundled_foods[0])
     await _snapshot(app, "05-barcode-result-dialog")
     for child in app.get_children():
-        if child is ConfirmationDialog:
+        if child.name == "ProductSheet":
             child.queue_free()
     await process_frame
     app._confirm_barcode_product({
@@ -91,7 +91,7 @@ func _capture() -> void:
     })
     await _snapshot(app, "06-new-product-dialog")
     for child in app.get_children():
-        if child is ConfirmationDialog:
+        if child.name == "ProductSheet":
             child.queue_free()
     await process_frame
     for page in ["activity", "weight", "stats", "settings"]:
