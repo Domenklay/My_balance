@@ -22,12 +22,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Install required Android SDK components
+      - name: Install Android SDK components
+        shell: bash
         run: |
+          set -euo pipefail
+          echo "ANDROID_HOME=${ANDROID_HOME:-}"
+          which sdkmanager
+          sdkmanager --install "platform-tools" "build-tools;35.0.1" "platforms;android-35" "cmdline-tools;latest"
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platform-tools" "build-tools;35.0.1" "platforms;android-35" "cmdline-tools;latest"
       - name: Install Godot 4.6.3 and matching export templates
         shell: bash
         run: |
