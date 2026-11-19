@@ -94,6 +94,17 @@ func _capture() -> void:
         if child.name == "ProductSheet":
             child.queue_free()
     await process_frame
+    var example_custom = {
+        "id": "visual_custom", "name": "Йогурт домашний", "barcode": "3017624010701",
+        "kcal": 82.0, "p": 6.0, "f": 2.4, "c": 9.0
+    }
+    app.store.data["foods"].append(example_custom)
+    app._edit_custom_food(example_custom)
+    await _snapshot(app, "07-edit-own-product")
+    for child in app.get_children():
+        if child.name == "ProductSheet":
+            child.queue_free()
+    await process_frame
     for page in ["activity", "weight", "stats", "settings"]:
         app.tab = page
         app._render()
