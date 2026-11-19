@@ -40,7 +40,7 @@ def valid_food(raw):
     if not isinstance(raw, dict):
         return None
     code = str(raw.get("code", "")).strip()
-    if not re.fullmatch(r"\d{8,14}", code):
+    if not valid_gtin(code) or code in NEEDS_LABEL_REVIEW:
         return None
     name = str(raw.get("product_name_ru") or raw.get("product_name") or "").strip()
     if len(name) < 3 or len(name) > 160:
