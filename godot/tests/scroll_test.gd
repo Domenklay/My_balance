@@ -73,15 +73,12 @@ func _run() -> void:
     touch.position = finger
     Input.parse_input_event(touch)
     await process_frame
-    print("TOUCH TRACE after input dispatch: index=", app._swipe_index,
-        " target=", str(app._swipe_target), " rect=", str(app.scroll.get_global_rect()))
     # Some headless render drivers do not dispatch synthetic touch through
     # Viewport. Call the same production handler explicitly as fallback.
     var direct_fallback = app._swipe_index < 0
     if direct_fallback:
-        print("TOUCH TRACE: headless synthetic dispatch missing; using direct handler")
+        # Headless backend skips Node._input dispatch for injected touch.
         app._input(touch)
-        print("TOUCH TRACE after direct begin: index=", app._swipe_index, " target=", str(app._swipe_target))
     for i in range(12):
         var drag = InputEventScreenDrag.new()
         drag.index = 0
@@ -92,10 +89,6 @@ func _run() -> void:
             app._input(drag)
         else:
             Input.parse_input_event(drag)
-        if i in [0, 1, 4, 11]:
-            print("TOUCH TRACE drag ", i, " scroll=", app.scroll.scroll_vertical,
-                " tracking=", app._swipe_index, " dragging=", app._swipe_dragging,
-                " target=", str(app._swipe_target))
         await process_frame
     var release = InputEventScreenTouch.new()
     release.index = 0
