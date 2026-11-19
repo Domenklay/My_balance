@@ -68,6 +68,20 @@ func _run() -> void:
         push_error("FAILED: default product catalog not present")
         quit(1)
         return
+    # Keyboard-focused fields must be visible and release focus on IME Done.
+    search.grab_focus()
+    await process_frame
+    await process_frame
+    await process_frame
+    if app.get_viewport().gui_get_focus_owner() != search:
+        push_error("FAILED: search field did not acquire keyboard focus")
+        quit(1)
+        return
+    search.text_submitted.emit("банан")
+    if app.get_viewport().gui_get_focus_owner() == search:
+        push_error("FAILED: IME Done did not release field focus")
+        quit(1)
+        return
     search.text = "банан"
     search.text_changed.emit("банан")
     if picker.item_count < 1:
@@ -141,6 +155,29 @@ func _run() -> void:
         push_error("FAILED: barcode product dialog did not add the exact selected item")
         quit(1)
         return
+    # Nonblocking status banner remains usable after UI rerenders.
+    var toast: PanelContainer = app.get_node_or_null("SaveStatus")
+    if toast == null or not toast.visible or toast.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+        push_error("FAILED: saved confirmation is absent or intercepts taps")
+        quit(1)
+        return
+    var toast_text: Label = toast.get_node("SaveStatusText")
+    if not toast_text.text.contains("Порция добавлена"):
+        push_error("FAILED: meal addition did not confirm success")
+        quit(1)
+        return
+    app.settings_page = "foods"
+    app._navigate_to_tab("settings")
+    if app.tab != "settings" or app.settings_page != "foods":
+        push_error("FAILED: cannot open dedicated food management tab")
+        quit(1)
+        return
+    app._navigate_to_tab("settings")
+    if app.settings_page != "main":
+        push_error("FAILED: tapping More while in own-products did not return to main settings")
+        quit(1)
+        return
+    print("PASS: keyboard focus/IME Done, status notification and settings navigation")
     print("PASS: barcode result card adds the exact product and selected portion to journal")
     print("PASS: Godot dashboard renders, food search filters, favorites toggle, quick-add works")
     app.queue_free()
