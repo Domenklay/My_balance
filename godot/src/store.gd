@@ -415,13 +415,17 @@ func is_favorite(food_id: String) -> bool:
 func toggle_favorite(food_id: String) -> bool:
     if food_by_id(food_id).is_empty():
         return false
-    var favorites: Array = data.get("favorites", [])
+    var before: Array = data.get("favorites", []).duplicate()
+    var favorites: Array = before.duplicate()
     if favorites.has(food_id):
         favorites.erase(food_id)
     else:
         favorites.append(food_id)
     data["favorites"] = favorites
-    return save()
+    if save():
+        return true
+    data["favorites"] = before
+    return false
 
 func repeat_entry(entry: Dictionary, destination_date: String) -> bool:
     if not data["entries"].has(entry):
@@ -430,7 +434,10 @@ func repeat_entry(entry: Dictionary, destination_date: String) -> bool:
     new_entry["id"] = "repeat_" + str(Time.get_ticks_usec()) + "_" + str(data["entries"].size())
     new_entry["date"] = destination_date
     data["entries"].append(new_entry)
-    return save()
+    if save():
+        return true
+    data["entries"].erase(new_entry)
+    return false
 
 func food_by_id(id: String) -> Dictionary:
     for f in all_foods():
