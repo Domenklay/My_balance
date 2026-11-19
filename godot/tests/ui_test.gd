@@ -97,6 +97,27 @@ func _run() -> void:
         push_error("FAILED: wrong product added from filtered search")
         quit(1)
         return
+    # Scan result must select the precise ID, not a matching display name.
+    var scanned_food: Dictionary = app.store.bundled_foods[0]
+    var target_id = str(scanned_food["id"])
+    app._show_barcode_portion(scanned_food)
+    await process_frame
+    var scanned_dialog: ConfirmationDialog = null
+    for child in app.get_children():
+        if child is ConfirmationDialog:
+            scanned_dialog = child
+    if scanned_dialog == null:
+        push_error("FAILED: exact barcode result dialog missing")
+        quit(1)
+        return
+    scanned_dialog.confirmed.emit()
+    await process_frame
+    var after_scan = app.store.day_entries(app.date)
+    if after_scan.size() != 2 or str(after_scan[1].get("food", "")) != target_id:
+        push_error("FAILED: barcode product dialog did not add the exact selected item")
+        quit(1)
+        return
+    print("PASS: barcode result card adds the exact product and selected portion to journal")
     print("PASS: Godot dashboard renders, food search filters, favorites toggle, quick-add works")
     app.queue_free()
     quit(0)
