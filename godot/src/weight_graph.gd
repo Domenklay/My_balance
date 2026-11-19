@@ -2,10 +2,21 @@ extends Control
 
 var samples: Array = []
 var goal: float = 65.0
-const GREEN = Color("#195b4a")
-const GRID = Color("#e2ece5")
-const MUTED = Color("#678376")
-const GOLD = Color("#bf7e43")
+var GREEN: Color = Color("#195b4a")
+var GRID: Color = Color("#e2ece5")
+var MUTED: Color = Color("#678376")
+var GOLD: Color = Color("#bf7e43")
+var AREA: Color = Color("#dcefe4")
+var HALO: Color = Color("#e0f0e4")
+
+func set_palette(line: Color, grid: Color, text: Color, accent: Color, area: Color, halo: Color) -> void:
+    GREEN = line
+    GRID = grid
+    MUTED = text
+    GOLD = accent
+    AREA = area
+    HALO = halo
+    queue_redraw()
 
 func set_points(weight_entries: Array, target: float) -> void:
     goal = target
@@ -74,10 +85,10 @@ func _draw() -> void:
         for point in positions:
             fill_area.append(point)
         fill_area.append(Vector2(positions[positions.size() - 1].x, bottom))
-        draw_colored_polygon(fill_area, Color("#dcefe4"))
+        draw_colored_polygon(fill_area, AREA)
         draw_polyline(positions, GREEN, 3.5, true)
     for point in positions:
-        draw_circle(point, 7.0, Color("#e0f0e4"))
+        draw_circle(point, 7.0, HALO)
         draw_circle(point, 4.2, Color.WHITE)
         draw_arc(point, 4.2, 0, TAU, 16, GREEN, 2.0, true)
     draw_string(font, Vector2(left, h - 11), _date_label(str(samples[0]["date"])),
