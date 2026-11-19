@@ -118,6 +118,37 @@ func _capture() -> void:
     app.settings_page = "foods"
     app._render()
     await _snapshot(app, "08-own-products")
+    # Test the new Recipes and personal Profile screens with fictional data.
+    app.store.data["recipes"].append({
+        "id": "visual_recipe",
+        "name": "Домашняя запеканка",
+        "cooked_weight": 800.0,
+        "servings": 4.0,
+        "ingredients": [
+            {"id":"oats", "name":"Овсяные хлопья", "grams":250.0,
+                "kcal":370.0, "p":13.0, "f":7.0, "c":62.0},
+            {"id":"milk", "name":"Молоко", "grams":400.0,
+                "kcal":50.0, "p":3.2, "f":2.0, "c":4.8}
+        ]
+    })
+    app.store.data["profile"] = {
+        "name": "Мой профиль", "avatar": "flower",
+        "motto": "Каждый день — маленький шаг вперёд"
+    }
+    app.tab = "recipes"
+    app._render()
+    await _snapshot(app, "12-recipes-list")
+    app._begin_recipe_editor(app.store.data["recipes"][0])
+    await _snapshot(app, "13-recipe-editor")
+    app.recipe_editor_open = false
+    app.tab = "profile"
+    app._render()
+    await _snapshot(app, "14-personal-profile")
+    app.profile_edit_open = true
+    app._render()
+    await _snapshot(app, "15-edit-profile")
+    app.profile_edit_open = false
+    app._render()
     # Capture each installed appearance variant for side-by-side review.
     for variant in ["forest", "mint", "sand", "dark"]:
         app.store.data["settings"]["theme"] = variant
@@ -137,5 +168,11 @@ func _capture() -> void:
     app.tab = "day"
     app._render()
     await _snapshot(app, "11-dark-no-patterns")
+    app.tab = "profile"
+    app._render()
+    await _snapshot(app, "16-dark-profile")
+    app.tab = "recipes"
+    app._render()
+    await _snapshot(app, "17-dark-recipes")
     app.queue_free()
     quit(0)
