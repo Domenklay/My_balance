@@ -578,7 +578,12 @@ func _show_day() -> void:
             var caption = _label(r, str(f.get("name", "Продукт")) + "\n" + str(entry.get("grams", 0)) + " г • " + str(roundi(store.entry_kcal(entry))) + " ккал", 14)
             caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
             _button(r, "✎", func(): _edit_entry(entry), true)
-            _button(r, "×", func(): _confirm_delete("Удалить запись питания?", func(): store.data["entries"].erase(entry); store.save(); _render()), true)
+            _button(r, "×", func(): _confirm_delete("Удалить запись питания?", func():
+                if store.delete_saved_record("entries", entry):
+                    _render()
+                else:
+                    _message("Не удалось удалить запись питания.")
+            ), true)
 
     var yesterday = store.change_date(date, -1)
     var previous = store.day_entries(yesterday)
@@ -615,11 +620,16 @@ func _show_day() -> void:
     notes_card.add_child(notes)
 
 func _jump_to_food() -> void:
-    if is_instance_valid(food_entry_card):
+    # Follow any pending card-rebuild and saved scroll restoration.
+    await get_tree().process_frame
+    await get_tree().process_frame
+    if tab == "day" and is_instance_valid(food_entry_card):
         scroll.ensure_control_visible(food_entry_card)
 
 func _jump_to_diary() -> void:
-    if is_instance_valid(diary_food_card):
+    await get_tree().process_frame
+    await get_tree().process_frame
+    if tab == "day" and is_instance_valid(diary_food_card):
         scroll.ensure_control_visible(diary_food_card)
 
 func _barcode_add_success() -> void:
@@ -1066,12 +1076,16 @@ func _show_activity() -> void:
     var detail = _text_input(card, "Упражнения, подходы и вес гантелей")
     _button(card, "Сохранить активность", func():
         var activity_kind = ["walk", "strength", "other"][kind.selected]
-        store.data["activities"].append({
+        var activity = {
             "id": str(Time.get_ticks_usec()), "date": date, "type": activity_kind,
             "minutes": minutes.value, "distance": distance.value, "detail": detail.text
-        })
-        store.save()
-        _render()
+        }
+        store.data["activities"].append(activity)
+        if store.save():
+            _render()
+        else:
+            store.data["activities"].erase(activity)
+            _message("Не удалось сохранить активность. Проверь память устройства.")
     )
     var saved = _card("Активность за день")
     var items = store.day_activities(date)
@@ -1088,7 +1102,12 @@ func _show_activity() -> void:
         var l = _label(r, text, 14)
         l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         _button(r, "✎", func(): _edit_activity(a), true)
-        _button(r, "×", func(): _confirm_delete("Удалить активность?", func(): store.data["activities"].erase(a); store.save(); _render()), true)
+        _button(r, "×", func(): _confirm_delete("Удалить активность?", func():
+            if store.delete_saved_record("activities", a):
+                _render()
+            else:
+                _message("Не удалось удалить активность.")
+        ), true)
 
 func _edit_activity(activity: Dictionary) -> void:
     var dialog = ConfirmationDialog.new()
@@ -1110,13 +1129,19 @@ func _edit_activity(activity: Dictionary) -> void:
     _label(fields, "Заметки")
     var detail = _text_input(fields, "Упражнения и нагрузка", str(activity.get("detail", "")))
     dialog.confirmed.connect(func():
+        var previous_activity = activity.duplicate(true)
         activity["type"] = types[kind.selected]
         activity["minutes"] = minutes.value
         activity["distance"] = distance.value
         activity["detail"] = detail.text
-        store.save()
-        dialog.queue_free()
-        _render()
+        if store.save():
+            dialog.queue_free()
+            _render()
+        else:
+            activity.clear()
+            activity.merge(previous_activity, true)
+            dialog.queue_free()
+            _message("Не удалось сохранить изменения активности.")
     )
     dialog.canceled.connect(func(): dialog.queue_free())
     dialog.popup_centered(Vector2i(390, 440))
@@ -1131,10 +1156,14 @@ func _show_weight() -> void:
         if str(w.get("date", "")) == date:
             value.value = float(w.get("value", settings["start"]))
     _button(card, "Записать вес", func():
+        var previous_weights = store.data["weights"].duplicate(true)
         store.data["weights"] = store.data["weights"].filter(func(w): return str(w.get("date", "")) != date)
         store.data["weights"].append({"id": "w" + date, "date": date, "value": value.value})
-        store.save()
-        _render()
+        if store.save():
+            _render()
+        else:
+            store.data["weights"] = previous_weights
+            _message("Не удалось сохранить вес. Предыдущие данные восстановлены.")
     )
     var chart = _card("Как меняется вес")
     var g = GraphScript.new()
@@ -1147,7 +1176,12 @@ func _show_weight() -> void:
         var r = _row(chart)
         var l = _label(r, str(w.get("date", "")) + " · " + str(w.get("value", 0)) + " кг", 14)
         l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        _button(r, "×", func(): _confirm_delete("Удалить запись веса?", func(): store.data["weights"].erase(w); store.save(); _render()), true)
+        _button(r, "×", func(): _confirm_delete("Удалить запись веса?", func():
+            if store.delete_saved_record("weights", w):
+                _render()
+            else:
+                _message("Не удалось удалить запись веса.")
+        ), true)
 
 func _show_stats() -> void:
     var card = _card("Итоги недели")
