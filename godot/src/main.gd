@@ -406,6 +406,9 @@ func _view_key() -> String:
     return "settings:" + settings_page if tab == "settings" else tab
 
 func _restore_scroll_position(key: String, serial: int, position: int) -> void:
+    # Wait until Godot has measured the new cards; otherwise the old scroll
+    # range may clamp a valid saved offset to zero during a tab switch.
+    await get_tree().process_frame
     if serial != _render_serial or key != _view_key() or not is_instance_valid(scroll):
         return
     var bar = scroll.get_v_scroll_bar()
