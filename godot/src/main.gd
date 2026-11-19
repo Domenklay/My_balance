@@ -87,6 +87,107 @@ var toast_panel: PanelContainer
 var toast_label: Label
 var toast_timer: Timer
 
+func _apply_palette() -> void:
+    var config: Dictionary = store.data.get("settings", {})
+    current_theme = str(config.get("theme", "forest"))
+    if not AppearanceScript.is_valid_theme(current_theme):
+        current_theme = "forest"
+    PATTERNS = bool(config.get("patterns", true))
+    DARK_MODE = current_theme == "dark"
+    var palette: Dictionary = AppearanceScript.palette(current_theme)
+    GREEN = Color(str(palette["green"]))
+    DEEP = Color(str(palette["deep"]))
+    INK = Color(str(palette["ink"]))
+    MUTED = Color(str(palette["muted"]))
+    PALE = Color(str(palette["pale"]))
+    ACCENT = Color(str(palette["accent"]))
+    SOFT_GOLD = Color(str(palette["gold"]))
+    INPUT_BG = Color(str(palette["input"]))
+    BORDER = Color(str(palette["border"]))
+    SECONDARY = Color(str(palette["secondary"]))
+    BACKGROUND = Color(str(palette["background"]))
+    CARD_BG = Color(str(palette["surface"]))
+    TINT_BG = Color(str(palette["tint"]))
+    ROW_BG = Color(str(palette["row"]))
+    HEADER_BG = Color(str(palette["header"]))
+    HEADER_MUTED = Color(str(palette["head_muted"]))
+    LOGO_BG = Color(str(palette["icon"]))
+    HERO_BG = Color(str(palette["hero"]))
+    HERO_MUTED = Color(str(palette["hero_muted"]))
+    CHIP_BG = Color(str(palette["chip"]))
+    CHIP_CAPTION = Color(str(palette["hero_muted"]))
+    HERO_TRACK = Color(str(palette["track"]))
+    HERO_FILL = Color(str(palette["fill"]))
+    MINT = HERO_FILL
+    TEXT_ACCENT = Color(str(palette["text_accent"]))
+    MACRO_PROTEIN = Color(str(palette["protein"]))
+    MACRO_FAT = Color(str(palette["fat"]))
+    MACRO_CARBS = Color(str(palette["carbs"]))
+    CHART_GRID = Color(str(palette["grid"]))
+    CHART_AREA = Color(str(palette["area"]))
+    PATTERN_STYLE = str(palette["pattern"])
+    PATTERN_COLOR = Color(str(palette["pattern_color"]))
+
+func _refresh_appearance() -> void:
+    _apply_palette()
+    if is_instance_valid(background_rect):
+        background_rect.color = BACKGROUND
+    if is_instance_valid(wallpaper_pattern):
+        wallpaper_pattern.configure(PATTERN_STYLE, PATTERN_COLOR, PATTERNS, 0.11 if DARK_MODE else 0.09)
+    if is_instance_valid(header_panel):
+        var header_style = header_panel.get_theme_stylebox("panel") as StyleBoxFlat
+        if header_style != null:
+            header_style.bg_color = HEADER_BG
+    if is_instance_valid(header_pattern):
+        header_pattern.configure(PATTERN_STYLE, PATTERN_COLOR, PATTERNS, 0.12)
+    if is_instance_valid(header_subtitle):
+        header_subtitle.add_theme_color_override("font_color", HEADER_MUTED)
+    if is_instance_valid(emblem_panel):
+        var symbol_style = emblem_panel.get_theme_stylebox("panel") as StyleBoxFlat
+        if symbol_style != null:
+            symbol_style.bg_color = LOGO_BG
+    if is_instance_valid(emblem_label):
+        emblem_label.add_theme_color_override("font_color", SOFT_GOLD)
+    if is_instance_valid(shell):
+        var navigation = shell.get_node_or_null("BottomNavigation") as PanelContainer
+        if navigation != null:
+            var nav_style = navigation.get_theme_stylebox("panel") as StyleBoxFlat
+            if nav_style != null:
+                nav_style.bg_color = CARD_BG
+                nav_style.border_color = BORDER
+    if is_instance_valid(toast_panel):
+        var toast_style = toast_panel.get_theme_stylebox("panel") as StyleBoxFlat
+        if toast_style != null:
+            toast_style.bg_color = GREEN
+    _update_tabs()
+
+func _choose_theme(id: String) -> void:
+    if not AppearanceScript.is_valid_theme(id):
+        return
+    var previous = str(store.data["settings"].get("theme", "forest"))
+    if previous == id:
+        return
+    _hide_keyboard_and_focus()
+    store.data["settings"]["theme"] = id
+    if not store.save():
+        store.data["settings"]["theme"] = previous
+        _message("Не удалось сохранить тему. Прежнее оформление оставлено.")
+        return
+    _refresh_appearance()
+    _render()
+    _notify_saved("Тема: " + AppearanceScript.name_for(id))
+
+func _toggle_patterns() -> void:
+    var previous = bool(store.data["settings"].get("patterns", true))
+    store.data["settings"]["patterns"] = not previous
+    if not store.save():
+        store.data["settings"]["patterns"] = previous
+        _message("Не удалось сохранить настройку узоров.")
+        return
+    _refresh_appearance()
+    _render()
+    _notify_saved("Узоры включены" if not previous else "Узоры выключены")
+
 func _ready() -> void:
     _apply_palette()
     month_shown = date.substr(0, 7)
