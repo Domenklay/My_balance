@@ -42,8 +42,8 @@ func _run() -> void:
         push_error("FAILED: mobile layout overflows 420px: " + str(app.shell.size.x))
         quit(1)
         return
-    if app.tab_buttons.size() != 5:
-        push_error("FAILED: mobile bottom navigation incomplete")
+    if app.tab_buttons.size() != 6 or not app.tab_buttons.has("recipes") or not app.tab_buttons.has("profile"):
+        push_error("FAILED: mobile navigation missing Recipes or Profile")
         quit(1)
         return
     var expand_button: Button = _find_button(app, "Найти продукт или ввести штрихкод")
