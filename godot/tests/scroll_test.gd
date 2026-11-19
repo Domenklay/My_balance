@@ -81,6 +81,7 @@ func _run() -> void:
     if direct_fallback:
         print("TOUCH TRACE: headless synthetic dispatch missing; using direct handler")
         app._input(touch)
+        print("TOUCH TRACE after direct begin: index=", app._swipe_index, " target=", str(app._swipe_target))
     for i in range(12):
         var drag = InputEventScreenDrag.new()
         drag.index = 0
@@ -90,6 +91,10 @@ func _run() -> void:
         Input.parse_input_event(drag)
         if direct_fallback:
             app._input(drag)
+        if i in [0, 1, 4, 11]:
+            print("TOUCH TRACE drag ", i, " scroll=", app.scroll.scroll_vertical,
+                " tracking=", app._swipe_index, " dragging=", app._swipe_dragging,
+                " target=", str(app._swipe_target))
         await process_frame
     var release = InputEventScreenTouch.new()
     release.index = 0
