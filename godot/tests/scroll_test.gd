@@ -135,7 +135,8 @@ func _run() -> void:
     app._render()
     await process_frame
     await process_frame
-    app.scroll.scroll_vertical = 190
+    var food_scroll_position = mini(110, maxi(0, roundi(catalog_range) - 10))
+    app.scroll.scroll_vertical = food_scroll_position
     await process_frame
     app.tab = "day"
     app._render()
@@ -148,8 +149,9 @@ func _run() -> void:
     app._render()
     await process_frame
     await process_frame
-    if abs(app.scroll.scroll_vertical - 190) > 20:
-        _fail("switching back to own products lost scroll position")
+    if abs(app.scroll.scroll_vertical - food_scroll_position) > 20:
+        _fail("switching back to own products lost scroll: expected " +
+            str(food_scroll_position) + ", actual " + str(app.scroll.scroll_vertical))
         return
 
     print("PASS: swipe, independent page positions, no reset after diary rerender")
