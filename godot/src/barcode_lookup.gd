@@ -6,13 +6,37 @@ const OFF_FIELDS = "code,product_name,product_name_ru,brands,nutriments,quantity
 
 static func normalize_code(raw: String) -> String:
     var code = raw.strip_edges()
-    if code.length() < 8 or code.length() > 14:
+    if code.length() not in [8, 12, 13, 14]:
         return ""
     for i in range(code.length()):
         var ch = code.unicode_at(i)
         if ch < 48 or ch > 57:
             return ""
+    var sum = 0
+    var weight = 3
+    for index in range(code.length() - 2, -1, -1):
+        sum += (code.unicode_at(index) - 48) * weight
+        weight = 1 if weight == 3 else 3
+    var check_digit = (10 - (sum % 10)) % 10
+    if check_digit != code.unicode_at(code.length() - 1) - 48:
+        return ""
     return code
+
+static func nutrition_warning(product: Dictionary) -> String:
+    var kcal = float(product.get("kcal", -1.0))
+    var p = float(product.get("p", -1.0))
+    var f = float(product.get("f", -1.0))
+    var c = float(product.get("c", -1.0))
+    if kcal < 0.0 or p < 0.0 or f < 0.0 or c < 0.0:
+        return "Указаны неполные сведения о пищевой ценности."
+    if kcal == 0.0 and (p > 1.0 or f > 1.0 or c > 1.0):
+        return "Нулевая калорийность противоречит указанным БЖУ."
+    # Approximation only: fibre, polyols, organic acids and labelling rules
+    # can legitimately make this differ from the conventional 4-9-4 formula.
+    var approximation = p * 4.0 + f * 9.0 + c * 4.0
+    if absf(kcal - approximation) > maxf(90.0, kcal * 0.5):
+        return "Калории и БЖУ заметно различаются. Проверь этикетку (возможны полиолы)."
+    return ""
 
 static func product_url(code: String) -> String:
     if normalize_code(code).is_empty():
@@ -51,6 +75,8 @@ static func parse_product(payload: Variant, barcode: String) -> Dictionary:
     var carbs = float(nutrition["carbohydrates_100g"])
     if kcal < 0.0 or kcal > 1000.0 or protein > 100.0 or fat > 100.0 or carbs > 100.0:
         return {"error": "В базе указаны сомнительные значения. Проверь упаковку."}
+    if kcal == 0.0 and (protein > 1.0 or fat > 1.0 or carbs > 1.0):
+        return {"error": "Противоречивые КБЖУ: ноль калорий при ненулевых питательных веществах."}
     var brand = str(product.get("brands", "")).strip_edges()
     if not brand.is_empty() and not name.to_lower().contains(brand.to_lower()):
         name += " (" + brand.substr(0, 60) + ")"
