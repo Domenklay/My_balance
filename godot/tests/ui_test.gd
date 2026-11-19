@@ -54,10 +54,25 @@ func _run() -> void:
         return
     search.text = "банан"
     search.text_changed.emit("банан")
-    if picker.item_count != 1 or not picker.get_item_text(0).to_lower().contains("банан"):
-        push_error("FAILED: food catalog search does not filter products")
+    if picker.item_count < 1:
+        push_error("FAILED: no banana found in food catalog")
         quit(1)
         return
+    var builtin_index = -1
+    for i in range(picker.item_count):
+        var label = picker.get_item_text(i).strip_edges()
+        if not label.to_lower().contains("банан"):
+            push_error("FAILED: search returned unrelated food: " + label)
+            quit(1)
+            return
+        if label == "Банан":
+            builtin_index = i
+    if builtin_index < 0:
+        push_error("FAILED: default banana missing from search results")
+        quit(1)
+        return
+    picker.select(builtin_index)
+    picker.item_selected.emit(builtin_index)
     var favorite_button = _find_button(parent, "☆ В избранное")
     if favorite_button == null:
         push_error("FAILED: favorite button missing")
