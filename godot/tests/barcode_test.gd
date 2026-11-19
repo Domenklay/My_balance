@@ -72,5 +72,36 @@ func _run() -> void:
     if converted.has("error") or absf(float(converted["kcal"]) - 100.0) > 0.1:
         _fail("kJ to kcal fallback incorrect")
         return
+    # Verify the bundled catalog has real codes, and local products override them.
+    var bundled = Store.new()
+    if bundled.bundled_foods.size() < 50:
+        _fail("verified offline barcode catalog is missing or too small")
+        return
+    var regional: Dictionary = bundled.bundled_foods[0]
+    var actual_code = str(regional.get("barcode", ""))
+    if bundled.food_by_barcode(actual_code).get("id", "") != regional["id"]:
+        _fail("offline barcode not searchable")
+        return
+    var custom_food = {"id": "my_favorite", "name": "Свой продукт",
+        "kcal": 125.0, "p": 8.0, "f": 3.0, "c": 15.0}
+    bundled.data["foods"].append(custom_food)
+    if not bundled.link_barcode_to_food("my_favorite", actual_code):
+        _fail("cannot link regional barcode to custom food")
+        return
+    if bundled.food_by_barcode(actual_code).get("id", "") != "my_favorite":
+        _fail("saved food does not take priority over bundled catalog")
+        return
+    var found = bundled.all_foods().filter(func(item): return str(item.get("barcode", "")) == actual_code)
+    if found.size() != 1:
+        _fail("bundled and saved food with same code are both listed")
+        return
+    var after_reload = Store.new()
+    if after_reload.food_by_barcode(actual_code).get("id", "") != "my_favorite":
+        _fail("custom barcode link was not saved")
+        return
+    if bundled.link_barcode_to_food("my_favorite", "12invalid"):
+        _fail("invalid barcode was linked")
+        return
+    print("PASS: bundled catalog, manual barcode linking, local override and persistence")
     print("PASS: barcode validation, Open Food Facts parser, macro completeness, local cache, JSON migration")
     quit(0)
