@@ -766,7 +766,7 @@ func _render(reset_position: bool = false) -> void:
 func _date_nav(parent: Node) -> void:
     var r = _row(parent)
     _button(r, "◀", func(): date = store.change_date(date, -1); month_shown = date.substr(0, 7); _render(), true)
-    var day_label = _nowrap(r, date.substr(8, 2) + "." + date.substr(5, 2) + "." + date.substr(0, 4), 18, GREEN)
+    var day_label = _nowrap(r, date.substr(8, 2) + "." + date.substr(5, 2) + "." + date.substr(0, 4), 18, TEXT_ACCENT)
     day_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     day_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     day_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -776,7 +776,7 @@ func _date_nav(parent: Node) -> void:
 func _calendar(parent: Node) -> void:
     var top = _row(parent)
     _button(top, "‹", func(): _shift_month(-1), true)
-    var month_label = _nowrap(top, month_shown, 16, GREEN)
+    var month_label = _nowrap(top, month_shown, 16, TEXT_ACCENT)
     month_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     month_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     month_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -921,7 +921,7 @@ func _show_day() -> void:
         var items = existing.filter(func(e): return str(e.get("meal", "")) == meal)
         if items.is_empty():
             continue
-        _label(foods, meal, 17, GREEN)
+        _label(foods, meal, 17, TEXT_ACCENT)
         for entry in items:
             var f: Dictionary = store.entry_food(entry)
             var r = _soft_list_row(foods)
@@ -1147,7 +1147,7 @@ func _show_barcode_portion(food: Dictionary) -> void:
     var fields: VBoxContainer = sheet["fields"]
     _label(fields, str(food.get("name", "Продукт")), 18, INK)
     _label(fields, str(food.get("barcode", "")) + " • " + str(food.get("source", "Каталог")), 12, MUTED)
-    _label(fields, "На 100 г: " + str(food.get("kcal", 0)) + " ккал", 16, GREEN)
+    _label(fields, "На 100 г: " + str(food.get("kcal", 0)) + " ккал", 16, TEXT_ACCENT)
     _label(fields, "Белки " + str(food.get("p", 0)) + " г  •  Жиры " +
         str(food.get("f", 0)) + " г  •  Углеводы " + str(food.get("c", 0)) + " г", 13, INK)
     var warning = BarcodeScript.nutrition_warning(food)
@@ -1157,7 +1157,7 @@ func _show_barcode_portion(food: Dictionary) -> void:
     var grams = _number(fields, 100, 1, 5000)
     _label(fields, "Приём пищи", 14, MUTED)
     var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
-    var calculated = _label(fields, "", 16, GREEN)
+    var calculated = _label(fields, "", 16, TEXT_ACCENT)
     var refresh = func(): calculated.text = str(roundi(float(food.get("kcal", 0)) * grams.value / 100.0)) + " ккал за порцию"
     grams.value_changed.connect(func(_v: float): refresh.call())
     refresh.call()
@@ -1260,7 +1260,7 @@ func _food_form(parent: VBoxContainer) -> void:
     var barcode_panel = VBoxContainer.new()
     barcode_panel.add_theme_constant_override("separation", 6)
     parent.add_child(barcode_panel)
-    _label(barcode_panel, "Найти продукт по штрихкоду", 17, GREEN)
+    _label(barcode_panel, "Найти продукт по штрихкоду", 17, TEXT_ACCENT)
     var camera_button = _button(barcode_panel, "▣  Сканировать штрихкод", func():
         if barcode_scanner != null:
             _barcode_message("Открываю сканер штрихкодов…")
@@ -1282,7 +1282,7 @@ func _food_form(parent: VBoxContainer) -> void:
     barcode_find.custom_minimum_size.x = 74
     barcode_message = _label(barcode_panel, "Встроено " + str(store.bundled_foods.size()) + " товаров с кодами. Другие ищем через интернет.", 12, MUTED)
     parent.add_child(HSeparator.new())
-    _label(parent, "Или найди в сохранённых продуктах", 16, GREEN)
+    _label(parent, "Или найди в сохранённых продуктах", 16, TEXT_ACCENT)
     var filtered: Array = []
     var search = _text_input(parent, "Поиск продукта по названию")
     if not selected_barcode_food.is_empty():
@@ -1569,7 +1569,7 @@ func _show_stats() -> void:
             elif a.get("type", "") == "strength":
                 workouts += 1
     var avg = "—" if recorded == 0 else str(roundi(total / recorded)) + " ккал"
-    _label(card, "Среднее за записанные дни: " + avg, 19, GREEN)
+    _label(card, "Среднее за записанные дни: " + avg, 19, TEXT_ACCENT)
     _label(card, "Дней с питанием: " + str(recorded) + " из 7", 15)
     _label(card, "Прогулки: " + str(walking) + " мин    Силовые: " + str(workouts), 15)
     _label(card, "Калории по дням", 16)
@@ -1613,7 +1613,11 @@ func _show_settings() -> void:
     var goal = _number(card, float(store.data["settings"]["goal"]), 20, 400, 0.1)
     _button(card, "Сохранить настройки", func():
         var previous_settings = store.data["settings"].duplicate(true)
-        store.data["settings"] = {"kcal": kcal.value, "start": start.value, "goal": goal.value}
+        var next_settings = previous_settings.duplicate(true)
+        next_settings["kcal"] = kcal.value
+        next_settings["start"] = start.value
+        next_settings["goal"] = goal.value
+        store.data["settings"] = next_settings
         if store.save():
             _render()
             _notify_saved("Настройки сохранены")
@@ -1621,6 +1625,27 @@ func _show_settings() -> void:
             store.data["settings"] = previous_settings
             _message("Не удалось сохранить настройки. Прежние значения оставлены.")
     )
+    var appearance = _card("Оформление")
+    _label(appearance, "Выбери тему — она сразу применится ко всем экранам.", 13, MUTED)
+    _label(appearance, "Активная: " + AppearanceScript.name_for(current_theme), 14, TEXT_ACCENT)
+    for id in AppearanceScript.ORDER:
+        var theme_id: String = str(id)
+        var sample: Dictionary = AppearanceScript.palette(theme_id)
+        var sample_row = _soft_list_row(appearance)
+        var color_preview = ColorRect.new()
+        color_preview.name = "ThemeSwatch_" + theme_id
+        color_preview.color = Color(str(sample["hero"]))
+        color_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        color_preview.custom_minimum_size = Vector2(34, 34)
+        sample_row.add_child(color_preview)
+        var name_label = _label(sample_row, AppearanceScript.name_for(theme_id), 13, INK)
+        name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        _button(sample_row, "✓" if current_theme == theme_id else "Выбрать",
+            func(): _choose_theme(theme_id), true)
+    _button(appearance, "Узоры: включены" if PATTERNS else "Узоры: выключены",
+        func(): _toggle_patterns(), true)
+    _label(appearance, "Тонкий рисунок на фоне и карточках. Если отключить, останется чистый минимализм.", 12, MUTED)
+
     var my_foods_link = _card("Мои продукты и штрихкоды")
     _label(my_foods_link, "Создание и редактирование продуктов, привязка штрихкодов, обновление каталога.", 13, MUTED)
     _button(my_foods_link, "Открыть мои продукты", func():
