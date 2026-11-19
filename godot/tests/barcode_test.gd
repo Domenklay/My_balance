@@ -103,11 +103,11 @@ func _run() -> void:
         _fail("invalid barcode was linked")
         return
     var good = bundled.bundled_foods[0]
-    if BarcodeScript.nutrition_warning(good) != "":
+    if Lookup.nutrition_warning(good) != "":
         _fail("curated catalog contains an implausible food")
         return
     var known_bad = {"kcal": 0, "p": 20, "f": 0, "c": 0}
-    if BarcodeScript.nutrition_warning(known_bad).is_empty():
+    if Lookup.nutrition_warning(known_bad).is_empty():
         _fail("zero-calorie protein anomaly not detected")
         return
     var report = FileAccess.get_file_as_string("res://data/barcode_catalog.json")
@@ -116,7 +116,7 @@ func _run() -> void:
         _fail("bundled JSON is not valid")
         return
     for entry in audit["products"]:
-        if not BarcodeScript.nutrition_warning(entry).is_empty():
+        if not Lookup.nutrition_warning(entry).is_empty():
             _fail("implausible entry remains in bundled catalog: " + str(entry.get("barcode", "")))
             return
     if not bundled.update_catalog_json(report) or bundled.bundled_foods.size() < 100:
