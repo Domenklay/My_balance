@@ -40,6 +40,10 @@ var bundled_foods: Array = []
 func _init() -> void:
     _load_bundled_foods()
     data = default_data()
+    if FileAccess.file_exists(DATA_PATH):
+        var content = FileAccess.get_file_as_string(DATA_PATH)
+        if not import_json(content, false) and FileAccess.file_exists(BACKUP_PATH):
+            import_json(FileAccess.get_file_as_string(BACKUP_PATH), false)
 
 func _load_bundled_foods() -> void:
     bundled_foods.clear()
@@ -73,10 +77,6 @@ func _is_barcode(code: String) -> bool:
         if digit < 48 or digit > 57:
             return false
     return true
-    if FileAccess.file_exists(DATA_PATH):
-        var content = FileAccess.get_file_as_string(DATA_PATH)
-        if not import_json(content, false) and FileAccess.file_exists(BACKUP_PATH):
-            import_json(FileAccess.get_file_as_string(BACKUP_PATH), false)
 
 func default_data() -> Dictionary:
     return {
