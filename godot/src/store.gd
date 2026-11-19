@@ -2,6 +2,7 @@ extends RefCounted
 
 const DATA_PATH = "user://my_balance.json"
 const BACKUP_PATH = "user://my_balance.previous.json"
+const TEMP_PATH = "user://my_balance.pending.json"
 
 const DEFAULT_PRODUCTS = [
     ["Овсяные хлопья (сухие)",370,13,7,62],
@@ -47,20 +48,32 @@ func default_data() -> Dictionary:
         "foods": [], "entries": [], "activities": [], "weights": [], "notes": {}
     }
 
-func save() -> void:
+func save() -> bool:
+    var serialized = JSON.stringify(data)
+    var tmp = FileAccess.open(TEMP_PATH, FileAccess.WRITE)
+    if tmp == null:
+        push_error("Не удалось создать временную копию дневника")
+        return false
+    tmp.store_string(serialized)
+    tmp.flush()
+    var write_error = tmp.get_error()
+    tmp.close()
+    if write_error != OK:
+        push_error("Ошибка записи временной копии дневника")
+        return false
+    # Copy the last complete file first; keep it if replacing the active file fails.
     if FileAccess.file_exists(DATA_PATH):
-        var previous = FileAccess.get_file_as_string(DATA_PATH)
-        if previous.length() > 0:
-            var backup = FileAccess.open(BACKUP_PATH, FileAccess.WRITE)
-            if backup != null:
-                backup.store_string(previous)
-                backup.close()
-    var file = FileAccess.open(DATA_PATH, FileAccess.WRITE)
-    if file != null:
-        file.store_string(JSON.stringify(data))
-        file.close()
-    else:
-        push_error("Не удалось сохранить дневник")
+        var previous_text = FileAccess.get_file_as_string(DATA_PATH)
+        var previous = JSON.parse_string(previous_text)
+        if previous is Dictionary:
+            var backup_status = DirAccess.copy_absolute(DATA_PATH, BACKUP_PATH)
+            if backup_status != OK:
+                push_warning("Не удалось обновить аварийную копию дневника")
+    var status = DirAccess.rename_absolute(TEMP_PATH, DATA_PATH)
+    if status != OK:
+        push_error("Не удалось заменить файл дневника: " + str(status))
+        return false
+    return true
 
 func import_json(raw: String, persist: bool = true) -> bool:
     var obj = JSON.parse_string(raw)
