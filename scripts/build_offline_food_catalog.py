@@ -18,6 +18,23 @@ FIELDS = "code,product_name,product_name_ru,brands,nutriments,countries_tags"
 COUNTRIES = ("en:finland", "en:russia", "en:poland")
 OUTPUT = Path("godot/data/barcode_catalog.json")
 MAX_PER_COUNTRY = 120
+# Quarantined source records: ambiguous or contradictory nutrition requiring
+# human comparison with the packaging, not silently corrected by estimation.
+NEEDS_LABEL_REVIEW = {
+    "4600494693335", "6420256012680",
+    "4690228027154", "4605246003523",
+}
+
+def valid_gtin(code):
+    if not re.fullmatch(r"\d{8}|\d{12}|\d{13}|\d{14}", code):
+        return False
+    sum_ = 0
+    weight = 3
+    for digit in reversed(code[:-1]):
+        sum_ += int(digit) * weight
+        weight = 1 if weight == 3 else 3
+    return (10 - sum_ % 10) % 10 == int(code[-1])
+
 
 def valid_food(raw):
     if not isinstance(raw, dict):
@@ -41,6 +58,11 @@ def valid_food(raw):
     if not all(isinstance(v, (float, int)) and v == v for v in values):
         return None
     if not (0 <= kcal <= 1000 and all(0 <= x <= 100 for x in values[1:])):
+        return None
+    if kcal == 0 and any(x > 1.0 for x in values[1:]):
+        return None
+    approx = values[1] * 4.0 + values[2] * 9.0 + values[3] * 4.0
+    if abs(kcal - approx) > max(90.0, kcal * 0.5):
         return None
     brand = str(raw.get("brands", "")).strip()[:55]
     if brand and brand.lower() not in name.lower():
