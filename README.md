@@ -77,3 +77,27 @@ Workflow теперь синхронизирует актуальный корн
 Проверьте веб-интерфейс GitHub: `My_balance → Actions → нужный run` (сообщение сверху), затем `Settings → Actions → General`, а также настройки `Billing → Actions`. Убедитесь, что GitHub-hosted runners разрешены и нет блокировки биллинга/квоты. После снятия блокировки workflow запускается при изменениях Android-файлов либо вручную через `Actions → Android APK → Run workflow`.
 
 Временный проверочный workflow удалён из исходников после проверки. **Проверенного APK пока нет.**
+
+## Нативная Godot-версия (0.5.0)
+
+В каталоге [`godot/`](godot/) находится самостоятельное приложение **Godot 4.6.3**, не использующее WebView. В исходниках: дневник еды по дням с граммовками и БЖУ, встроенные и пользовательские продукты, календарь, записи прогулок и домашних тренировок, история веса, график, недельная статистика, заметки о вечернем голоде, локальное JSON-хранилище. В настройках предусмотрены экспорт и импорт JSON через буфер обмена.
+
+**Важно:** Godot APK будет иметь идентификатор `com.domenklay.mybalance.godot`, отличный от прежнего Android WebView приложения. Данные автоматически между приложениями не синхронизируются; перенос требует ручного JSON-импорта. При копировании JSON в системный буфер обмена он может стать доступен другим приложениям.
+
+### Сборка Godot Android APK через GitHub
+
+Workflow: [Godot Android APK](.github/workflows/godot-android.yml).
+
+Пайплайн скачивает Godot 4.6.3 и соответствующие export templates, настраивает Android SDK 35 и debug keystore, валидирует проект через headless editor и экспортирует `godot/build/MyBalance-debug.apk`. Артефакт успешного запуска называется `MyBalance-Godot-Android-APK`.
+
+**Текущий статус:** [run #44471851233](https://github.com/Domenklay/My_balance/actions/runs/44471851233) завершился `failure` **до назначения GitHub runner, с 0 выполненных шагов**. Поэтому фактическая сборка, корректность GDScript в Godot и установка на телефон ещё не проверены, готового APK нет. Требуется устранить ограничение запуска GitHub-hosted runners в настройках Actions/биллинга этого приватного репозитория либо выделить self-hosted runner и изменить `runs-on` для него.
+
+Для локальной сборки при установленном Godot 4.6.3, Android SDK и экспортных шаблонах:
+
+```bash
+godot --headless --editor --path godot --quit
+mkdir -p godot/build
+godot --headless --path godot --export-debug "Android" godot/build/MyBalance-debug.apk
+```
+
+Проверяйте apk на тестовом устройстве прежде чем доверять хранению важных записей.
