@@ -45,7 +45,7 @@ func _init() -> void:
 func default_data() -> Dictionary:
     return {
         "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0},
-        "foods": [], "entries": [], "activities": [], "weights": [], "notes": {}
+        "foods": [], "entries": [], "activities": [], "weights": [], "notes": {}, "favorites": []
     }
 
 func save() -> bool:
@@ -87,6 +87,14 @@ func import_json(raw: String, persist: bool = true) -> bool:
                 obj[key] = {}
             else:
                 return false
+    # Favorites were introduced in 0.5.3; older exports have no such field.
+    if not obj.has("favorites"):
+        obj["favorites"] = []
+    if not (obj["favorites"] is Array) or obj["favorites"].size() > 500:
+        return false
+    for id in obj["favorites"]:
+        if not (id is String) or id.length() > 100:
+            return false
     if not (obj["settings"] is Dictionary and obj["foods"] is Array and obj["entries"] is Array and obj["activities"] is Array and obj["weights"] is Array and obj["notes"] is Dictionary):
         return false
     var settings: Dictionary = obj["settings"]
@@ -130,6 +138,29 @@ func all_foods() -> Array:
         if f is Dictionary:
             result.append(f)
     return result
+
+func is_favorite(food_id: String) -> bool:
+    return data.get("favorites", []).has(food_id)
+
+func toggle_favorite(food_id: String) -> bool:
+    if food_by_id(food_id).is_empty():
+        return false
+    var favorites: Array = data.get("favorites", [])
+    if favorites.has(food_id):
+        favorites.erase(food_id)
+    else:
+        favorites.append(food_id)
+    data["favorites"] = favorites
+    return save()
+
+func repeat_entry(entry: Dictionary, destination_date: String) -> bool:
+    if not data["entries"].has(entry):
+        return false
+    var new_entry: Dictionary = entry.duplicate(true)
+    new_entry["id"] = "repeat_" + str(Time.get_ticks_usec()) + "_" + str(data["entries"].size())
+    new_entry["date"] = destination_date
+    data["entries"].append(new_entry)
+    return save()
 
 func food_by_id(id: String) -> Dictionary:
     for f in all_foods():
