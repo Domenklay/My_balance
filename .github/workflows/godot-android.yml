@@ -75,6 +75,8 @@ jobs:
         run: /tmp/godot --headless --editor --path godot --quit --verbose
       - name: Verify journal save and restore
         run: /tmp/godot --headless --path godot --script res://tests/storage_test.gd
+      - name: Test food search, favorites and quick-add UI
+        run: /tmp/godot --headless --path godot --script res://tests/ui_test.gd
       - name: Smoke test app startup
         shell: bash
         run: |
