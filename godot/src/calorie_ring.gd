@@ -3,6 +3,15 @@ extends Control
 # Lightweight native Godot vector ring: never requires a bitmap or internet.
 var progress: float = 0.0
 var goal_text: String = ""
+var track_color: Color = Color("#417969")
+var fill_color: Color = Color("#dbefbb")
+var label_color: Color = Color.WHITE
+
+func set_palette(track: Color, fill: Color, label: Color) -> void:
+    track_color = track
+    fill_color = fill
+    label_color = label
+    queue_redraw()
 
 func set_value(value: float, goal: float) -> void:
     progress = clampf(value / maxf(1.0, goal), 0.0, 1.0)
@@ -15,14 +24,14 @@ func _draw() -> void:
     if radius < 20:
         return
     draw_arc(center, radius, -PI / 2.0, PI * 1.5, 100,
-        Color("#417969"), 10.0, true)
+        track_color, 10.0, true)
     if progress > 0.0:
         draw_arc(center, radius, -PI / 2.0, -PI / 2.0 + TAU * progress,
-            100, Color("#dbefbb"), 10.0, true)
+            100, fill_color, 10.0, true)
     var font = ThemeDB.fallback_font
     var font_size = 19
     var display = goal_text if not goal_text.is_empty() else "0%"
     var measured = font.get_string_size(display, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
     draw_string(font, Vector2(center.x - measured.x * 0.5,
         center.y + measured.y * 0.32), display,
-        HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color("#ffffff"))
+        HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, label_color)
