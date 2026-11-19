@@ -43,6 +43,9 @@ var _swipe_start: Vector2 = Vector2.ZERO
 var _swipe_last: Vector2 = Vector2.ZERO
 var _swipe_dragging: bool = false
 var _swipe_ignore_button_release: bool = false
+var toast_panel: PanelContainer
+var toast_label: Label
+var toast_timer: Timer
 
 func _ready() -> void:
     month_shown = date.substr(0, 7)
@@ -112,6 +115,79 @@ func _ready() -> void:
     note_save_timer.timeout.connect(func(): store.save())
     add_child(note_save_timer)
     _make_tabs()
+    _setup_toast()
+    _render()
+
+func _setup_toast() -> void:
+    toast_panel = PanelContainer.new()
+    toast_panel.name = "SaveStatus"
+    toast_panel.visible = false
+    toast_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    toast_panel.z_index = 40
+    toast_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+    toast_panel.offset_left = 18.0
+    toast_panel.offset_right = -18.0
+    toast_panel.offset_top = 83.0
+    toast_panel.offset_bottom = 128.0
+    var style = StyleBoxFlat.new()
+    style.bg_color = GREEN
+    style.set_corner_radius_all(12)
+    style.shadow_color = Color(0.0, 0.0, 0.0, 0.18)
+    style.shadow_size = 6
+    style.content_margin_left = 14
+    style.content_margin_right = 14
+    style.content_margin_top = 10
+    style.content_margin_bottom = 10
+    toast_panel.add_theme_stylebox_override("panel", style)
+    add_child(toast_panel)
+    toast_label = Label.new()
+    toast_label.name = "SaveStatusText"
+    toast_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    toast_label.add_theme_color_override("font_color", WHITE)
+    toast_label.add_theme_font_size_override("font_size", 14)
+    toast_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    toast_panel.add_child(toast_label)
+    toast_timer = Timer.new()
+    toast_timer.one_shot = true
+    toast_timer.wait_time = 2.7
+    toast_timer.timeout.connect(func(): toast_panel.visible = false)
+    add_child(toast_timer)
+
+func _notify_saved(value: String) -> void:
+    if not is_instance_valid(toast_panel):
+        return
+    toast_label.text = "✓  " + value
+    toast_panel.visible = true
+    toast_timer.start()
+
+func _hide_keyboard_and_focus() -> void:
+    var focused = get_viewport().gui_get_focus_owner()
+    if focused is LineEdit or focused is TextEdit:
+        focused.release_focus()
+    DisplayServer.virtual_keyboard_hide()
+
+func _ensure_field_visible(field: Control) -> void:
+    # Re-measure after Android IME/focus changes the available viewport.
+    await get_tree().process_frame
+    await get_tree().process_frame
+    if not is_instance_valid(field) or not field.is_inside_tree():
+        return
+    var ancestor = field.get_parent()
+    while ancestor != null:
+        if ancestor is ScrollContainer:
+            ancestor.ensure_control_visible(field)
+            return
+        ancestor = ancestor.get_parent()
+
+func _bind_field_focus(field: Control) -> void:
+    field.focus_entered.connect(func(): _ensure_field_visible(field))
+
+func _navigate_to_tab(target: String) -> void:
+    _hide_keyboard_and_focus()
+    if target == "settings" and tab == "settings" and settings_page == "foods":
+        settings_page = "main"
+    tab = target
     _render()
 
 func _input(event: InputEvent) -> void:
@@ -297,7 +373,10 @@ func _number(parent: Node, value: float, minimum: float, maximum: float, step: f
     spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     spin.mouse_filter = Control.MOUSE_FILTER_PASS
     spin.add_theme_font_size_override("font_size", 16)
-    _style_field(spin.get_line_edit())
+    var line_editor = spin.get_line_edit()
+    _style_field(line_editor)
+    line_editor.text_submitted.connect(func(_text: String): _hide_keyboard_and_focus())
+    _bind_field_focus(line_editor)
     parent.add_child(spin)
     return spin
 
@@ -310,6 +389,8 @@ func _text_input(parent: Node, placeholder: String, text: String = "") -> LineEd
     field.mouse_filter = Control.MOUSE_FILTER_PASS
     field.add_theme_font_size_override("font_size", 15)
     _style_field(field)
+    field.text_submitted.connect(func(_text: String): _hide_keyboard_and_focus())
+    _bind_field_focus(field)
     parent.add_child(field)
     return field
 
@@ -351,7 +432,7 @@ func _make_tabs() -> void:
     ]
     for item in tabs:
         var target: String = item[1]
-        var b = _button(row, item[0], func(): tab = target; _render(), true)
+        var b = _button(row, item[0], func(): _navigate_to_tab(target), true)
         b.custom_minimum_size.y = 48
         b.add_theme_font_size_override("font_size", 13)
         tab_buttons[target] = b
@@ -613,6 +694,7 @@ func _show_day() -> void:
     notes.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
     notes.placeholder_text = "Как прошёл день? Голод, настроение, самочувствие…"
     notes.text = str(store.data["notes"].get(date, ""))
+    _bind_field_focus(notes)
     notes.text_changed.connect(func():
         store.data["notes"][date] = notes.text
         note_save_timer.start()
