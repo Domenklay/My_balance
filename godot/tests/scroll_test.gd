@@ -28,7 +28,7 @@ func _run() -> void:
             "meal": ["Завтрак", "Обед", "Перекус", "Ужин"][i % 4]
         })
     var scrollable_pages = 0
-    for page in ["day", "activity", "weight", "stats", "settings"]:
+    for page in ["day", "recipes", "activity", "weight", "stats", "profile", "settings"]:
         app.tab = page
         app._render()
         await process_frame
