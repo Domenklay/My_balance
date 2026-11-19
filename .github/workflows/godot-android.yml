@@ -78,6 +78,8 @@ jobs:
           set -euo pipefail
           mkdir -p godot/android/build
           unzip -q "$HOME/.local/share/godot/export_templates/4.6.3.stable/android_source.zip" -d godot/android/build
+          printf '4.6.3.stable' > godot/android/.build_version
+          touch godot/android/build/.gdignore
           python3 android_scanner/patch_template.py
           find godot/android/build -maxdepth 3 -name build.gradle -o -name AndroidManifest.xml
       - name: Validate project scripts and import resources
