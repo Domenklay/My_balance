@@ -557,48 +557,112 @@ func _manual_barcode_product(code: String) -> Dictionary:
     return {"barcode": code, "name": "", "kcal": 0.0,
         "p": 0.0, "f": 0.0, "c": 0.0, "source": "Пользователь"}
 
+func _mobile_sheet(title: String, description: String, accept_label: String, requested_height: float = 530.0) -> Dictionary:
+    # Draw a real in-app card rather than a native dark ConfirmationDialog.
+    # Header and action buttons stay visible while lengthy inputs scroll.
+    var veil = Control.new()
+    veil.name = "ProductSheet"
+    veil.mouse_filter = Control.MOUSE_FILTER_STOP
+    add_child(veil)
+    veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+    var shade = ColorRect.new()
+    shade.color = Color(0.07, 0.13, 0.10, 0.50)
+    shade.mouse_filter = Control.MOUSE_FILTER_STOP
+    veil.add_child(shade)
+    shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+    var centering = CenterContainer.new()
+    veil.add_child(centering)
+    centering.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    var panel = PanelContainer.new()
+    panel.custom_minimum_size = Vector2(
+        minf(396.0, maxf(270.0, get_viewport_rect().size.x - 32.0)),
+        minf(requested_height, maxf(300.0, get_viewport_rect().size.y - 76.0))
+    )
+    var style = StyleBoxFlat.new()
+    style.bg_color = WHITE
+    style.border_color = BORDER
+    style.set_border_width_all(1)
+    style.set_corner_radius_all(20)
+    style.shadow_color = Color(0.08, 0.15, 0.10, 0.22)
+    style.shadow_size = 12
+    style.content_margin_left = 18
+    style.content_margin_right = 18
+    style.content_margin_top = 18
+    style.content_margin_bottom = 18
+    panel.add_theme_stylebox_override("panel", style)
+    centering.add_child(panel)
+
+    var column = VBoxContainer.new()
+    column.add_theme_constant_override("separation", 10)
+    panel.add_child(column)
+    _label(column, title, 20, GREEN)
+    if not description.is_empty():
+        _label(column, description, 12, MUTED)
+
+    var scroller = ScrollContainer.new()
+    scroller.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    scroller.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    scroller.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    column.add_child(scroller)
+    var fields = VBoxContainer.new()
+    fields.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    fields.add_theme_constant_override("separation", 10)
+    scroller.add_child(fields)
+
+    var message = _label(column, "", 12, ACCENT)
+    message.visible = false
+    var actions = _row(column)
+    var cancel = _button(actions, "Отмена", func(): veil.queue_free(), true)
+    cancel.name = "ProductSheetCancel"
+    var confirm = _button(actions, accept_label, Callable())
+    confirm.name = "ProductSheetConfirm"
+    confirm.clip_text = true
+    return {"root": veil, "fields": fields, "confirm": confirm,
+        "cancel": cancel, "message": message}
+
+func _sheet_error(sheet: Dictionary, message: String) -> void:
+    var label: Label = sheet["message"]
+    label.text = message
+    label.visible = true
+
 func _show_barcode_portion(food: Dictionary) -> void:
-    var dialog = ConfirmationDialog.new()
-    dialog.title = "Продукт найден"
-    dialog.ok_button_text = "Добавить в дневник"
-    add_child(dialog)
-    var panel = VBoxContainer.new()
-    panel.add_theme_constant_override("separation", 8)
-    dialog.add_child(panel)
-    _label(panel, str(food.get("name", "")), 18, GREEN)
-    _label(panel, str(food.get("barcode", "")) + " • " + str(food.get("source", "Локальный каталог")), 12, MUTED)
-    _label(panel, "На 100 г: " + str(food.get("kcal", 0)) + " ккал • Б " + str(food.get("p", 0))
-        + " • Ж " + str(food.get("f", 0)) + " • У " + str(food.get("c", 0)), 13, INK)
+    var sheet = _mobile_sheet("Продукт найден", "Проверь данные с упаковки перед добавлением.", "Добавить", 485.0)
+    var fields: VBoxContainer = sheet["fields"]
+    _label(fields, str(food.get("name", "Продукт")), 18, INK)
+    _label(fields, str(food.get("barcode", "")) + " • " + str(food.get("source", "Каталог")), 12, MUTED)
+    _label(fields, "На 100 г: " + str(food.get("kcal", 0)) + " ккал", 16, GREEN)
+    _label(fields, "Белки " + str(food.get("p", 0)) + " г  •  Жиры " +
+        str(food.get("f", 0)) + " г  •  Углеводы " + str(food.get("c", 0)) + " г", 13, INK)
     var warning = BarcodeScript.nutrition_warning(food)
     if not warning.is_empty():
-        _label(panel, "Проверь упаковку: " + warning, 13, ACCENT)
-    _label(panel, "Вес порции, г", 14, MUTED)
-    var grams = _number(panel, 100, 1, 5000)
-    _label(panel, "Приём пищи", 14, MUTED)
-    var meal = _choice(panel, ["Завтрак", "Обед", "Перекус", "Ужин"])
-    var calculated = _label(panel, "", 16, GREEN)
+        _label(fields, "Проверь этикетку: " + warning, 13, ACCENT)
+    _label(fields, "Вес порции, г", 14, MUTED)
+    var grams = _number(fields, 100, 1, 5000)
+    _label(fields, "Приём пищи", 14, MUTED)
+    var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
+    var calculated = _label(fields, "", 16, GREEN)
     var refresh = func(): calculated.text = str(roundi(float(food.get("kcal", 0)) * grams.value / 100.0)) + " ккал за порцию"
     grams.value_changed.connect(func(_v: float): refresh.call())
     refresh.call()
-    dialog.confirmed.connect(func():
+    var confirm: Button = sheet["confirm"]
+    confirm.pressed.connect(func():
         if store.add_food_entry(food, grams.value, meal.get_item_text(meal.selected), date):
+            var root_control: Control = sheet["root"]
+            root_control.queue_free()
             _barcode_add_success()
         else:
-            _message("Не удалось сохранить порцию.")
-        dialog.queue_free()
+            _sheet_error(sheet, "Не удалось сохранить порцию. Проверь память устройства.")
     )
-    dialog.canceled.connect(func(): dialog.queue_free())
-    dialog.popup_centered(Vector2i(395, 435))
 
 func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void:
-    var dialog = ConfirmationDialog.new()
-    dialog.title = "Добавить товар по штрихкоду" if manual else "Товар найден по штрихкоду"
-    dialog.ok_button_text = "Сохранить и добавить"
-    dialog.dialog_text = ("Внеси данные с этикетки на 100 г / мл." if manual
-        else "Open Food Facts: сверь КБЖУ с упаковкой.")
-    add_child(dialog)
-    var fields = VBoxContainer.new()
-    dialog.add_child(fields)
+    var description = "Внеси КБЖУ с этикетки на 100 г / мл." if manual else "Open Food Facts: сравни КБЖУ с этикеткой."
+    var sheet = _mobile_sheet(
+        "Новый товар" if manual else "Найденный товар",
+        description, "Сохранить и добавить", 690.0)
+    var fields: VBoxContainer = sheet["fields"]
+    _label(fields, "Название", 13, MUTED)
     var name = _text_input(fields, "Название продукта", str(product.get("name", "")))
     _label(fields, "Калории • на 100 г", 13, MUTED)
     var kcal = _number(fields, float(product.get("kcal", 0)), 0, 1000, 0.1)
@@ -611,10 +675,11 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
     var grams = _number(fields, 100, 1, 5000, 1)
     _label(fields, "Приём пищи", 13, MUTED)
     var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
-    var helper = _label(fields, "После сохранения продукт будет доступен без интернета.", 12, MUTED)
     var note = BarcodeScript.nutrition_warning(product)
     if not note.is_empty() and not manual:
-        helper.text = "Проверь упаковку: " + note
+        _label(fields, "Внимание: " + note, 12, ACCENT)
+    _label(fields, "Сохранённый товар будет доступен без интернета.", 12, MUTED)
+
     var commit_record = func(add_to_diary: bool):
         var record: Dictionary = product.duplicate(true)
         record["name"] = name.text.strip_edges()
@@ -623,30 +688,33 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
         record["f"] = fat.value
         record["c"] = carbs.value
         if record["name"].is_empty():
-            _message("Нужно указать название товара.")
+            _sheet_error(sheet, "Укажи название товара.")
             return
         if manual and kcal.value == 0.0 and protein.value == 0.0 and fat.value == 0.0 and carbs.value == 0.0:
-            _message("Внеси КБЖУ с упаковки, пустые данные сохранять нельзя.")
+            _sheet_error(sheet, "Внеси пищевую ценность с упаковки.")
             return
         var saved_id = store.save_barcode_food(record)
         if saved_id.is_empty():
-            _message("Не удалось сохранить товар. Проверь код или место на устройстве.")
+            _sheet_error(sheet, "Не удалось сохранить товар. Проверь штрихкод или память устройства.")
             return
-        var food = store.food_by_id(saved_id)
+        var saved_food = store.food_by_id(saved_id)
         if add_to_diary:
-            if not store.add_food_entry(food, grams.value, meal.get_item_text(meal.selected), date):
-                _message("Не удалось сохранить порцию.")
+            if not store.add_food_entry(saved_food, grams.value, meal.get_item_text(meal.selected), date):
+                _sheet_error(sheet, "Товар сохранён, но порция не записана. Попробуй снова.")
                 return
+            var root_control: Control = sheet["root"]
+            root_control.queue_free()
             _barcode_add_success()
         else:
-            _message("Продукт сохранён в локальном каталоге.")
+            var root_control: Control = sheet["root"]
+            root_control.queue_free()
             _render()
-        dialog.queue_free()
-    var save_only = _button(fields, "Сохранить товар без записи", func(): commit_record.call(false), true)
+            _message("Продукт сохранён в локальном каталоге.")
+
+    var save_only = _button(fields, "Сохранить без записи в дневник", func(): commit_record.call(false), true)
     save_only.custom_minimum_size.y = 43
-    dialog.confirmed.connect(func(): commit_record.call(true))
-    dialog.canceled.connect(func(): dialog.queue_free())
-    dialog.popup_centered(Vector2i(395, 670))
+    var confirm: Button = sheet["confirm"]
+    confirm.pressed.connect(func(): commit_record.call(true))
 
 func _on_catalog_http_completed(result: int, status: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
     if result != HTTPRequest.RESULT_SUCCESS or status != 200:
