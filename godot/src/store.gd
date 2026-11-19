@@ -331,6 +331,19 @@ func add_custom_food_without_barcode(food: Dictionary) -> bool:
     data["foods"].erase(item)
     return false
 
+func delete_saved_record(collection: String, record: Dictionary) -> bool:
+    if collection not in ["entries", "activities", "weights"] or not data.has(collection):
+        return false
+    var records: Array = data[collection]
+    var index = records.find(record)
+    if index < 0:
+        return false
+    records.remove_at(index)
+    if save():
+        return true
+    records.insert(index, record)
+    return false
+
 func add_food_entry(food: Dictionary, grams: float, meal: String, day: String) -> bool:
     if food.is_empty() or grams <= 0.0 or grams > 5000.0:
         return false
