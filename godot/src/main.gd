@@ -499,18 +499,18 @@ func _button(parent: Node, s: String, call: Callable, secondary: bool = false) -
         var st = StyleBoxFlat.new()
         st.bg_color = (SECONDARY if secondary else GREEN)
         if mode == "hover":
-            st.bg_color = Color("#cfebd8") if secondary else Color("#195a46")
+            st.bg_color = SECONDARY.lightened(0.06) if secondary else GREEN.lightened(0.09)
         elif mode == "pressed":
-            st.bg_color = Color("#c2dfcc") if secondary else Color("#164d3c")
+            st.bg_color = SECONDARY.darkened(0.05) if secondary else GREEN.darkened(0.07)
         st.set_corner_radius_all(13)
         st.content_margin_left = 10
         st.content_margin_right = 10
         st.content_margin_top = 7
         st.content_margin_bottom = 7
         b.add_theme_stylebox_override(mode, st)
-    b.add_theme_color_override("font_color", GREEN if secondary else WHITE)
-    b.add_theme_color_override("font_hover_color", GREEN if secondary else WHITE)
-    b.add_theme_color_override("font_pressed_color", GREEN if secondary else WHITE)
+    b.add_theme_color_override("font_color", INK if secondary and DARK_MODE else (TEXT_ACCENT if secondary else WHITE))
+    b.add_theme_color_override("font_hover_color", INK if secondary and DARK_MODE else (TEXT_ACCENT if secondary else WHITE))
+    b.add_theme_color_override("font_pressed_color", INK if secondary and DARK_MODE else (TEXT_ACCENT if secondary else WHITE))
     b.add_theme_color_override("font_disabled_color", MUTED)
     if call.is_valid():
         b.pressed.connect(func():
@@ -525,11 +525,11 @@ func _card(title: String, variant: String = "plain") -> VBoxContainer:
     panel.mouse_filter = Control.MOUSE_FILTER_PASS
     panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     var style = StyleBoxFlat.new()
-    style.bg_color = DEEP if variant == "hero" else (Color("#eaf5e9") if variant == "tint" else WHITE)
+    style.bg_color = HERO_BG if variant == "hero" else (TINT_BG if variant == "tint" else CARD_BG)
     style.set_corner_radius_all(22)
-    style.border_color = Color("#dfe9df") if variant == "plain" else style.bg_color
+    style.border_color = BORDER if variant == "plain" else style.bg_color
     style.set_border_width_all(1)
-    style.shadow_color = Color(0.06, 0.17, 0.11, 0.08)
+    style.shadow_color = Color(0.0, 0.0, 0.0, 0.13 if DARK_MODE else 0.08)
     style.shadow_size = 5 if variant == "hero" else 3
     style.shadow_offset = Vector2(0, 3)
     style.content_margin_left = 17
@@ -538,6 +538,11 @@ func _card(title: String, variant: String = "plain") -> VBoxContainer:
     style.content_margin_bottom = 17
     panel.add_theme_stylebox_override("panel", style)
     body.add_child(panel)
+    if PATTERNS and variant in ["hero", "tint"]:
+        var ornament = PatternScript.new()
+        ornament.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        ornament.configure(PATTERN_STYLE, PATTERN_COLOR, true, 0.13 if variant == "hero" else 0.07)
+        panel.add_child(ornament)
     var content = VBoxContainer.new()
     content.mouse_filter = Control.MOUSE_FILTER_PASS
     content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -552,7 +557,7 @@ func _macro_chip(parent: Node, caption: String, value: float, tint: Color) -> vo
     panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
     panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     var style = StyleBoxFlat.new()
-    style.bg_color = Color("#286453")
+    style.bg_color = CHIP_BG
     style.set_corner_radius_all(12)
     style.content_margin_left = 9
     style.content_margin_right = 7
@@ -563,7 +568,7 @@ func _macro_chip(parent: Node, caption: String, value: float, tint: Color) -> vo
     var content = VBoxContainer.new()
     content.add_theme_constant_override("separation", 3)
     panel.add_child(content)
-    _label(content, caption, 11, Color("#cee4d6"))
+    _label(content, caption, 11, CHIP_CAPTION)
     _label(content, str(roundi(value)) + " г", 19, tint)
 
 
@@ -572,7 +577,7 @@ func _soft_list_row(parent: Node) -> HBoxContainer:
     panel.mouse_filter = Control.MOUSE_FILTER_PASS
     panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     var st = StyleBoxFlat.new()
-    st.bg_color = Color("#f4f9f4")
+    st.bg_color = ROW_BG
     st.set_corner_radius_all(13)
     st.content_margin_left = 10
     st.content_margin_right = 8
@@ -641,7 +646,7 @@ func _make_tabs() -> void:
     var bar = PanelContainer.new()
     bar.name = "BottomNavigation"
     var st = StyleBoxFlat.new()
-    st.bg_color = WHITE
+    st.bg_color = CARD_BG
     st.border_color = BORDER
     st.border_width_top = 1
     st.content_margin_left = 7
@@ -675,7 +680,7 @@ func _update_tabs() -> void:
         var b: Button = tab_buttons[key]
         var active = key == tab
         var box_style = StyleBoxFlat.new()
-        box_style.bg_color = GREEN if active else WHITE
+        box_style.bg_color = GREEN if active else CARD_BG
         box_style.set_corner_radius_all(14)
         for state in ["normal", "hover", "pressed"]:
             b.add_theme_stylebox_override(state, box_style)
@@ -686,7 +691,7 @@ func _update_tabs() -> void:
 
 func _style_progress(bar: ProgressBar) -> void:
     var track = StyleBoxFlat.new()
-    track.bg_color = Color("#e1ece4")
+    track.bg_color = PALE
     track.set_corner_radius_all(9)
     var fill = StyleBoxFlat.new()
     fill.bg_color = GREEN
@@ -830,17 +835,18 @@ func _show_day() -> void:
     var total = store.day_calories(date)
     var target = float(store.data["settings"]["kcal"])
     var hero = _card("Энергия дня", "hero")
-    _label(hero, "Твой ежедневный ориентир", 13, Color("#bddbcc"))
+    _label(hero, "Твой ежедневный ориентир", 13, HERO_MUTED)
     var hero_content = _row(hero)
     var numbers = VBoxContainer.new()
     numbers.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     numbers.add_theme_constant_override("separation", 2)
     hero_content.add_child(numbers)
     _label(numbers, str(roundi(total)), 39, WHITE)
-    _label(numbers, "из " + str(roundi(target)) + " ккал", 15, Color("#d5e7d9"))
+    _label(numbers, "из " + str(roundi(target)) + " ккал", 15, HERO_MUTED)
     var ring = RingScript.new()
     ring.name = "DailyCalorieRing"
     ring.custom_minimum_size = Vector2(112, 112)
+    ring.set_palette(HERO_TRACK, HERO_FILL, WHITE)
     ring.set_value(total, target)
     hero_content.add_child(ring)
     var track = ProgressBar.new()
@@ -849,23 +855,23 @@ func _show_day() -> void:
     track.value = minf(total, target)
     _style_progress(track)
     var track_bg = StyleBoxFlat.new()
-    track_bg.bg_color = Color("#3d7967")
+    track_bg.bg_color = HERO_TRACK
     track_bg.set_corner_radius_all(8)
     var track_fg = StyleBoxFlat.new()
-    track_fg.bg_color = Color("#deebbd")
+    track_fg.bg_color = HERO_FILL
     track_fg.set_corner_radius_all(8)
     track.add_theme_stylebox_override("background", track_bg)
     track.add_theme_stylebox_override("fill", track_fg)
     hero.add_child(track)
     var remaining = target - total
     if remaining >= 0.0:
-        _label(hero, "До дневного ориентира — " + str(roundi(remaining)) + " ккал", 13, Color("#d2e9d8"))
+        _label(hero, "До дневного ориентира — " + str(roundi(remaining)) + " ккал", 13, HERO_MUTED)
     else:
         _label(hero, "Сверх ориентира — " + str(roundi(-remaining)) + " ккал", 13, SOFT_GOLD)
     var macros = _row(hero)
-    _macro_chip(macros, "БЕЛКИ", store.day_macro(date, "p"), Color("#d7f4d7"))
-    _macro_chip(macros, "ЖИРЫ", store.day_macro(date, "f"), Color("#f2d49d"))
-    _macro_chip(macros, "УГЛЕВОДЫ", store.day_macro(date, "c"), Color("#d3e5fa"))
+    _macro_chip(macros, "БЕЛКИ", store.day_macro(date, "p"), MACRO_PROTEIN)
+    _macro_chip(macros, "ЖИРЫ", store.day_macro(date, "f"), MACRO_FAT)
+    _macro_chip(macros, "УГЛЕВОДЫ", store.day_macro(date, "c"), MACRO_CARBS)
 
     var activity = _card("Движение сегодня")
     var walking = 0
@@ -1080,7 +1086,7 @@ func _mobile_sheet(title: String, description: String, accept_label: String, req
         minf(requested_height, maxf(300.0, get_viewport_rect().size.y - 76.0))
     )
     var style = StyleBoxFlat.new()
-    style.bg_color = WHITE
+    style.bg_color = CARD_BG
     style.border_color = BORDER
     style.set_border_width_all(1)
     style.set_corner_radius_all(20)
@@ -1098,7 +1104,7 @@ func _mobile_sheet(title: String, description: String, accept_label: String, req
     column.mouse_filter = Control.MOUSE_FILTER_PASS
     column.add_theme_constant_override("separation", 10)
     panel.add_child(column)
-    _label(column, title, 20, GREEN)
+    _label(column, title, 20, TEXT_ACCENT)
     if not description.is_empty():
         _label(column, description, 12, MUTED)
 
@@ -1528,6 +1534,7 @@ func _show_weight() -> void:
     var chart = _card("Как меняется вес")
     var g = GraphScript.new()
     g.custom_minimum_size = Vector2(0, 210)
+    g.set_palette(TEXT_ACCENT, CHART_GRID, MUTED, ACCENT, CHART_AREA, SECONDARY)
     g.set_points(store.data["weights"], float(settings["goal"]))
     chart.add_child(g)
     var history = store.data["weights"].duplicate()
