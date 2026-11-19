@@ -3,6 +3,7 @@ extends RefCounted
 const DATA_PATH = "user://my_balance.json"
 const BACKUP_PATH = "user://my_balance.previous.json"
 const TEMP_PATH = "user://my_balance.pending.json"
+const OFFLINE_CATALOG_PATH = "res://data/barcode_catalog.json"
 
 const DEFAULT_PRODUCTS = [
     ["Овсяные хлопья (сухие)",370,13,7,62],
@@ -34,9 +35,44 @@ const DEFAULT_PRODUCTS = [
 ]
 
 var data: Dictionary = {}
+var bundled_foods: Array = []
 
 func _init() -> void:
+    _load_bundled_foods()
     data = default_data()
+
+func _load_bundled_foods() -> void:
+    bundled_foods.clear()
+    if not FileAccess.file_exists(OFFLINE_CATALOG_PATH):
+        return
+    var parsed = JSON.parse_string(FileAccess.get_file_as_string(OFFLINE_CATALOG_PATH))
+    if not (parsed is Dictionary) or not (parsed.get("products") is Array):
+        push_warning("Офлайн-каталог штрихкодов повреждён")
+        return
+    for item in parsed["products"]:
+        if not (item is Dictionary):
+            continue
+        var code = str(item.get("barcode", ""))
+        if not _is_barcode(code) or not item.has("name"):
+            continue
+        if str(item["name"]).strip_edges().is_empty():
+            continue
+        var valid = true
+        for nutrient in ["kcal", "p", "f", "c"]:
+            if not (item.get(nutrient) is int or item.get(nutrient) is float):
+                valid = false
+                break
+        if valid:
+            bundled_foods.append(item)
+
+func _is_barcode(code: String) -> bool:
+    if code.length() < 8 or code.length() > 14:
+        return false
+    for i in range(code.length()):
+        var digit = code.unicode_at(i)
+        if digit < 48 or digit > 57:
+            return false
+    return true
     if FileAccess.file_exists(DATA_PATH):
         var content = FileAccess.get_file_as_string(DATA_PATH)
         if not import_json(content, false) and FileAccess.file_exists(BACKUP_PATH):
@@ -134,27 +170,64 @@ func all_foods() -> Array:
     for i in range(DEFAULT_PRODUCTS.size()):
         var f: Array = DEFAULT_PRODUCTS[i]
         result.append({"id": "d" + str(i), "name": f[0], "kcal": f[1], "p": f[2], "f": f[3], "c": f[4]})
+    var replaced_barcodes = {}
+    for f in data["foods"]:
+        if f is Dictionary and not str(f.get("barcode", "")).is_empty():
+            replaced_barcodes[str(f["barcode"])] = true
+    for item in bundled_foods:
+        if not replaced_barcodes.has(str(item.get("barcode", ""))):
+            result.append(item)
     for f in data["foods"]:
         if f is Dictionary:
             result.append(f)
     return result
 
 func food_by_barcode(code: String) -> Dictionary:
+    if not _is_barcode(code):
+        return {}
     for item in data["foods"]:
         if item is Dictionary and str(item.get("barcode", "")) == code:
             return item
+    for item in bundled_foods:
+        if str(item.get("barcode", "")) == code:
+            return item
     return {}
+
+func link_barcode_to_food(food_id: String, code: String) -> bool:
+    if not _is_barcode(code):
+        return false
+    for item in data["foods"]:
+        if not (item is Dictionary) or str(item.get("id", "")) != food_id:
+            continue
+        var existing = food_by_barcode(code)
+        if not existing.is_empty() and str(existing.get("id", "")) != food_id:
+            # A local copy of an offline item can override it; do not silently
+            # attach another barcode to an unrelated saved product.
+            if str(existing.get("id", "")).begins_with("offline_"):
+                pass
+            else:
+                return false
+        var previous = str(item.get("barcode", ""))
+        item["barcode"] = code
+        if save():
+            return true
+        if previous.is_empty():
+            item.erase("barcode")
+        else:
+            item["barcode"] = previous
+        return false
+    return false
 
 func save_barcode_food(details: Dictionary) -> String:
     var barcode = str(details.get("barcode", ""))
-    if barcode.length() < 8 or barcode.length() > 14:
+    if not _is_barcode(barcode):
         return ""
     for field in ["name", "kcal", "p", "f", "c"]:
         if not details.has(field):
             return ""
-    var existing = food_by_barcode(barcode)
-    if not existing.is_empty():
-        return str(existing.get("id", ""))
+    for saved in data["foods"]:
+        if saved is Dictionary and str(saved.get("barcode", "")) == barcode:
+            return str(saved.get("id", ""))
     var item = {
         "id": "barcode_" + barcode,
         "barcode": barcode,
@@ -163,7 +236,7 @@ func save_barcode_food(details: Dictionary) -> String:
         "p": float(details["p"]),
         "f": float(details["f"]),
         "c": float(details["c"]),
-        "source": "Open Food Facts"
+        "source": str(details.get("source", "Пользователь"))
     }
     if item["name"].is_empty():
         return ""
