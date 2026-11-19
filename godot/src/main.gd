@@ -15,6 +15,8 @@ var month_shown: String = ""
 var shell: VBoxContainer
 var body: VBoxContainer
 var scroll: ScrollContainer
+var food_entry_card: VBoxContainer
+var note_save_timer: Timer
 
 func _ready() -> void:
     month_shown = date.substr(0, 7)
@@ -44,8 +46,17 @@ func _ready() -> void:
     body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     body.add_theme_constant_override("separation", 12)
     scroll.add_child(body)
+    note_save_timer = Timer.new()
+    note_save_timer.wait_time = 0.6
+    note_save_timer.one_shot = true
+    note_save_timer.timeout.connect(func(): store.save())
+    add_child(note_save_timer)
     _make_tabs()
     _render()
+
+func _exit_tree() -> void:
+    if note_save_timer != null and not note_save_timer.is_stopped():
+        store.save()
 
 func _label(parent: Node, s: String, size: int = 16, color: Color = INK) -> Label:
     var l = Label.new()
@@ -261,8 +272,9 @@ func _show_day() -> void:
             var caption = _label(r, str(f.get("name", "Продукт")) + "\n" + str(entry.get("grams", 0)) + " г · " + str(roundi(store.entry_kcal(entry))) + " ккал", 13)
             caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
             _button(r, "✎", func(): _edit_entry(entry), true)
-            _button(r, "×", func(): store.data["entries"].erase(entry); store.save(); _render(), true)
+            _button(r, "×", func(): _confirm_delete("Удалить запись питания?", func(): store.data["entries"].erase(entry); store.save(); _render()), true)
     var add = _card("Добавить продукт")
+    food_entry_card = add
     _food_form(add)
     var notes_card = _card("Как прошёл день?")
     var notes = TextEdit.new()
@@ -270,11 +282,12 @@ func _show_day() -> void:
     notes.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
     notes.placeholder_text = "Был ли голод после работы? Что помогло почувствовать сытость?"
     notes.text = str(store.data["notes"].get(date, ""))
-    notes.text_changed.connect(func(): store.data["notes"][date] = notes.text; store.save())
+    notes.text_changed.connect(func(): store.data["notes"][date] = notes.text; note_save_timer.start())
     notes_card.add_child(notes)
 
 func _jump_to_food() -> void:
-    scroll.scroll_vertical = int(scroll.get_v_scroll_bar().max_value)
+    if is_instance_valid(food_entry_card):
+        scroll.ensure_control_visible(food_entry_card)
 
 func _food_form(parent: VBoxContainer) -> void:
     _label(parent, "Продукт")
@@ -296,17 +309,38 @@ func _food_form(parent: VBoxContainer) -> void:
 
 func _edit_entry(entry: Dictionary) -> void:
     var dialog = ConfirmationDialog.new()
-    dialog.title = "Изменить порцию"
-    dialog.dialog_text = "Вес порции в граммах:"
+    dialog.title = "Изменить запись питания"
     add_child(dialog)
-    var field = SpinBox.new()
-    field.min_value = 1
-    field.max_value = 5000
-    field.value = float(entry.get("grams", 100))
-    dialog.add_child(field)
-    dialog.confirmed.connect(func(): entry["grams"] = field.value; store.save(); dialog.queue_free(); _render())
+    var fields = VBoxContainer.new()
+    dialog.add_child(fields)
+    _label(fields, "Продукт")
+    var available = store.all_foods()
+    var selector = _choice(fields, available.map(func(f): return f.get("name", "")))
+    var old_id = str(entry.get("food", ""))
+    for i in range(available.size()):
+        if str(available[i].get("id", "")) == old_id:
+            selector.select(i)
+            break
+    _label(fields, "Количество, г")
+    var grams = _number(fields, float(entry.get("grams", 100)), 1, 5000)
+    _label(fields, "Приём пищи")
+    var meals = ["Завтрак", "Обед", "Перекус", "Ужин"]
+    var meal = _choice(fields, meals)
+    var meal_index = meals.find(str(entry.get("meal", "")))
+    if meal_index >= 0:
+        meal.select(meal_index)
+    dialog.confirmed.connect(func():
+        var f: Dictionary = available[selector.selected]
+        entry["food"] = f["id"]
+        entry["nutrition"] = {"name": f["name"], "kcal": f["kcal"], "p": f["p"], "f": f["f"], "c": f["c"]}
+        entry["grams"] = grams.value
+        entry["meal"] = meals[meal.selected]
+        store.save()
+        dialog.queue_free()
+        _render()
+    )
     dialog.canceled.connect(func(): dialog.queue_free())
-    dialog.popup_centered(Vector2i(350, 180))
+    dialog.popup_centered(Vector2i(380, 370))
 
 func _show_activity() -> void:
     var card = _card("Прогулки и домашние тренировки")
@@ -342,27 +376,38 @@ func _show_activity() -> void:
         var l = _label(r, text, 14)
         l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         _button(r, "✎", func(): _edit_activity(a), true)
-        _button(r, "×", func(): store.data["activities"].erase(a); store.save(); _render(), true)
+        _button(r, "×", func(): _confirm_delete("Удалить активность?", func(): store.data["activities"].erase(a); store.save(); _render()), true)
 
 func _edit_activity(activity: Dictionary) -> void:
     var dialog = ConfirmationDialog.new()
-    dialog.title = "Изменить тренировку"
-    dialog.dialog_text = "Продолжительность в минутах:"
+    dialog.title = "Изменить активность"
     add_child(dialog)
-    var minutes = SpinBox.new()
-    minutes.min_value = 1
-    minutes.max_value = 1440
-    minutes.step = 1
-    minutes.value = float(activity.get("minutes", 30))
-    dialog.add_child(minutes)
+    var fields = VBoxContainer.new()
+    dialog.add_child(fields)
+    var kinds = ["Ходьба", "Гантели", "Другая активность"]
+    var types = ["walk", "strength", "other"]
+    _label(fields, "Вид активности")
+    var kind = _choice(fields, kinds)
+    var old_kind = types.find(str(activity.get("type", "other")))
+    if old_kind >= 0:
+        kind.select(old_kind)
+    _label(fields, "Продолжительность, мин")
+    var minutes = _number(fields, float(activity.get("minutes", 30)), 1, 1440)
+    _label(fields, "Расстояние, км")
+    var distance = _number(fields, float(activity.get("distance", 0)), 0, 100, 0.1)
+    _label(fields, "Заметки")
+    var detail = _text_input(fields, "Упражнения и нагрузка", str(activity.get("detail", "")))
     dialog.confirmed.connect(func():
+        activity["type"] = types[kind.selected]
         activity["minutes"] = minutes.value
+        activity["distance"] = distance.value
+        activity["detail"] = detail.text
         store.save()
         dialog.queue_free()
         _render()
     )
     dialog.canceled.connect(func(): dialog.queue_free())
-    dialog.popup_centered(Vector2i(350, 180))
+    dialog.popup_centered(Vector2i(390, 440))
 
 func _show_weight() -> void:
     var card = _card("История веса")
@@ -390,7 +435,7 @@ func _show_weight() -> void:
         var r = _row(chart)
         var l = _label(r, str(w.get("date", "")) + " · " + str(w.get("value", 0)) + " кг", 14)
         l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        _button(r, "×", func(): store.data["weights"].erase(w); store.save(); _render(), true)
+        _button(r, "×", func(): _confirm_delete("Удалить запись веса?", func(): store.data["weights"].erase(w); store.save(); _render()), true)
 
 func _show_stats() -> void:
     var card = _card("Итоги недели")
@@ -482,6 +527,16 @@ func _show_settings() -> void:
             _message("Неверная резервная копия JSON.")
     )
     _label(backup, "Записи хранятся в памяти приложения без регистрации и интернета. При удалении приложения данные могут исчезнуть.", 13, MUTED)
+
+func _confirm_delete(prompt: String, action: Callable) -> void:
+    var dialog = ConfirmationDialog.new()
+    dialog.title = "Подтверждение удаления"
+    dialog.dialog_text = prompt
+    dialog.ok_button_text = "Удалить"
+    add_child(dialog)
+    dialog.confirmed.connect(func(): action.call(); dialog.queue_free())
+    dialog.canceled.connect(func(): dialog.queue_free())
+    dialog.popup_centered(Vector2i(345, 175))
 
 func _message(s: String) -> void:
     var dialog = AcceptDialog.new()
