@@ -6,6 +6,7 @@ const TEMP_PATH = "user://my_balance.pending.json"
 const OFFLINE_CATALOG_PATH = "res://data/barcode_catalog.json"
 const UPDATE_CATALOG_PATH = "user://barcode_catalog_verified.json"
 const BarcodeScript = preload("res://src/barcode_lookup.gd")
+const RecipeMath = preload("res://src/recipe_math.gd")
 
 const DEFAULT_PRODUCTS = [
     ["Овсяные хлопья (сухие)",370,13,7,62],
@@ -121,7 +122,8 @@ func _is_barcode(code: String) -> bool:
 func default_data() -> Dictionary:
     return {
         "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true},
-        "foods": [], "entries": [], "activities": [], "weights": [], "notes": {}, "favorites": []
+        "foods": [], "entries": [], "activities": [], "weights": [], "notes": {}, "favorites": [],
+        "recipes": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат"}
     }
 
 func save() -> bool:
@@ -151,6 +153,99 @@ func save() -> bool:
         return false
     return true
 
+func _valid_profile(profile: Dictionary) -> bool:
+    var name = profile.get("name")
+    var motto = profile.get("motto")
+    var avatar = profile.get("avatar")
+    if not (name is String and motto is String and avatar is String):
+        return false
+    if name.strip_edges().is_empty() or name.length() > 45 or motto.length() > 140:
+        return false
+    return avatar in ["leaf", "star", "moon", "sun", "flower", "heart"]
+
+func update_profile(changes: Dictionary) -> bool:
+    if not _valid_profile(changes):
+        return false
+    var previous = data["profile"].duplicate(true)
+    data["profile"] = changes.duplicate(true)
+    if save():
+        return true
+    data["profile"] = previous
+    return false
+
+func recipe_by_id(recipe_id: String) -> Dictionary:
+    for recipe in data.get("recipes", []):
+        if recipe is Dictionary and str(recipe.get("id", "")) == recipe_id:
+            return recipe
+    return {}
+
+func save_recipe(recipe_data: Dictionary) -> String:
+    var recipe = recipe_data.duplicate(true)
+    var recipe_id = str(recipe.get("id", "")).strip_edges()
+    if recipe_id.is_empty():
+        recipe_id = "r" + str(Time.get_ticks_usec()) + "_" + str(data["recipes"].size())
+    recipe["id"] = recipe_id
+    if not RecipeMath.validate_recipe(recipe):
+        return ""
+    var recipes: Array = data["recipes"]
+    var index = -1
+    for i in range(recipes.size()):
+        if str(recipes[i].get("id", "")) == recipe_id:
+            index = i
+            break
+    if index < 0 and recipes.size() >= 300:
+        return ""
+    if index >= 0:
+        var previous = recipes[index].duplicate(true)
+        recipes[index] = recipe
+        if save():
+            return recipe_id
+        recipes[index] = previous
+        return ""
+    recipes.append(recipe)
+    if save():
+        return recipe_id
+    recipes.erase(recipe)
+    return ""
+
+func delete_recipe(recipe_id: String) -> bool:
+    var recipes: Array = data["recipes"]
+    for i in range(recipes.size()):
+        if str(recipes[i].get("id", "")) == recipe_id:
+            var removed = recipes[i]
+            recipes.remove_at(i)
+            if save():
+                return true
+            recipes.insert(i, removed)
+            return false
+    return false
+
+func add_recipe_portion(recipe_id: String, grams: float, meal: String, day: String) -> bool:
+    if not is_finite(grams) or grams <= 0.0 or grams > 5000.0:
+        return false
+    if meal not in ["Завтрак", "Обед", "Перекус", "Ужин"]:
+        return false
+    var recipe = recipe_by_id(recipe_id)
+    if recipe.is_empty():
+        return false
+    var metrics = RecipeMath.calculate(recipe["ingredients"], float(recipe["cooked_weight"]))
+    if metrics.is_empty():
+        return false
+    var nutrition = {"name": str(recipe["name"])}
+    for field in RecipeMath.NUTRIENTS:
+        nutrition[field] = float(metrics[field])
+    var entry = {
+        "id": "recipe_" + str(Time.get_ticks_usec()) + "_" + str(data["entries"].size()),
+        "date": day, "food": "recipe:" + recipe_id, "recipe_id": recipe_id,
+        "nutrition": nutrition,
+        "grams": grams, "meal": meal
+    }
+    data["entries"].append(entry)
+    if save():
+        return true
+    data["entries"].erase(entry)
+    return false
+
 func import_json(raw: String, persist: bool = true) -> bool:
     var obj = JSON.parse_string(raw)
     if not (obj is Dictionary):
@@ -164,6 +259,10 @@ func import_json(raw: String, persist: bool = true) -> bool:
             else:
                 return false
     # Favorites were introduced in 0.5.3; older exports have no such field.
+    if not obj.has("recipes"):
+        obj["recipes"] = []
+    if not obj.has("profile"):
+        obj["profile"] = {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат"}
     if not obj.has("favorites"):
         obj["favorites"] = []
     if not (obj["favorites"] is Array) or obj["favorites"].size() > 500:
@@ -173,6 +272,19 @@ func import_json(raw: String, persist: bool = true) -> bool:
             return false
     if not (obj["settings"] is Dictionary and obj["foods"] is Array and obj["entries"] is Array and obj["activities"] is Array and obj["weights"] is Array and obj["notes"] is Dictionary):
         return false
+    if not (obj["recipes"] is Array and obj["profile"] is Dictionary) or obj["recipes"].size() > 300:
+        return false
+    var profile: Dictionary = obj["profile"]
+    if not _valid_profile(profile):
+        return false
+    var ids = {}
+    for saved_recipe in obj["recipes"]:
+        if not RecipeMath.validate_recipe(saved_recipe):
+            return false
+        var recipe_id = str(saved_recipe["id"])
+        if ids.has(recipe_id):
+            return false
+        ids[recipe_id] = true
     var settings: Dictionary = obj["settings"]
     if not (settings.has("kcal") and settings.has("start") and settings.has("goal")):
         return false
