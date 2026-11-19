@@ -16,14 +16,18 @@ build_candidates = sorted(
     p for p in root.rglob("build.gradle")
     if p.parent.name == "app"
 )
+# Official Godot android_source.zip packages the :app module at the archive root.
+if not build_candidates and (root / "build.gradle").is_file():
+    build_candidates = [root / "build.gradle"]
 if not build_candidates:
-    raise SystemExit("Godot Android app/build.gradle not found: " +
-                     ", ".join(map(str, root.glob("*/build.gradle"))))
+    raise SystemExit("Godot Gradle module not found: " + ", ".join(map(str, root.rglob("build.gradle"))))
 app_build = build_candidates[0]
 app_root = app_build.parent
 manifest = app_root / "src/main/AndroidManifest.xml"
 if not manifest.is_file():
-    raise SystemExit(f"Expected Android manifest missing at: {manifest}")
+    manifest_candidates = list(root.rglob("AndroidManifest.xml"))
+    raise SystemExit("No template manifest at " + str(manifest) +
+                     "; found " + ", ".join(map(str, manifest_candidates)))
 
 dest = app_root / "src/main/java/com/domenklay/mybalance/barcode/MyBalanceBarcode.java"
 dest.parent.mkdir(parents=True, exist_ok=True)
