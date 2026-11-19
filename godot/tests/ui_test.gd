@@ -37,6 +37,15 @@ func _run() -> void:
         return
     app._render()
     await process_frame
+    # The full screen including five bottom tabs must not exceed 420 px.
+    if app.shell.size.x > 421.0 or app.shell.size.x < 415.0:
+        push_error("FAILED: mobile layout overflows 420px: " + str(app.shell.size.x))
+        quit(1)
+        return
+    if app.tab_buttons.size() != 5:
+        push_error("FAILED: mobile bottom navigation incomplete")
+        quit(1)
+        return
     var search: LineEdit = _find_search(app)
     if search == null:
         push_error("FAILED: food search input missing")
@@ -102,15 +111,17 @@ func _run() -> void:
     var target_id = str(scanned_food["id"])
     app._show_barcode_portion(scanned_food)
     await process_frame
-    var scanned_dialog: ConfirmationDialog = null
-    for child in app.get_children():
-        if child is ConfirmationDialog:
-            scanned_dialog = child
-    if scanned_dialog == null:
-        push_error("FAILED: exact barcode result dialog missing")
+    var scanned_sheet: Control = app.get_node_or_null("ProductSheet")
+    if scanned_sheet == null:
+        push_error("FAILED: light product card missing")
         quit(1)
         return
-    scanned_dialog.confirmed.emit()
+    var confirm_button: Button = scanned_sheet.find_child("ProductSheetConfirm", true, false)
+    if confirm_button == null or confirm_button.text != "Добавить":
+        push_error("FAILED: barcode product card has no visible add button")
+        quit(1)
+        return
+    confirm_button.pressed.emit()
     await process_frame
     var after_scan = app.store.day_entries(app.date)
     if after_scan.size() != 2 or str(after_scan[1].get("food", "")) != target_id:
