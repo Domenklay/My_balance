@@ -4,18 +4,53 @@ const StoreScript = preload("res://src/store.gd")
 const GraphScript = preload("res://src/weight_graph.gd")
 const RingScript = preload("res://src/calorie_ring.gd")
 const BarcodeScript = preload("res://src/barcode_lookup.gd")
-const GREEN = Color("#195b4a")
-const DEEP = Color("#123f36")
-const MINT = Color("#cdebd8")
-const INK = Color("#263a32")
-const MUTED = Color("#678376")
-const PALE = Color("#f2f7f2")
-const WHITE = Color("#ffffff")
-const ACCENT = Color("#bf7e43")
-const SOFT_GOLD = Color("#f8e8c9")
-const INPUT_BG = Color("#fbfdfb")
-const BORDER = Color("#dfeae1")
-const SECONDARY = Color("#e8f3e9")
+const AppearanceScript = preload("res://src/appearance.gd")
+const PatternScript = preload("res://src/theme_pattern.gd")
+var GREEN: Color = Color("#195b4a")
+var DEEP: Color = Color("#123f36")
+var MINT: Color = Color("#cdebd8")
+var INK: Color = Color("#263a32")
+var MUTED: Color = Color("#678376")
+var PALE: Color = Color("#f2f7f2")
+var WHITE: Color = Color("#ffffff")
+var ACCENT: Color = Color("#bf7e43")
+var SOFT_GOLD: Color = Color("#f8e8c9")
+var INPUT_BG: Color = Color("#fbfdfb")
+var BORDER: Color = Color("#dfeae1")
+var SECONDARY: Color = Color("#e8f3e9")
+
+var BACKGROUND: Color = Color("#f0f6f1")
+var CARD_BG: Color = Color("#ffffff")
+var HERO_BG: Color = Color("#123f36")
+var TINT_BG: Color = Color("#eaf5e9")
+var ROW_BG: Color = Color("#f4f9f4")
+var HEADER_BG: Color = Color("#123f36")
+var HEADER_MUTED: Color = Color("#c8e4d4")
+var LOGO_BG: Color = Color("#2e7160")
+var TEXT_ACCENT: Color = Color("#195b4a")
+var HERO_MUTED: Color = Color("#d5e7d9")
+var CHIP_BG: Color = Color("#286453")
+var CHIP_CAPTION: Color = Color("#cee4d6")
+var HERO_TRACK: Color = Color("#3d7967")
+var HERO_FILL: Color = Color("#deebbd")
+var MACRO_PROTEIN: Color = Color("#d7f4d7")
+var MACRO_FAT: Color = Color("#f2d49d")
+var MACRO_CARBS: Color = Color("#d3e5fa")
+var CHART_GRID: Color = Color("#e2ece5")
+var CHART_AREA: Color = Color("#dcefe4")
+var PATTERN_COLOR: Color = Color("#6da48b")
+var PATTERN_STYLE: String = "leaves"
+var PATTERNS: bool = true
+var DARK_MODE: bool = false
+var current_theme: String = "forest"
+var background_rect: ColorRect
+var wallpaper_pattern: Control
+var header_panel: PanelContainer
+var header_pattern: Control
+var header_title: Label
+var header_subtitle: Label
+var emblem_panel: PanelContainer
+var emblem_label: Label
 
 var store = StoreScript.new()
 var date: String = Time.get_date_string_from_system()
@@ -53,6 +88,7 @@ var toast_label: Label
 var toast_timer: Timer
 
 func _ready() -> void:
+    _apply_palette()
     month_shown = date.substr(0, 7)
     barcode_http = HTTPRequest.new()
     barcode_http.timeout = 15.0
@@ -70,46 +106,57 @@ func _ready() -> void:
             barcode_scanner.connect("barcode_error", Callable(self, "_on_barcode_scan_error"))
         if barcode_scanner.has_signal("barcode_cancelled"):
             barcode_scanner.connect("barcode_cancelled", Callable(self, "_on_barcode_scan_cancelled"))
-    var backdrop = ColorRect.new()
-    backdrop.color = Color("#f0f6f1")
-    backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-    add_child(backdrop)
+    background_rect = ColorRect.new()
+    background_rect.color = BACKGROUND
+    background_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    add_child(background_rect)
+    wallpaper_pattern = PatternScript.new()
+    wallpaper_pattern.name = "WallpaperPattern"
+    wallpaper_pattern.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    wallpaper_pattern.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    wallpaper_pattern.configure(PATTERN_STYLE, PATTERN_COLOR, PATTERNS, 0.11 if DARK_MODE else 0.09)
+    add_child(wallpaper_pattern)
     shell = VBoxContainer.new()
     shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     shell.add_theme_constant_override("separation", 0)
     add_child(shell)
-    var title = PanelContainer.new()
+    header_panel = PanelContainer.new()
+    header_panel.name = "AppHeader"
     var head_style = StyleBoxFlat.new()
-    head_style.bg_color = DEEP
+    head_style.bg_color = HEADER_BG
     head_style.content_margin_left = 21
     head_style.content_margin_right = 19
     head_style.content_margin_top = 14
     head_style.content_margin_bottom = 16
-    title.add_theme_stylebox_override("panel", head_style)
-    shell.add_child(title)
+    header_panel.add_theme_stylebox_override("panel", head_style)
+    shell.add_child(header_panel)
+    header_pattern = PatternScript.new()
+    header_pattern.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    header_pattern.configure(PATTERN_STYLE, PATTERN_COLOR, PATTERNS, 0.10)
+    header_panel.add_child(header_pattern)
     var heading = HBoxContainer.new()
     heading.add_theme_constant_override("separation", 8)
-    title.add_child(heading)
+    header_panel.add_child(heading)
     var brand = VBoxContainer.new()
     brand.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     brand.add_theme_constant_override("separation", 3)
     heading.add_child(brand)
-    _label(brand, "Мой баланс", 25, WHITE)
-    _label(brand, "Забота о себе каждый день", 12, Color("#c8e4d4"))
-    var insignia = PanelContainer.new()
-    insignia.custom_minimum_size = Vector2(46, 46)
+    header_title = _label(brand, "Мой баланс", 25, WHITE)
+    header_subtitle = _label(brand, "Забота о себе каждый день", 12, HEADER_MUTED)
+    emblem_panel = PanelContainer.new()
+    emblem_panel.custom_minimum_size = Vector2(46, 46)
     var logo_style = StyleBoxFlat.new()
-    logo_style.bg_color = Color("#2e7160")
+    logo_style.bg_color = LOGO_BG
     logo_style.set_corner_radius_all(15)
     logo_style.content_margin_left = 11
     logo_style.content_margin_right = 11
     logo_style.content_margin_top = 7
     logo_style.content_margin_bottom = 5
-    insignia.add_theme_stylebox_override("panel", logo_style)
-    heading.add_child(insignia)
-    var symbol = _label(insignia, "✦", 26, SOFT_GOLD)
-    symbol.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    symbol.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    emblem_panel.add_theme_stylebox_override("panel", logo_style)
+    heading.add_child(emblem_panel)
+    emblem_label = _label(emblem_panel, "✦", 26, SOFT_GOLD)
+    emblem_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    emblem_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     scroll = ScrollContainer.new()
     scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
     scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -283,7 +330,9 @@ func _exit_tree() -> void:
     if note_save_timer != null and not note_save_timer.is_stopped():
         store.save()
 
-func _label(parent: Node, s: String, size: int = 16, color: Color = INK) -> Label:
+func _label(parent: Node, s: String, size: int = 16, color: Color = Color("#263a32")) -> Label:
+    if color == Color("#263a32"):
+        color = INK
     var l = Label.new()
     l.text = s
     l.add_theme_font_size_override("font_size", size)
@@ -293,7 +342,7 @@ func _label(parent: Node, s: String, size: int = 16, color: Color = INK) -> Labe
     parent.add_child(l)
     return l
 
-func _nowrap(parent: Node, value: String, font_size: int = 16, color: Color = INK) -> Label:
+func _nowrap(parent: Node, value: String, font_size: int = 16, color: Color = Color("#263a32")) -> Label:
     var l = _label(parent, value, font_size, color)
     l.autowrap_mode = TextServer.AUTOWRAP_OFF
     l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -547,7 +596,9 @@ func _style_progress(bar: ProgressBar) -> void:
     bar.custom_minimum_size.y = 13
     bar.show_percentage = false
 
-func _metric_tile(parent: Node, value: String, caption: String, tone: Color = GREEN) -> void:
+func _metric_tile(parent: Node, value: String, caption: String, tone: Color = Color("#195b4a")) -> void:
+    if tone == Color("#195b4a"):
+        tone = TEXT_ACCENT
     var panel = PanelContainer.new()
     panel.mouse_filter = Control.MOUSE_FILTER_PASS
     panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
