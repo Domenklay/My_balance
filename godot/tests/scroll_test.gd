@@ -77,7 +77,8 @@ func _run() -> void:
         " target=", str(app._swipe_target), " rect=", str(app.scroll.get_global_rect()))
     # Some headless render drivers do not dispatch synthetic touch through
     # Viewport. Call the same production handler explicitly as fallback.
-    if app._swipe_index < 0:
+    var direct_fallback = app._swipe_index < 0
+    if direct_fallback:
         print("TOUCH TRACE: headless synthetic dispatch missing; using direct handler")
         app._input(touch)
     for i in range(12):
@@ -87,7 +88,7 @@ func _run() -> void:
         drag.relative = Vector2(0, -20)
         drag.velocity = Vector2(0, -400)
         Input.parse_input_event(drag)
-        if app._swipe_index >= 0 and app.scroll.scroll_vertical == 0:
+        if direct_fallback:
             app._input(drag)
         await process_frame
     var release = InputEventScreenTouch.new()
