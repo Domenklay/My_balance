@@ -58,7 +58,7 @@ func _run() -> void:
         if hero == null or hero.get_theme_stylebox("panel").bg_color != app.HERO_BG:
             _fail("daily hero missing themed card: " + id)
             return
-        if app.tab_buttons.size() != 5:
+        if app.tab_buttons.size() != 6:
             _fail("theme broke bottom navigation: " + id)
             return
         var navigation = app.shell.get_node("BottomNavigation") as PanelContainer
