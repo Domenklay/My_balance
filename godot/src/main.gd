@@ -1170,7 +1170,7 @@ func _show_settings() -> void:
     _label(backup, "Записи хранятся в памяти приложения без регистрации и интернета. При удалении приложения данные могут исчезнуть.", 13, MUTED)
 
 func _edit_custom_food(food: Dictionary) -> void:
-    var sheet = _mobile_sheet("Редактировать продукт", "На 100 г. Ранее внесённые блюда сохранят свои КБЖУ.", "Сохранить", 650.0)
+    var sheet = _mobile_sheet("Редактировать продукт", "На 100 г. Ранее внесённые блюда сохранят свои КБЖУ.", "Сохранить", 540.0)
     var fields: VBoxContainer = sheet["fields"]
     _label(fields, "Название", 13, MUTED)
     var name = _text_input(fields, "Название", str(food.get("name", "")))
