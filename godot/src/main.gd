@@ -151,6 +151,8 @@ func _input_focus_style() -> StyleBoxFlat:
     return st
 
 func _style_field(control: Control) -> void:
+    # Preserve native editing but let swipe gestures bubble to the scroll view.
+    control.mouse_filter = Control.MOUSE_FILTER_PASS
     control.add_theme_stylebox_override("normal", _input_style())
     control.add_theme_stylebox_override("focus", _input_focus_style())
     control.add_theme_color_override("font_color", INK)
@@ -323,6 +325,7 @@ func _metric_tile(parent: Node, value: String, caption: String, tone: Color = GR
     panel.add_theme_stylebox_override("panel", style)
     parent.add_child(panel)
     var inner = VBoxContainer.new()
+    inner.mouse_filter = Control.MOUSE_FILTER_PASS
     panel.add_child(inner)
     _label(inner, value, 25, tone)
     _label(inner, caption, 12, MUTED)
