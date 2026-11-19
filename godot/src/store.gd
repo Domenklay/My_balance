@@ -139,6 +139,43 @@ func all_foods() -> Array:
             result.append(f)
     return result
 
+func food_by_barcode(code: String) -> Dictionary:
+    for item in data["foods"]:
+        if item is Dictionary and str(item.get("barcode", "")) == code:
+            return item
+    return {}
+
+func save_barcode_food(details: Dictionary) -> String:
+    var barcode = str(details.get("barcode", ""))
+    if barcode.length() < 8 or barcode.length() > 14:
+        return ""
+    for field in ["name", "kcal", "p", "f", "c"]:
+        if not details.has(field):
+            return ""
+    var existing = food_by_barcode(barcode)
+    if not existing.is_empty():
+        return str(existing.get("id", ""))
+    var item = {
+        "id": "barcode_" + barcode,
+        "barcode": barcode,
+        "name": str(details["name"]).substr(0, 160),
+        "kcal": float(details["kcal"]),
+        "p": float(details["p"]),
+        "f": float(details["f"]),
+        "c": float(details["c"]),
+        "source": "Open Food Facts"
+    }
+    if item["name"].is_empty():
+        return ""
+    for field in ["kcal", "p", "f", "c"]:
+        if item[field] < 0.0 or item[field] > 1000.0:
+            return ""
+    data["foods"].append(item)
+    if not save():
+        data["foods"].erase(item)
+        return ""
+    return str(item["id"])
+
 func is_favorite(food_id: String) -> bool:
     return data.get("favorites", []).has(food_id)
 
