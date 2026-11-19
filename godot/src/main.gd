@@ -22,6 +22,7 @@ var body: VBoxContainer
 var scroll: ScrollContainer
 var food_entry_card: VBoxContainer
 var note_save_timer: Timer
+var note_status_label: Label
 var calendar_expanded: bool = false
 var food_form_expanded: bool = false
 var settings_page: String = "main"
@@ -112,7 +113,15 @@ func _ready() -> void:
     note_save_timer = Timer.new()
     note_save_timer.wait_time = 0.6
     note_save_timer.one_shot = true
-    note_save_timer.timeout.connect(func(): store.save())
+    note_save_timer.timeout.connect(func():
+        if store.save():
+            if is_instance_valid(note_status_label):
+                note_status_label.text = "✓  Заметка сохранена"
+        else:
+            if is_instance_valid(note_status_label):
+                note_status_label.text = "Не удалось сохранить заметку"
+            _message("Не удалось сохранить заметку. Сохрани резервную копию дневника.")
+    )
     add_child(note_save_timer)
     _make_tabs()
     _setup_toast()
@@ -699,9 +708,12 @@ func _show_day() -> void:
     _bind_field_focus(notes)
     notes.text_changed.connect(func():
         store.data["notes"][date] = notes.text
+        if is_instance_valid(note_status_label):
+            note_status_label.text = "Сохранение…"
         note_save_timer.start()
     )
     notes_card.add_child(notes)
+    note_status_label = _label(notes_card, "Заметка сохраняется автоматически", 12, MUTED)
 
 func _jump_to_food() -> void:
     # Follow any pending card-rebuild and saved scroll restoration.
@@ -854,7 +866,10 @@ func _mobile_sheet(title: String, description: String, accept_label: String, req
     var message = _label(column, "", 12, ACCENT)
     message.visible = false
     var actions = _row(column)
-    var cancel = _button(actions, "Отмена", func(): veil.queue_free(), true)
+    var cancel = _button(actions, "Отмена", func():
+        _hide_keyboard_and_focus()
+        veil.queue_free()
+    , true)
     cancel.name = "ProductSheetCancel"
     var confirm = _button(actions, accept_label, Callable())
     confirm.name = "ProductSheetConfirm"
