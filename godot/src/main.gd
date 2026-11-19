@@ -23,6 +23,11 @@ var scroll: ScrollContainer
 var food_entry_card: VBoxContainer
 var note_save_timer: Timer
 var calendar_expanded: bool = false
+var food_form_expanded: bool = false
+var settings_page: String = "main"
+var _rendered_view: String = ""
+var _scroll_memory: Dictionary = {}
+var _render_serial: int = 0
 var tab_buttons: Dictionary = {}
 var barcode_http: HTTPRequest
 var catalog_http: HTTPRequest
@@ -397,7 +402,29 @@ func _metric_tile(parent: Node, value: String, caption: String, tone: Color = GR
     _label(inner, value, 25, tone)
     _label(inner, caption, 12, MUTED)
 
-func _render() -> void:
+func _view_key() -> String:
+    return "settings:" + settings_page if tab == "settings" else tab
+
+func _restore_scroll_position(key: String, serial: int, position: int) -> void:
+    if serial != _render_serial or key != _view_key() or not is_instance_valid(scroll):
+        return
+    var bar = scroll.get_v_scroll_bar()
+    var limit = maxi(0, roundi(bar.max_value - bar.page))
+    scroll.scroll_vertical = clampi(position, 0, limit)
+
+func _render(reset_position: bool = false) -> void:
+    # Preserve scroll state whenever cards are rebuilt after saving or edits.
+    # Each tab and the separate own-products screen keep independent offsets.
+    var old_key = _rendered_view
+    if not old_key.is_empty() and is_instance_valid(scroll):
+        _scroll_memory[old_key] = scroll.scroll_vertical
+    var new_key = _view_key()
+    var desired = 0 if reset_position else int(_scroll_memory.get(new_key, 0))
+    if reset_position:
+        _scroll_memory[new_key] = 0
+    _rendered_view = new_key
+    _render_serial += 1
+    var current_serial = _render_serial
     _update_tabs()
     for child in body.get_children():
         body.remove_child(child)
@@ -408,7 +435,9 @@ func _render() -> void:
         "weight": _show_weight()
         "stats": _show_stats()
         "settings": _show_settings()
-    scroll.scroll_vertical = 0
+    scroll.scroll_vertical = desired
+    call_deferred("_restore_scroll_position", new_key, current_serial, desired)
+
 
 func _date_nav(parent: Node) -> void:
     var r = _row(parent)
@@ -507,9 +536,28 @@ func _show_day() -> void:
     _button(shortcuts, "+ Спорт", func(): tab = "activity"; _render(), true)
     _button(shortcuts, "+ Вес", func(): tab = "weight"; _render(), true)
 
-    var add = _card("Быстро добавить еду")
+    var add = _card("Добавить еду")
     food_entry_card = add
-    _food_form(add)
+    if food_form_expanded:
+        _button(add, "▴ Свернуть поиск продуктов", func():
+            food_form_expanded = false
+            _render()
+        , true)
+        _food_form(add)
+    else:
+        _button(add, "▣  Сканировать штрихкод", func():
+            if barcode_scanner != null:
+                barcode_scanner.scanBarcode()
+            else:
+                food_form_expanded = true
+                _render()
+                call_deferred("_jump_to_food")
+        )
+        _button(add, "Найти продукт или ввести штрихкод", func():
+            food_form_expanded = true
+            _render()
+            call_deferred("_jump_to_food")
+        , true)
 
     var foods = _card("Дневник питания")
     diary_food_card = foods
