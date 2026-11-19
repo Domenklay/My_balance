@@ -91,9 +91,12 @@ func import_json(raw: String, persist: bool = true) -> bool:
     if obj["foods"].size() > 10000 or obj["entries"].size() > 50000 or obj["weights"].size() > 5000 or obj["activities"].size() > 50000:
         return false
     for entry in obj["entries"]:
-        if not (entry is Dictionary and entry.get("grams", 0) is float or entry is Dictionary and entry.get("grams", 0) is int):
+        if not (entry is Dictionary):
             return false
-        if float(entry.get("grams", 0)) <= 0.0 or float(entry.get("grams", 0)) > 5000.0:
+        var grams = entry.get("grams", 0)
+        if not (grams is float or grams is int):
+            return false
+        if float(grams) <= 0.0 or float(grams) > 5000.0:
             return false
     data = obj
     if persist:
