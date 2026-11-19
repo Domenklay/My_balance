@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   export-apk:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.GODOT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
@@ -27,17 +27,17 @@ jobs:
       - name: Install required Android SDK components
         run: |
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platform-tools" "build-tools;35.0.1" "platforms;android-35"
+          sdkmanager "platform-tools" "build-tools;35.0.1" "platforms;android-35" "cmdline-tools;latest"
       - name: Install Godot 4.6.3 and matching export templates
         shell: bash
         run: |
           set -euo pipefail
           VERSION="4.6.3-stable"
-          curl -fL --retry 3 -o /tmp/godot.zip "https://github.com/godotengine/godot/releases/download/${VERSION}/Godot_v${VERSION}_linux.x86_64.zip"
+          curl -fL --retry 3 -o /tmp/godot.zip "https://github.com/godotengine/godot-builds/releases/download/${VERSION}/Godot_v${VERSION}_linux.x86_64.zip"
           unzip -q /tmp/godot.zip -d /tmp/godot-bin
           mv "/tmp/godot-bin/Godot_v${VERSION}_linux.x86_64" /tmp/godot
           chmod +x /tmp/godot
-          curl -fL --retry 3 -o /tmp/templates.tpz "https://github.com/godotengine/godot/releases/download/${VERSION}/Godot_v${VERSION}_export_templates.tpz"
+          curl -fL --retry 3 -o /tmp/templates.tpz "https://github.com/godotengine/godot-builds/releases/download/${VERSION}/Godot_v${VERSION}_export_templates.tpz"
           mkdir -p "/home/runner/.local/share/godot/export_templates/4.6.3.stable"
           unzip -q /tmp/templates.tpz -d /tmp/godot-templates
           cp /tmp/godot-templates/templates/* "/home/runner/.local/share/godot/export_templates/4.6.3.stable/"
@@ -67,6 +67,12 @@ jobs:
           mkdir -p godot/build
           /tmp/godot --headless --path godot --export-debug "Android" "$GITHUB_WORKSPACE/godot/build/MyBalance-debug.apk"
           test -s godot/build/MyBalance-debug.apk
+          sha256sum godot/build/MyBalance-debug.apk
+      - name: Check generated APK and report size
+        shell: bash
+        run: |
+          test -s godot/build/MyBalance-debug.apk
+          ls -lh godot/build/MyBalance-debug.apk
           sha256sum godot/build/MyBalance-debug.apk
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
