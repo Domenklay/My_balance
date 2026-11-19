@@ -4,6 +4,8 @@ const DATA_PATH = "user://my_balance.json"
 const BACKUP_PATH = "user://my_balance.previous.json"
 const TEMP_PATH = "user://my_balance.pending.json"
 const OFFLINE_CATALOG_PATH = "res://data/barcode_catalog.json"
+const UPDATE_CATALOG_PATH = "user://barcode_catalog_verified.json"
+const BarcodeScript = preload("res://src/barcode_lookup.gd")
 
 const DEFAULT_PRODUCTS = [
     ["Овсяные хлопья (сухие)",370,13,7,62],
@@ -47,36 +49,74 @@ func _init() -> void:
 
 func _load_bundled_foods() -> void:
     bundled_foods.clear()
-    if not FileAccess.file_exists(OFFLINE_CATALOG_PATH):
-        return
-    var parsed = JSON.parse_string(FileAccess.get_file_as_string(OFFLINE_CATALOG_PATH))
-    if not (parsed is Dictionary) or not (parsed.get("products") is Array):
-        push_warning("Офлайн-каталог штрихкодов повреждён")
-        return
-    for item in parsed["products"]:
+    if FileAccess.file_exists(UPDATE_CATALOG_PATH):
+        var update = FileAccess.get_file_as_string(UPDATE_CATALOG_PATH)
+        if _set_bundled_catalog(update):
+            return
+        push_warning("Обновление каталога повреждено, используется встроенная база.")
+    if FileAccess.file_exists(OFFLINE_CATALOG_PATH):
+        if not _set_bundled_catalog(FileAccess.get_file_as_string(OFFLINE_CATALOG_PATH)):
+            push_warning("Встроенный офлайн-каталог штрихкодов повреждён")
+
+func _set_bundled_catalog(raw: String) -> bool:
+    var parsed = JSON.parse_string(raw)
+    if not (parsed is Dictionary and parsed.get("products") is Array):
+        return false
+    if str(parsed.get("source", "")) != "Open Food Facts":
+        return false
+    var entries: Array = parsed["products"]
+    if entries.size() < 30 or entries.size() > 15000:
+        return false
+    var candidate: Array = []
+    var existing = {}
+    for item in entries:
         if not (item is Dictionary):
-            continue
+            return false
         var code = str(item.get("barcode", ""))
-        if not _is_barcode(code) or not item.has("name"):
-            continue
-        if str(item["name"]).strip_edges().is_empty():
-            continue
+        if not _is_barcode(code) or existing.has(code):
+            return false
+        if str(item.get("name", "")).strip_edges().is_empty():
+            return false
         var valid = true
         for nutrient in ["kcal", "p", "f", "c"]:
-            if not (item.get(nutrient) is int or item.get(nutrient) is float):
+            var amount = item.get(nutrient)
+            if not (amount is int or amount is float):
                 valid = false
                 break
-        if valid:
-            bundled_foods.append(item)
+            if not is_finite(float(amount)) or float(amount) < 0.0 or float(amount) > (1000.0 if nutrient == "kcal" else 100.0):
+                valid = false
+                break
+        if not valid:
+            return false
+        if not BarcodeScript.nutrition_warning(item).is_empty():
+            return false
+        existing[code] = true
+        candidate.append(item)
+    bundled_foods = candidate
+    return true
+
+func update_catalog_json(raw: String) -> bool:
+    if raw.length() > 4000000 or raw.length() < 100:
+        return false
+    var previous: Array = bundled_foods.duplicate(true)
+    if not _set_bundled_catalog(raw):
+        bundled_foods = previous
+        return false
+    var file = FileAccess.open(UPDATE_CATALOG_PATH, FileAccess.WRITE)
+    if file == null:
+        bundled_foods = previous
+        return false
+    file.store_string(raw)
+    file.flush()
+    var result = file.get_error()
+    file.close()
+    if result != OK:
+        bundled_foods = previous
+        return false
+    return true
 
 func _is_barcode(code: String) -> bool:
-    if code.length() < 8 or code.length() > 14:
-        return false
-    for i in range(code.length()):
-        var digit = code.unicode_at(i)
-        if digit < 48 or digit > 57:
-            return false
-    return true
+    return not BarcodeScript.normalize_code(code).is_empty()
 
 func default_data() -> Dictionary:
     return {
@@ -248,6 +288,84 @@ func save_barcode_food(details: Dictionary) -> String:
         data["foods"].erase(item)
         return ""
     return str(item["id"])
+
+func add_food_entry(food: Dictionary, grams: float, meal: String, day: String) -> bool:
+    if food.is_empty() or grams <= 0.0 or grams > 5000.0:
+        return false
+    var entry = {
+        "id": str(Time.get_ticks_usec()) + "_" + str(data["entries"].size()),
+        "date": day,
+        "food": str(food.get("id", "")),
+        "nutrition": {
+            "name": str(food.get("name", "")),
+            "kcal": float(food.get("kcal", 0)),
+            "p": float(food.get("p", 0)),
+            "f": float(food.get("f", 0)),
+            "c": float(food.get("c", 0))
+        },
+        "grams": grams,
+        "meal": meal
+    }
+    data["entries"].append(entry)
+    if not save():
+        data["entries"].erase(entry)
+        return false
+    return true
+
+func update_custom_food(id: String, changes: Dictionary) -> bool:
+    var name = str(changes.get("name", "")).strip_edges()
+    if name.is_empty() or name.length() > 160:
+        return false
+    var code = str(changes.get("barcode", "")).strip_edges()
+    if not code.is_empty() and not _is_barcode(code):
+        return false
+    for nutrient in ["kcal", "p", "f", "c"]:
+        var amount = changes.get(nutrient)
+        if not (amount is float or amount is int) or not is_finite(float(amount)):
+            return false
+        if float(amount) < 0.0 or float(amount) > (1000.0 if nutrient == "kcal" else 100.0):
+            return false
+    for food in data["foods"]:
+        if not (food is Dictionary):
+            continue
+        if str(food.get("id", "")) == id:
+            continue
+        if not code.is_empty() and str(food.get("barcode", "")) == code:
+            return false
+    for food in data["foods"]:
+        if not (food is Dictionary) or str(food.get("id", "")) != id:
+            continue
+        var old = food.duplicate(true)
+        for key in ["name", "kcal", "p", "f", "c"]:
+            food[key] = changes[key]
+        if code.is_empty():
+            food.erase("barcode")
+        else:
+            food["barcode"] = code
+        if save():
+            return true
+        food.clear()
+        food.merge(old, true)
+        return false
+    return false
+
+func delete_custom_food(id: String) -> bool:
+    var found: Dictionary = {}
+    for item in data["foods"]:
+        if item is Dictionary and str(item.get("id", "")) == id:
+            found = item
+            break
+    if found.is_empty():
+        return false
+    var original = data["foods"].duplicate(true)
+    var previous_favorites = data["favorites"].duplicate()
+    data["foods"].erase(found)
+    data["favorites"].erase(id)
+    if save():
+        return true
+    data["foods"] = original
+    data["favorites"] = previous_favorites
+    return false
 
 func is_favorite(food_id: String) -> bool:
     return data.get("favorites", []).has(food_id)
