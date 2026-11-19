@@ -2,6 +2,7 @@ extends Control
 
 const StoreScript = preload("res://src/store.gd")
 const GraphScript = preload("res://src/weight_graph.gd")
+const RingScript = preload("res://src/calorie_ring.gd")
 const BarcodeScript = preload("res://src/barcode_lookup.gd")
 const GREEN = Color("#195b4a")
 const DEEP = Color("#123f36")
@@ -646,7 +647,7 @@ func _shift_month(delta: int) -> void:
     _render()
 
 func _show_day() -> void:
-    var overview = _card("Мой день")
+    var overview = _card("Обзор дня")
     _date_nav(overview)
     _button(overview, "▾  Скрыть календарь" if calendar_expanded else "▸  Открыть календарь", func():
         calendar_expanded = not calendar_expanded
@@ -654,20 +655,48 @@ func _show_day() -> void:
     , true)
     if calendar_expanded:
         _calendar(overview)
+
     var total = store.day_calories(date)
     var target = float(store.data["settings"]["kcal"])
-    var stats = _row(overview)
-    _metric_tile(stats, str(roundi(total)), "Съедено, ккал")
-    _metric_tile(stats, str(roundi(maxf(0.0, target - total))), "Осталось, ккал", ACCENT)
-    var bar = ProgressBar.new()
-    bar.min_value = 0.0
-    bar.max_value = maxf(1.0, target)
-    bar.value = minf(total, target)
-    _style_progress(bar)
-    overview.add_child(bar)
-    if total > target:
-        _label(overview, "Сверх ориентира: " + str(roundi(total - target)) + " ккал", 14, MUTED)
-    _label(overview, "Б: " + str(roundi(store.day_macro(date, "p"))) + " г     Ж: " + str(roundi(store.day_macro(date, "f"))) + " г     У: " + str(roundi(store.day_macro(date, "c"))) + " г", 14, MUTED)
+    var hero = _card("Энергия дня", "hero")
+    _label(hero, "Твой ежедневный ориентир", 13, Color("#bddbcc"))
+    var hero_content = _row(hero)
+    var numbers = VBoxContainer.new()
+    numbers.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    numbers.add_theme_constant_override("separation", 2)
+    hero_content.add_child(numbers)
+    _label(numbers, str(roundi(total)), 39, WHITE)
+    _label(numbers, "из " + str(roundi(target)) + " ккал", 15, Color("#d5e7d9"))
+    var ring = RingScript.new()
+    ring.name = "DailyCalorieRing"
+    ring.custom_minimum_size = Vector2(112, 112)
+    ring.set_value(total, target)
+    hero_content.add_child(ring)
+    var track = ProgressBar.new()
+    track.min_value = 0
+    track.max_value = maxf(1.0, target)
+    track.value = minf(total, target)
+    _style_progress(track)
+    var track_bg = StyleBoxFlat.new()
+    track_bg.bg_color = Color("#3d7967")
+    track_bg.set_corner_radius_all(8)
+    var track_fg = StyleBoxFlat.new()
+    track_fg.bg_color = Color("#deebbd")
+    track_fg.set_corner_radius_all(8)
+    track.add_theme_stylebox_override("background", track_bg)
+    track.add_theme_stylebox_override("fill", track_fg)
+    hero.add_child(track)
+    var remaining = target - total
+    if remaining >= 0.0:
+        _label(hero, "До дневного ориентира — " + str(roundi(remaining)) + " ккал", 13, Color("#d2e9d8"))
+    else:
+        _label(hero, "Сверх ориентира — " + str(roundi(-remaining)) + " ккал", 13, SOFT_GOLD)
+    var macros = _row(hero)
+    _macro_chip(macros, "БЕЛКИ", store.day_macro(date, "p"), Color("#d7f4d7"))
+    _macro_chip(macros, "ЖИРЫ", store.day_macro(date, "f"), Color("#f2d49d"))
+    _macro_chip(macros, "УГЛЕВОДЫ", store.day_macro(date, "c"), Color("#d3e5fa"))
+
+    var activity = _card("Движение сегодня")
     var walking = 0
     var exercise = 0
     for a in store.day_activities(date):
@@ -675,15 +704,15 @@ func _show_day() -> void:
             walking += int(a.get("minutes", 0))
         else:
             exercise += int(a.get("minutes", 0))
-    var activity_stats = _row(overview)
+    var activity_stats = _row(activity)
     _metric_tile(activity_stats, str(walking) + " мин", "Прогулки")
     _metric_tile(activity_stats, str(exercise) + " мин", "Тренировки")
-    var shortcuts = _row(overview)
+    var shortcuts = _row(activity)
     _button(shortcuts, "+ Еда", func(): _jump_to_food())
     _button(shortcuts, "+ Спорт", func(): _navigate_to_tab("activity"), true)
     _button(shortcuts, "+ Вес", func(): _navigate_to_tab("weight"), true)
 
-    var add = _card("Добавить еду")
+    var add = _card("Добавить еду", "tint")
     food_entry_card = add
     if food_form_expanded:
         _button(add, "▴ Свернуть поиск продуктов", func():
