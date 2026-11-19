@@ -32,6 +32,12 @@ var barcode_input: LineEdit
 var barcode_message: Label
 var pending_barcode: String = ""
 var selected_barcode_food: String = ""
+var _swipe_target: ScrollContainer = null
+var _swipe_index: int = -1
+var _swipe_start: Vector2 = Vector2.ZERO
+var _swipe_last: Vector2 = Vector2.ZERO
+var _swipe_dragging: bool = false
+var _swipe_ignore_button_release: bool = false
 
 func _ready() -> void:
     month_shown = date.substr(0, 7)
@@ -102,6 +108,64 @@ func _ready() -> void:
     add_child(note_save_timer)
     _make_tabs()
     _render()
+
+func _input(event: InputEvent) -> void:
+    # Android can lose ScrollContainer touch drags when a nested control
+    # consumes them (buttons, product selectors, text fields). Capture only
+    # genuine vertical swipes, not taps, and scroll the active visible panel.
+    if event is InputEventScreenTouch:
+        var touch: InputEventScreenTouch = event
+        if touch.pressed:
+            if _swipe_index >= 0:
+                return
+            _swipe_target = _scroll_target_at(touch.position)
+            _swipe_index = touch.index if _swipe_target != null else -1
+            _swipe_start = touch.position
+            _swipe_last = touch.position
+            _swipe_dragging = false
+        elif touch.index == _swipe_index:
+            if _swipe_dragging:
+                _swipe_ignore_button_release = true
+                get_viewport().set_input_as_handled()
+                call_deferred("_end_swipe_release_guard")
+            _swipe_index = -1
+            _swipe_target = null
+            _swipe_dragging = false
+        return
+
+    if event is InputEventScreenDrag:
+        var drag: InputEventScreenDrag = event
+        if drag.index != _swipe_index or not is_instance_valid(_swipe_target):
+            return
+        var overall = drag.position - _swipe_start
+        if not _swipe_dragging:
+            if absf(overall.y) <= 12.0 or absf(overall.y) < absf(overall.x) * 1.2:
+                _swipe_last = drag.position
+                return
+            _swipe_dragging = true
+        var delta_y = drag.position.y - _swipe_last.y
+        _swipe_last = drag.position
+        var max_scroll = _swipe_target.get_v_scroll_bar().max_value - _swipe_target.get_v_scroll_bar().page
+        _swipe_target.scroll_vertical = clampi(
+            _swipe_target.scroll_vertical - roundi(delta_y),
+            0, maxi(0, roundi(max_scroll)))
+        get_viewport().set_input_as_handled()
+
+func _end_swipe_release_guard() -> void:
+    _swipe_ignore_button_release = false
+
+func _scroll_target_at(point: Vector2) -> ScrollContainer:
+    var product_sheet = get_node_or_null("ProductSheet")
+    if product_sheet != null:
+        var containers = product_sheet.find_children("*", "ScrollContainer", true, false)
+        for candidate in containers:
+            var popup_scroll: ScrollContainer = candidate
+            if popup_scroll.get_global_rect().has_point(point):
+                return popup_scroll
+        return null
+    if not is_instance_valid(scroll) or not scroll.get_global_rect().has_point(point):
+        return null
+    return scroll
 
 func _exit_tree() -> void:
     if note_save_timer != null and not note_save_timer.is_stopped():
@@ -187,7 +251,10 @@ func _button(parent: Node, s: String, call: Callable, secondary: bool = false) -
     b.add_theme_color_override("font_pressed_color", GREEN if secondary else WHITE)
     b.add_theme_color_override("font_disabled_color", MUTED)
     if call.is_valid():
-        b.pressed.connect(call)
+        b.pressed.connect(func():
+            if not _swipe_dragging and not _swipe_ignore_button_release:
+                call.call()
+        )
     parent.add_child(b)
     return b
 
