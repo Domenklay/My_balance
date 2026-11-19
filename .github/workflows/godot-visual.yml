@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - "godot/tests/visual_snapshot.gd"
+      - "godot/src/**"
+      - "godot/icon.svg"
+      - "godot/project.godot"
       - ".github/workflows/godot-visual.yml"
   workflow_dispatch:
 permissions:
