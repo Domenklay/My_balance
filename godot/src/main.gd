@@ -8,7 +8,10 @@ const INK = Color("#233c34")
 const MUTED = Color("#71877a")
 const PALE = Color("#f1f7f3")
 const WHITE = Color("#ffffff")
-const ACCENT = Color("#e7a948")
+const ACCENT = Color("#b57a27")
+const INPUT_BG = Color("#f7faf7")
+const BORDER = Color("#d3e2d7")
+const SECONDARY = Color("#e3f0e8")
 
 var store = StoreScript.new()
 var date: String = Time.get_date_string_from_system()
@@ -59,7 +62,11 @@ func _ready() -> void:
     head_style.content_margin_bottom = 14
     title.add_theme_stylebox_override("panel", head_style)
     shell.add_child(title)
-    _label(title, "🌿 Мой баланс   •   личный дневник", 21, WHITE)
+    var heading = VBoxContainer.new()
+    heading.add_theme_constant_override("separation", 1)
+    title.add_child(heading)
+    _label(heading, "Мой баланс", 24, WHITE)
+    _label(heading, "Питание  •  движение  •  прогресс", 12, Color("#d9efe2"))
     scroll = ScrollContainer.new()
     scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
     scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -67,7 +74,14 @@ func _ready() -> void:
     body = VBoxContainer.new()
     body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     body.add_theme_constant_override("separation", 12)
-    scroll.add_child(body)
+    var margins = MarginContainer.new()
+    margins.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    margins.add_theme_constant_override("margin_left", 12)
+    margins.add_theme_constant_override("margin_right", 12)
+    margins.add_theme_constant_override("margin_top", 12)
+    margins.add_theme_constant_override("margin_bottom", 16)
+    scroll.add_child(margins)
+    margins.add_child(body)
     note_save_timer = Timer.new()
     note_save_timer.wait_time = 0.6
     note_save_timer.one_shot = true
@@ -89,30 +103,70 @@ func _label(parent: Node, s: String, size: int = 16, color: Color = INK) -> Labe
     parent.add_child(l)
     return l
 
+func _nowrap(parent: Node, value: String, font_size: int = 16, color: Color = INK) -> Label:
+    var l = _label(parent, value, font_size, color)
+    l.autowrap_mode = TextServer.AUTOWRAP_OFF
+    l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+    return l
+
 func _row(parent: Node) -> HBoxContainer:
     var r = HBoxContainer.new()
     r.add_theme_constant_override("separation", 8)
     parent.add_child(r)
     return r
 
+func _input_style() -> StyleBoxFlat:
+    var st = StyleBoxFlat.new()
+    st.bg_color = INPUT_BG
+    st.border_color = BORDER
+    st.set_border_width_all(1)
+    st.set_corner_radius_all(11)
+    st.content_margin_left = 12
+    st.content_margin_right = 12
+    st.content_margin_top = 11
+    st.content_margin_bottom = 11
+    return st
+
+func _input_focus_style() -> StyleBoxFlat:
+    var st = StyleBoxFlat.new()
+    st.bg_color = Color(0, 0, 0, 0)
+    st.border_color = GREEN
+    st.set_border_width_all(2)
+    st.set_corner_radius_all(11)
+    return st
+
+func _style_field(control: Control) -> void:
+    control.add_theme_stylebox_override("normal", _input_style())
+    control.add_theme_stylebox_override("focus", _input_focus_style())
+    control.add_theme_color_override("font_color", INK)
+    control.add_theme_color_override("font_placeholder_color", MUTED)
+    control.add_theme_color_override("font_selected_color", WHITE)
+    control.add_theme_color_override("selection_color", GREEN)
+
 func _button(parent: Node, s: String, call: Callable, secondary: bool = false) -> Button:
     var b = Button.new()
     b.text = s
-    b.custom_minimum_size = Vector2(0, 42)
-    b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    var st = StyleBoxFlat.new()
-    st.bg_color = Color("#dbece1") if secondary else GREEN
-    st.set_corner_radius_all(11)
-    st.content_margin_left = 8
-    st.content_margin_right = 8
-    st.content_margin_top = 5
-    st.content_margin_bottom = 5
-    b.add_theme_stylebox_override("normal", st)
-    b.add_theme_stylebox_override("hover", st)
-    b.add_theme_stylebox_override("pressed", st)
+    var compact = s in ["◀", "▶", "‹", "›", "✎", "×", "+"]
+    b.custom_minimum_size = Vector2(46 if compact else 0, 45)
+    b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER if compact else Control.SIZE_EXPAND_FILL
+    b.add_theme_font_size_override("font_size", 14)
+    for mode in ["normal", "hover", "pressed"]:
+        var st = StyleBoxFlat.new()
+        st.bg_color = (SECONDARY if secondary else GREEN)
+        if mode == "hover":
+            st.bg_color = Color("#cfebd8") if secondary else Color("#195a46")
+        elif mode == "pressed":
+            st.bg_color = Color("#c2dfcc") if secondary else Color("#164d3c")
+        st.set_corner_radius_all(11)
+        st.content_margin_left = 10
+        st.content_margin_right = 10
+        st.content_margin_top = 7
+        st.content_margin_bottom = 7
+        b.add_theme_stylebox_override(mode, st)
     b.add_theme_color_override("font_color", GREEN if secondary else WHITE)
     b.add_theme_color_override("font_hover_color", GREEN if secondary else WHITE)
     b.add_theme_color_override("font_pressed_color", GREEN if secondary else WHITE)
+    b.add_theme_color_override("font_disabled_color", MUTED)
     if call.is_valid():
         b.pressed.connect(call)
     parent.add_child(b)
@@ -126,10 +180,10 @@ func _card(title: String) -> VBoxContainer:
     style.set_corner_radius_all(18)
     style.shadow_color = Color(0.12, 0.22, 0.16, 0.08)
     style.shadow_size = 3
-    style.content_margin_left = 14
-    style.content_margin_right = 14
-    style.content_margin_top = 14
-    style.content_margin_bottom = 14
+    style.content_margin_left = 16
+    style.content_margin_right = 16
+    style.content_margin_top = 16
+    style.content_margin_bottom = 16
     panel.add_theme_stylebox_override("panel", style)
     body.add_child(panel)
     var content = VBoxContainer.new()
@@ -146,8 +200,10 @@ func _number(parent: Node, value: float, minimum: float, maximum: float, step: f
     spin.max_value = maximum
     spin.step = step
     spin.value = value
-    spin.custom_minimum_size.y = 45
+    spin.custom_minimum_size = Vector2(126, 48)
     spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    spin.add_theme_font_size_override("font_size", 16)
+    _style_field(spin.get_line_edit())
     parent.add_child(spin)
     return spin
 
@@ -155,15 +211,24 @@ func _text_input(parent: Node, placeholder: String, text: String = "") -> LineEd
     var field = LineEdit.new()
     field.placeholder_text = placeholder
     field.text = text
-    field.custom_minimum_size.y = 45
+    field.custom_minimum_size = Vector2(100, 48)
     field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    field.add_theme_font_size_override("font_size", 15)
+    _style_field(field)
     parent.add_child(field)
     return field
 
 func _choice(parent: Node, options: Array) -> OptionButton:
     var picker = OptionButton.new()
-    picker.custom_minimum_size.y = 46
+    picker.custom_minimum_size = Vector2(105, 48)
     picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    picker.add_theme_font_size_override("font_size", 15)
+    for mode in ["normal", "hover", "pressed"]:
+        picker.add_theme_stylebox_override(mode, _input_style())
+    picker.add_theme_stylebox_override("focus", _input_focus_style())
+    picker.add_theme_color_override("font_color", INK)
+    picker.add_theme_color_override("font_hover_color", INK)
+    picker.add_theme_color_override("font_pressed_color", INK)
     for name in options:
         picker.add_item(str(name))
     parent.add_child(picker)
@@ -239,13 +304,20 @@ func _render() -> void:
 func _date_nav(parent: Node) -> void:
     var r = _row(parent)
     _button(r, "◀", func(): date = store.change_date(date, -1); month_shown = date.substr(0, 7); _render(), true)
-    _label(r, date, 17)
+    var day_label = _nowrap(r, date.substr(8, 2) + "." + date.substr(5, 2) + "." + date.substr(0, 4), 18, GREEN)
+    day_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    day_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    day_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    day_label.custom_minimum_size.y = 45
     _button(r, "▶", func(): date = store.change_date(date, 1); month_shown = date.substr(0, 7); _render(), true)
 
 func _calendar(parent: Node) -> void:
     var top = _row(parent)
     _button(top, "‹", func(): _shift_month(-1), true)
-    _label(top, month_shown, 16)
+    var month_label = _nowrap(top, month_shown, 16, GREEN)
+    month_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    month_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    month_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     _button(top, "›", func(): _shift_month(1), true)
     var grid = GridContainer.new()
     grid.columns = 7
@@ -371,7 +443,8 @@ func _show_day() -> void:
 
     var notes_card = _card("Заметка о дне")
     var notes = TextEdit.new()
-    notes.custom_minimum_size.y = 92
+    notes.custom_minimum_size.y = 110
+    _style_field(notes)
     notes.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
     notes.placeholder_text = "Как прошёл день? Голод, настроение, самочувствие…"
     notes.text = str(store.data["notes"].get(date, ""))
@@ -507,9 +580,10 @@ func _food_form(parent: VBoxContainer) -> void:
     favorite_only.text = "Только избранные"
     parent.add_child(favorite_only)
     var picker = _choice(parent, [])
+    _label(parent, "Вес порции, г", 14, MUTED)
     var values = _row(parent)
-    _label(values, "Граммы", 13, MUTED)
     var grams = _number(values, 100, 1, 5000)
+    grams.custom_minimum_size.x = 160
     var meal = _choice(parent, ["Завтрак", "Обед", "Перекус", "Ужин"])
     var preview = _label(parent, "", 14, MUTED)
     var controls = _row(parent)
@@ -753,8 +827,8 @@ func _show_stats() -> void:
     _label(card, "Калории по дням", 16)
     for d in days:
         var line = _row(card)
-        var l = _label(line, d.substr(5, 5), 13)
-        l.custom_minimum_size.x = 50
+        var l = _nowrap(line, d.substr(8, 2) + "." + d.substr(5, 2), 13)
+        l.custom_minimum_size.x = 54
         var bar = ProgressBar.new()
         bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         bar.min_value = 0
@@ -762,7 +836,9 @@ func _show_stats() -> void:
         bar.value = store.day_calories(d)
         bar.show_percentage = false
         line.add_child(bar)
-        _label(line, str(roundi(store.day_calories(d))) if not store.day_entries(d).is_empty() else "—", 13)
+        var daily_value = _nowrap(line, str(roundi(store.day_calories(d))) if not store.day_entries(d).is_empty() else "—", 13)
+        daily_value.custom_minimum_size.x = 35
+        daily_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
     _label(card, "Пустые дни не входят в среднее. Оценивай тенденцию, а не один день.", 13, MUTED)
     var chart = _card("Вес")
     var g = GraphScript.new()
