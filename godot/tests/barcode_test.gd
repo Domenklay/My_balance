@@ -14,7 +14,7 @@ func _run() -> void:
     if Lookup.normalize_code("3017624010701") != "3017624010701":
         _fail("valid EAN-13 not accepted")
         return
-    for invalid in ["", "123", "123456789012345", "1234567A90123", " 123 456 78 "]:
+    for invalid in ["", "123", "123456789012345", "1234567A90123", " 123 456 78 ", "3017624010702", "123456789", "4600494693336"]:
         if not Lookup.normalize_code(invalid).is_empty():
             _fail("invalid barcode accepted: " + invalid)
             return
@@ -102,6 +102,52 @@ func _run() -> void:
     if bundled.link_barcode_to_food("my_favorite", "12invalid"):
         _fail("invalid barcode was linked")
         return
+    var good = bundled.bundled_foods[0]
+    if BarcodeScript.nutrition_warning(good) != "":
+        _fail("curated catalog contains an implausible food")
+        return
+    var known_bad = {"kcal": 0, "p": 20, "f": 0, "c": 0}
+    if BarcodeScript.nutrition_warning(known_bad).is_empty():
+        _fail("zero-calorie protein anomaly not detected")
+        return
+    var report = FileAccess.get_file_as_string("res://data/barcode_catalog.json")
+    var audit: Variant = JSON.parse_string(report)
+    if not (audit is Dictionary and audit.get("products") is Array):
+        _fail("bundled JSON is not valid")
+        return
+    for entry in audit["products"]:
+        if not BarcodeScript.nutrition_warning(entry).is_empty():
+            _fail("implausible entry remains in bundled catalog: " + str(entry.get("barcode", "")))
+            return
+    if not bundled.update_catalog_json(report) or bundled.bundled_foods.size() < 100:
+        _fail("manual catalog refresh rejected valid data")
+        return
+    if bundled.update_catalog_json('{"source":"Open Food Facts","products":[{"barcode":"123"}]}'):
+        _fail("malformed update replaced valid catalog")
+        return
+    if bundled.bundled_foods.size() < 100:
+        _fail("bad catalog update erased the last known-good catalog")
+        return
+    var saved_id = str(bundled.data["foods"][0]["id"])
+    var changed = {"name": "Йогурт с упаковки", "barcode": actual_code, "kcal": 150.0,
+        "p": 5.5, "f": 4.5, "c": 20.0}
+    if not bundled.update_custom_food(saved_id, changed):
+        _fail("cannot edit custom food")
+        return
+    if str(bundled.food_by_barcode(actual_code).get("name", "")) != "Йогурт с упаковки":
+        _fail("edited custom food is not searchable")
+        return
+    if not bundled.add_food_entry(bundled.food_by_barcode(actual_code), 180.0, "Обед", "2026-11-19"):
+        _fail("cannot save an exact barcode-based portion")
+        return
+    var entries_before = bundled.day_entries("2026-11-19").size()
+    if not bundled.delete_custom_food(saved_id):
+        _fail("cannot delete own product")
+        return
+    if bundled.day_entries("2026-11-19").size() != entries_before:
+        _fail("removing catalog product changed historical diary")
+        return
+    print("PASS: GTIN checksum, catalog validation, safe refresh, own-product edits and exact portion") 
     print("PASS: bundled catalog, manual barcode linking, local override and persistence")
     print("PASS: barcode validation, Open Food Facts parser, macro completeness, local cache, JSON migration")
     quit(0)
