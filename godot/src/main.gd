@@ -2,6 +2,7 @@ extends Control
 
 const StoreScript = preload("res://src/store.gd")
 const GraphScript = preload("res://src/weight_graph.gd")
+const BarcodeScript = preload("res://src/barcode_lookup.gd")
 const GREEN = Color("#226b55")
 const INK = Color("#233c34")
 const MUTED = Color("#71877a")
@@ -20,9 +21,27 @@ var food_entry_card: VBoxContainer
 var note_save_timer: Timer
 var calendar_expanded: bool = false
 var tab_buttons: Dictionary = {}
+var barcode_http: HTTPRequest
+var barcode_scanner: Object = null
+var barcode_input: LineEdit
+var barcode_message: Label
+var pending_barcode: String = ""
+var selected_barcode_food: String = ""
 
 func _ready() -> void:
     month_shown = date.substr(0, 7)
+    barcode_http = HTTPRequest.new()
+    barcode_http.timeout = 15.0
+    add_child(barcode_http)
+    barcode_http.request_completed.connect(_on_barcode_http_completed)
+    if OS.has_feature("android") and Engine.has_singleton("MyBalanceBarcode"):
+        barcode_scanner = Engine.get_singleton("MyBalanceBarcode")
+        if barcode_scanner.has_signal("barcode_scanned"):
+            barcode_scanner.connect("barcode_scanned", Callable(self, "_on_barcode_scanned"))
+        if barcode_scanner.has_signal("barcode_error"):
+            barcode_scanner.connect("barcode_error", Callable(self, "_on_barcode_scan_error"))
+        if barcode_scanner.has_signal("barcode_cancelled"):
+            barcode_scanner.connect("barcode_cancelled", Callable(self, "_on_barcode_scan_cancelled"))
     var backdrop = ColorRect.new()
     backdrop.color = Color("#edf4ef")
     backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -366,9 +385,123 @@ func _jump_to_food() -> void:
     if is_instance_valid(food_entry_card):
         scroll.ensure_control_visible(food_entry_card)
 
+func _barcode_message(value: String) -> void:
+    if is_instance_valid(barcode_message):
+        barcode_message.text = value
+
+func _on_barcode_scanned(code: String) -> void:
+    if is_instance_valid(barcode_input):
+        barcode_input.text = code
+    _lookup_barcode(code)
+
+func _on_barcode_scan_error(reason: String) -> void:
+    _barcode_message("Не удалось открыть сканер: " + reason + ". Введи код вручную.")
+
+func _on_barcode_scan_cancelled() -> void:
+    _barcode_message("Сканирование отменено. Можно ввести цифры под штрихкодом.")
+
+func _lookup_barcode(raw: String) -> void:
+    var code = BarcodeScript.normalize_code(raw)
+    if code.is_empty():
+        _barcode_message("Укажи 8–14 цифр штрихкода без пробелов.")
+        return
+    if barcode_http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+        _barcode_message("Дождись завершения предыдущего поиска.")
+        return
+    var cached = store.food_by_barcode(code)
+    if not cached.is_empty():
+        selected_barcode_food = str(cached.get("name", ""))
+        _barcode_message("Найден в памяти телефона: " + selected_barcode_food)
+        _render()
+        return
+    pending_barcode = code
+    _barcode_message("Поиск товара " + code + " в Open Food Facts…")
+    var headers = PackedStringArray([
+        "User-Agent: MyBalance/0.5.4 (+https://github.com/Domenklay/My_balance)",
+        "Accept: application/json"
+    ])
+    var error = barcode_http.request(BarcodeScript.product_url(code), headers, HTTPClient.METHOD_GET)
+    if error != OK:
+        pending_barcode = ""
+        _barcode_message("Не удалось начать поиск. Проверь подключение к интернету.")
+
+func _on_barcode_http_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+    if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
+        _barcode_message("Сервис временно недоступен. Попробуй позже или введи продукт вручную.")
+        pending_barcode = ""
+        return
+    if body.size() > 1000000:
+        _barcode_message("Ответ сервиса слишком большой.")
+        pending_barcode = ""
+        return
+    var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+    var outcome: Dictionary = BarcodeScript.parse_product(parsed, pending_barcode)
+    pending_barcode = ""
+    if outcome.has("error"):
+        _barcode_message(str(outcome["error"]))
+        return
+    _confirm_barcode_product(outcome)
+
+func _confirm_barcode_product(product: Dictionary) -> void:
+    var dialog = ConfirmationDialog.new()
+    dialog.title = "Товар найден по штрихкоду"
+    dialog.dialog_text = "Open Food Facts • значения на 100 г / мл.\nСверь КБЖУ с упаковкой перед сохранением."
+    add_child(dialog)
+    var fields = VBoxContainer.new()
+    dialog.add_child(fields)
+    var name = _text_input(fields, "Название продукта", str(product.get("name", "")))
+    _label(fields, "Калории • на 100 г", 13, MUTED)
+    var kcal = _number(fields, float(product.get("kcal", 0)), 0, 1000, 0.1)
+    _label(fields, "Белки • Жиры • Углеводы на 100 г", 13, MUTED)
+    var nutrition_row = _row(fields)
+    var protein = _number(nutrition_row, float(product.get("p", 0)), 0, 100, 0.1)
+    var fat = _number(nutrition_row, float(product.get("f", 0)), 0, 100, 0.1)
+    var carbs = _number(nutrition_row, float(product.get("c", 0)), 0, 100, 0.1)
+    dialog.confirmed.connect(func():
+        var record = product.duplicate()
+        record["name"] = name.text.strip_edges()
+        record["kcal"] = kcal.value
+        record["p"] = protein.value
+        record["f"] = fat.value
+        record["c"] = carbs.value
+        var id = store.save_barcode_food(record)
+        if id.is_empty():
+            _message("Не удалось сохранить товар. Проверь место на устройстве.")
+        else:
+            selected_barcode_food = record["name"]
+            _render()
+        dialog.queue_free()
+    )
+    dialog.canceled.connect(func(): dialog.queue_free())
+    dialog.popup_centered(Vector2i(395, 470))
+
 func _food_form(parent: VBoxContainer) -> void:
+    var barcode_panel = VBoxContainer.new()
+    barcode_panel.add_theme_constant_override("separation", 6)
+    parent.add_child(barcode_panel)
+    _label(barcode_panel, "По штрихкоду товара", 16, GREEN)
+    _label(barcode_panel, "Сканер распознаёт код камерой. Для нового товара нужен интернет.", 12, MUTED)
+    var barcode_controls = _row(barcode_panel)
+    barcode_input = _text_input(barcode_controls, "EAN / UPC — 8–14 цифр")
+    barcode_input.max_length = 14
+    barcode_input.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+    _button(barcode_controls, "Найти", func(): _lookup_barcode(barcode_input.text))
+    var camera_button = _button(barcode_panel, "▣ Сканировать камерой", func():
+        if barcode_scanner != null:
+            _barcode_message("Открываю сканер штрихкодов…")
+            barcode_scanner.scanBarcode()
+        else:
+            _barcode_message("Камера недоступна на этом устройстве. Введи цифры под штрихкодом.")
+    )
+    camera_button.disabled = barcode_scanner == null
+    barcode_message = _label(barcode_panel, "Если товар не найден, его можно добавить вручную.", 12, MUTED)
+    parent.add_child(HSeparator.new())
+    _label(parent, "Или найди в сохранённых продуктах", 16, GREEN)
     var filtered: Array = []
     var search = _text_input(parent, "Поиск продукта по названию")
+    if not selected_barcode_food.is_empty():
+        search.text = selected_barcode_food
+        selected_barcode_food = ""
     search.clear_button_enabled = true
     var favorite_only = CheckButton.new()
     favorite_only.text = "Только избранные"
