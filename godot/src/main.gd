@@ -315,9 +315,9 @@ func _show_activity() -> void:
     var distance = _number(card, 0, 0, 100, 0.1)
     var detail = _text_input(card, "Упражнения, подходы и вес гантелей")
     _button(card, "Сохранить активность", func():
-        var type = ["walk", "strength", "other"][kind.selected]
+        var activity_kind = ["walk", "strength", "other"][kind.selected]
         store.data["activities"].append({
-            "id": str(Time.get_ticks_usec()), "date": date, "type": type,
+            "id": str(Time.get_ticks_usec()), "date": date, "type": activity_kind,
             "minutes": minutes.value, "distance": distance.value, "detail": detail.text
         })
         store.save()
@@ -453,7 +453,7 @@ func _show_settings() -> void:
             _render()
         else:
             _message("Неверная резервная копия JSON.")
-    , true)
+    )
     _label(backup, "Записи хранятся в памяти приложения без регистрации и интернета. При удалении приложения данные могут исчезнуть.", 13, MUTED)
 
 func _message(s: String) -> void:
