@@ -92,6 +92,8 @@ jobs:
         run: /tmp/godot --headless --path godot --script res://tests/scroll_test.gd
       - name: Test themes, dark mode, ornaments and saved settings
         run: /tmp/godot --headless --path godot --script res://tests/theme_test.gd
+      - name: Test recipe calculations, history and personal profile
+        run: /tmp/godot --headless --path godot --script res://tests/recipe_profile_test.gd
       - name: Test food search, favorites and quick-add UI
         run: /tmp/godot --headless --path godot --script res://tests/ui_test.gd
       - name: Smoke test app startup
