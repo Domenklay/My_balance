@@ -227,6 +227,9 @@ func _text_input(parent: Node, placeholder: String, text: String = "") -> LineEd
 
 func _choice(parent: Node, options: Array) -> OptionButton:
     var picker = OptionButton.new()
+    # Large food catalog entries must never dictate the width of the phone UI.
+    picker.fit_to_longest_item = false
+    picker.clip_text = true
     picker.custom_minimum_size = Vector2(105, 48)
     picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     picker.add_theme_font_size_override("font_size", 15)
