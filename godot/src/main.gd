@@ -944,15 +944,10 @@ func _food_form(parent: VBoxContainer) -> void:
             _message("Выбери продукт. При необходимости отключи фильтр избранного.")
             return
         var f: Dictionary = filtered[picker.selected]
-        var snap = {"name": f["name"], "kcal": f["kcal"], "p": f["p"], "f": f["f"], "c": f["c"]}
-        store.data["entries"].append({
-            "id": str(Time.get_ticks_usec()) + "_" + str(store.data["entries"].size()),
-            "date": date, "food": f["id"], "nutrition": snap,
-            "grams": grams.value, "meal": meal.get_item_text(meal.selected)
-        })
-        if not store.save():
-            _message("Ошибка сохранения. Проверь свободное место на устройстве.")
-        _render()
+        if store.add_food_entry(f, grams.value, meal.get_item_text(meal.selected), date):
+            _render()
+        else:
+            _message("Ошибка сохранения. Запись не добавлена; проверь свободное место.")
     )
     search.text_changed.connect(func(_value: String):
         _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star)
@@ -1212,9 +1207,13 @@ func _show_settings() -> void:
     _label(card, "Моя цель")
     var goal = _number(card, float(store.data["settings"]["goal"]), 20, 400, 0.1)
     _button(card, "Сохранить настройки", func():
+        var previous_settings = store.data["settings"].duplicate(true)
         store.data["settings"] = {"kcal": kcal.value, "start": start.value, "goal": goal.value}
-        store.save()
-        _render()
+        if store.save():
+            _render()
+        else:
+            store.data["settings"] = previous_settings
+            _message("Не удалось сохранить настройки. Прежние значения оставлены.")
     )
     var my_foods_link = _card("Мои продукты и штрихкоды")
     _label(my_foods_link, "Создание и редактирование продуктов, привязка штрихкодов, обновление каталога.", 13, MUTED)
@@ -1276,10 +1275,8 @@ func _show_my_foods() -> void:
                 _message("Не удалось сохранить продукт или штрихкод.")
                 return
         else:
-            store.data["foods"].append(record)
-            if not store.save():
-                store.data["foods"].erase(record)
-                _message("Не удалось сохранить продукт.")
+            if not store.add_custom_food_without_barcode(record):
+                _message("Не удалось сохранить продукт. Проверь введённые КБЖУ и место на устройстве.")
                 return
         _render()
     )
