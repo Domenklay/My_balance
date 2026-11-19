@@ -64,6 +64,15 @@ jobs:
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android" >> "$GITHUB_ENV"
       - name: Validate project scripts and import resources
         run: /tmp/godot --headless --editor --path godot --quit --verbose
+      - name: Smoke test app startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          /tmp/godot --headless --path godot --quit-after 30 --verbose 2>&1 | tee /tmp/mybalance-smoke.log
+          if grep -E "SCRIPT ERROR:|Parse Error:|Invalid call\.|Invalid operands" /tmp/mybalance-smoke.log; then
+            echo "Godot startup smoke test found script/runtime errors"
+            exit 1
+          fi
       - name: Export debug Android APK
         shell: bash
         run: |
