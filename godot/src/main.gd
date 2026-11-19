@@ -520,17 +520,24 @@ func _on_barcode_http_completed(result: int, response_code: int, _headers: Packe
         pending_barcode = ""
         return
     var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
-    var outcome: Dictionary = BarcodeScript.parse_product(parsed, pending_barcode)
+    var searched_code = pending_barcode
+    var outcome: Dictionary = BarcodeScript.parse_product(parsed, searched_code)
     pending_barcode = ""
     if outcome.has("error"):
-        _barcode_message(str(outcome["error"]))
+        _barcode_message(str(outcome["error"]) + " Можно внести товар с упаковки.")
+        _confirm_barcode_product({
+            "barcode": searched_code, "name": "", "kcal": 0.0,
+            "p": 0.0, "f": 0.0, "c": 0.0,
+            "source": "Пользователь"
+        }, true)
         return
     _confirm_barcode_product(outcome)
 
-func _confirm_barcode_product(product: Dictionary) -> void:
+func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void:
     var dialog = ConfirmationDialog.new()
-    dialog.title = "Товар найден по штрихкоду"
-    dialog.dialog_text = "Open Food Facts • значения на 100 г / мл.\nСверь КБЖУ с упаковкой перед сохранением."
+    dialog.title = "Добавить товар по штрихкоду" if manual else "Товар найден по штрихкоду"
+    dialog.dialog_text = ("Товар не найден. Впиши данные с этикетки на 100 г / мл." if manual
+        else "Open Food Facts • значения на 100 г / мл.\nСверь КБЖУ с упаковкой перед сохранением.")
     add_child(dialog)
     var fields = VBoxContainer.new()
     dialog.add_child(fields)
@@ -545,6 +552,10 @@ func _confirm_barcode_product(product: Dictionary) -> void:
     dialog.confirmed.connect(func():
         var record = product.duplicate()
         record["name"] = name.text.strip_edges()
+        if record["name"].is_empty():
+            _message("Введите название продукта с упаковки.")
+            dialog.queue_free()
+            return
         record["kcal"] = kcal.value
         record["p"] = protein.value
         record["f"] = fat.value
@@ -880,7 +891,12 @@ func _show_settings() -> void:
         _render()
     )
     var foods_card = _card("Добавить свой продукт · на 100 г")
+    _label(foods_card, "Штрихкод поможет найти свой продукт повторно, даже без интернета.", 13, MUTED)
     var name = _text_input(foods_card, "Название продукта")
+    var custom_barcode = _text_input(foods_card, "Штрихкод, 8–14 цифр (необязательно)")
+    custom_barcode.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+    custom_barcode.max_length = 14
+    _label(foods_card, "Калории на 100 г / мл", 13, MUTED)
     var k = _number(foods_card, 100, 0, 1000, 0.1)
     _label(foods_card, "Белки · Жиры · Углеводы", 13, MUTED)
     var r = _row(foods_card)
@@ -891,13 +907,50 @@ func _show_settings() -> void:
         if name.text.strip_edges().is_empty():
             _message("Введи название продукта")
             return
-        store.data["foods"].append({
+        var barcode = custom_barcode.text.strip_edges()
+        var record = {
             "id": "u" + str(Time.get_ticks_usec()), "name": name.text.strip_edges(),
-            "kcal": k.value, "p": p.value, "f": f.value, "c": c.value
-        })
-        store.save()
+            "kcal": k.value, "p": p.value, "f": f.value, "c": c.value,
+            "source": "Пользователь"
+        }
+        if not barcode.is_empty():
+            if BarcodeScript.normalize_code(barcode).is_empty():
+                _message("Штрихкод должен содержать 8–14 цифр.")
+                return
+            record["barcode"] = barcode
+            if store.save_barcode_food(record).is_empty():
+                _message("Не удалось сохранить продукт или штрихкод.")
+                return
+        else:
+            store.data["foods"].append(record)
+            if not store.save():
+                store.data["foods"].erase(record)
+                _message("Не удалось сохранить продукт.")
+                return
         _render()
     )
+    var custom_foods: Array = store.data["foods"].filter(func(item): return item is Dictionary)
+    if not custom_foods.is_empty():
+        var link_card = _card("Привязать штрихкод к своему продукту")
+        _label(link_card, "Если продукт уже добавлен, выбери его и введи цифры с упаковки.", 13, MUTED)
+        var custom_picker = _choice(link_card, custom_foods.map(func(item): return str(item.get("name", "Продукт"))))
+        var link_code = _text_input(link_card, "Штрихкод из упаковки")
+        link_code.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+        link_code.max_length = 14
+        _button(link_card, "Привязать штрихкод", func():
+            if custom_picker.selected < 0:
+                return
+            var item: Dictionary = custom_foods[custom_picker.selected]
+            if BarcodeScript.normalize_code(link_code.text).is_empty():
+                _message("Штрихкод должен содержать 8–14 цифр.")
+                return
+            if store.link_barcode_to_food(str(item.get("id", "")), link_code.text.strip_edges()):
+                _message("Штрихкод сохранён. Теперь товар можно находить сканером без интернета.")
+                _render()
+            else:
+                _message("Не удалось привязать код. Возможно, он уже принадлежит другому продукту.")
+        , true)
+    _label(foods_card, "Сведения Open Food Facts: © contributors, Open Database License (ODbL). Проверяй КБЖУ на упаковке.", 12, MUTED)
     var backup = _card("Резервная копия и перенос")
     _label(backup, "Сохрани файл JSON вне приложения, чтобы восстановить данные после удаления или переустановки.", 13, MUTED)
     _button(backup, "Сохранить JSON в файл", func(): _pick_backup_file(true))
