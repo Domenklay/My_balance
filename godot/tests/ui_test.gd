@@ -48,7 +48,6 @@ func _run() -> void:
         if child is OptionButton:
             picker = child
             break
-    print("DEBUG UI: catalog=", app.store.all_foods().size(), " picker=", -1 if picker == null else picker.item_count, " search=", search.text, " parent_children=", parent.get_child_count())
     if picker == null or picker.item_count < 20:
         push_error("FAILED: default product catalog not present")
         quit(1)
