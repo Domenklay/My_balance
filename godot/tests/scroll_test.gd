@@ -88,9 +88,10 @@ func _run() -> void:
         drag.position = finger + Vector2(0, -20.0 * float(i + 1))
         drag.relative = Vector2(0, -20)
         drag.velocity = Vector2(0, -400)
-        Input.parse_input_event(drag)
         if direct_fallback:
             app._input(drag)
+        else:
+            Input.parse_input_event(drag)
         if i in [0, 1, 4, 11]:
             print("TOUCH TRACE drag ", i, " scroll=", app.scroll.scroll_vertical,
                 " tracking=", app._swipe_index, " dragging=", app._swipe_dragging,
@@ -100,7 +101,10 @@ func _run() -> void:
     release.index = 0
     release.pressed = false
     release.position = finger + Vector2(0, -240)
-    Input.parse_input_event(release)
+    if direct_fallback:
+        app._input(release)
+    else:
+        Input.parse_input_event(release)
     await process_frame
     print("SCROLL TOUCH: scroll_vertical=", app.scroll.scroll_vertical)
     if app.scroll.scroll_vertical < 15:
