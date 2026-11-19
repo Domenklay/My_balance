@@ -120,7 +120,7 @@ func _is_barcode(code: String) -> bool:
 
 func default_data() -> Dictionary:
     return {
-        "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0},
+        "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true},
         "foods": [], "entries": [], "activities": [], "weights": [], "notes": {}, "favorites": []
     }
 
@@ -184,6 +184,16 @@ func import_json(raw: String, persist: bool = true) -> bool:
     if float(settings["start"]) < 20.0 or float(settings["start"]) > 400.0:
         return false
     if float(settings["goal"]) < 20.0 or float(settings["goal"]) > 400.0:
+        return false
+    # Older diary backups predate appearance controls; import them unchanged
+    # and fill in safe defaults. Unknown themes are never applied.
+    if not settings.has("theme"):
+        settings["theme"] = "forest"
+    if not (settings["theme"] is String) or str(settings["theme"]) not in ["forest", "mint", "sand", "dark"]:
+        return false
+    if not settings.has("patterns"):
+        settings["patterns"] = true
+    if not (settings["patterns"] is bool):
         return false
     if obj["foods"].size() > 10000 or obj["entries"].size() > 50000 or obj["weights"].size() > 5000 or obj["activities"].size() > 50000:
         return false
