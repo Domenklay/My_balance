@@ -874,39 +874,45 @@ func _update_food_preview(picker: OptionButton, filtered: Array, grams: SpinBox,
     star.text = "★ В избранном" if store.is_favorite(str(f.get("id", ""))) else "☆ В избранное"
 
 func _edit_entry(entry: Dictionary) -> void:
-    var dialog = ConfirmationDialog.new()
-    dialog.title = "Изменить запись питания"
-    add_child(dialog)
-    var fields = VBoxContainer.new()
-    dialog.add_child(fields)
-    _label(fields, "Продукт")
+    var sheet = _mobile_sheet("Изменить запись питания", "Изменения затронут выбранную запись.", "Сохранить", 505.0)
+    var fields: VBoxContainer = sheet["fields"]
+    _label(fields, "Продукт", 13, MUTED)
     var available = store.all_foods()
-    var selector = _choice(fields, available.map(func(f): return f.get("name", "")))
-    var old_id = str(entry.get("food", ""))
+    var selector = _choice(fields, available.map(func(food): return food.get("name", "")))
+    var current_id = str(entry.get("food", ""))
     for i in range(available.size()):
-        if str(available[i].get("id", "")) == old_id:
+        if str(available[i].get("id", "")) == current_id:
             selector.select(i)
             break
-    _label(fields, "Количество, г")
+    _label(fields, "Количество, г", 13, MUTED)
     var grams = _number(fields, float(entry.get("grams", 100)), 1, 5000)
-    _label(fields, "Приём пищи")
+    _label(fields, "Приём пищи", 13, MUTED)
     var meals = ["Завтрак", "Обед", "Перекус", "Ужин"]
     var meal = _choice(fields, meals)
-    var meal_index = meals.find(str(entry.get("meal", "")))
-    if meal_index >= 0:
-        meal.select(meal_index)
-    dialog.confirmed.connect(func():
-        var f: Dictionary = available[selector.selected]
-        entry["food"] = f["id"]
-        entry["nutrition"] = {"name": f["name"], "kcal": f["kcal"], "p": f["p"], "f": f["f"], "c": f["c"]}
+    var selected = meals.find(str(entry.get("meal", "")))
+    if selected >= 0:
+        meal.select(selected)
+    var confirm: Button = sheet["confirm"]
+    confirm.pressed.connect(func():
+        if selector.selected < 0 or selector.selected >= available.size():
+            _sheet_error(sheet, "Выбери продукт.")
+            return
+        var previous = entry.duplicate(true)
+        var product: Dictionary = available[selector.selected]
+        entry["food"] = product["id"]
+        entry["nutrition"] = {"name": product["name"], "kcal": product["kcal"],
+            "p": product["p"], "f": product["f"], "c": product["c"]}
         entry["grams"] = grams.value
         entry["meal"] = meals[meal.selected]
-        store.save()
-        dialog.queue_free()
+        if not store.save():
+            entry.clear()
+            entry.merge(previous, true)
+            _sheet_error(sheet, "Ошибка сохранения. Проверь свободное место.")
+            return
+        var root_control: Control = sheet["root"]
+        root_control.queue_free()
         _render()
     )
-    dialog.canceled.connect(func(): dialog.queue_free())
-    dialog.popup_centered(Vector2i(380, 370))
 
 func _show_activity() -> void:
     var card = _card("Прогулки и домашние тренировки")
@@ -1164,12 +1170,8 @@ func _show_settings() -> void:
     _label(backup, "Записи хранятся в памяти приложения без регистрации и интернета. При удалении приложения данные могут исчезнуть.", 13, MUTED)
 
 func _edit_custom_food(food: Dictionary) -> void:
-    var dialog = ConfirmationDialog.new()
-    dialog.title = "Редактировать продукт"
-    dialog.ok_button_text = "Сохранить изменения"
-    add_child(dialog)
-    var fields = VBoxContainer.new()
-    dialog.add_child(fields)
+    var sheet = _mobile_sheet("Редактировать продукт", "На 100 г. Ранее внесённые блюда сохранят свои КБЖУ.", "Сохранить", 650.0)
+    var fields: VBoxContainer = sheet["fields"]
     _label(fields, "Название", 13, MUTED)
     var name = _text_input(fields, "Название", str(food.get("name", "")))
     _label(fields, "Штрихкод (необязательно)", 13, MUTED)
@@ -1179,24 +1181,21 @@ func _edit_custom_food(food: Dictionary) -> void:
     _label(fields, "Калории на 100 г", 13, MUTED)
     var kcal = _number(fields, float(food.get("kcal", 0)), 0, 1000, 0.1)
     _label(fields, "Белки • Жиры • Углеводы на 100 г", 13, MUTED)
-    var r = _row(fields)
-    var p = _number(r, float(food.get("p", 0)), 0, 100, 0.1)
-    var f = _number(r, float(food.get("f", 0)), 0, 100, 0.1)
-    var c = _number(r, float(food.get("c", 0)), 0, 100, 0.1)
-    dialog.confirmed.connect(func():
-        var changes = {
-            "name": name.text.strip_edges(),
-            "barcode": code.text.strip_edges(),
-            "kcal": kcal.value, "p": p.value, "f": f.value, "c": c.value
-        }
+    var nutrition_row = _row(fields)
+    var p = _number(nutrition_row, float(food.get("p", 0)), 0, 100, 0.1)
+    var f = _number(nutrition_row, float(food.get("f", 0)), 0, 100, 0.1)
+    var c = _number(nutrition_row, float(food.get("c", 0)), 0, 100, 0.1)
+    var confirm: Button = sheet["confirm"]
+    confirm.pressed.connect(func():
+        var changes = {"name": name.text.strip_edges(), "barcode": code.text.strip_edges(),
+            "kcal": kcal.value, "p": p.value, "f": f.value, "c": c.value}
         if store.update_custom_food(str(food.get("id", "")), changes):
+            var root_control: Control = sheet["root"]
+            root_control.queue_free()
             _render()
         else:
-            _message("Не удалось сохранить. Проверь название, цифры штрихкода или его уникальность.")
-        dialog.queue_free()
+            _sheet_error(sheet, "Проверь название, штрихкод и пищевую ценность.")
     )
-    dialog.canceled.connect(func(): dialog.queue_free())
-    dialog.popup_centered(Vector2i(395, 560))
 
 func _pick_backup_file(exporting: bool) -> void:
     var picker = FileDialog.new()
