@@ -17,6 +17,16 @@ func _run() -> void:
     root.add_child(app)
     await process_frame
     app.store.data = app.store.default_data()
+    # Populate a realistic long diary; compact empty pages can legitimately fit.
+    var sample_food = app.store.all_foods()[0]
+    for i in range(10):
+        app.store.data["entries"].append({
+            "id": "scroll_sample_" + str(i), "date": app.date,
+            "food": sample_food["id"],
+            "nutrition": sample_food.duplicate(true),
+            "grams": 100.0,
+            "meal": ["Завтрак", "Обед", "Перекус", "Ужин"][i % 4]
+        })
     var scrollable_pages = 0
     for page in ["day", "activity", "weight", "stats", "settings"]:
         app.tab = page
@@ -31,8 +41,8 @@ func _run() -> void:
         var range_px = maxf(0.0, bar.max_value - bar.page)
         print("SCROLL PAGE: ", page, " range=", range_px,
             " viewport=", scrolling.size.y, " body=", app.body.size.y)
-        if page in ["day", "settings"] and range_px < 150.0:
-            _fail("long page unexpectedly has no vertical scroll range: " + page)
+        if page == "day" and range_px < 150.0:
+            _fail("filled diary unexpectedly has no scroll range")
             return
         if range_px > 150.0:
             scrollable_pages += 1
@@ -41,10 +51,19 @@ func _run() -> void:
             if scrolling.scroll_vertical < 100:
                 _fail("could not scroll " + page + " programmatically")
                 return
-    # Activity and weight can legitimately fit without scrolling;
-    # require the two long pages to be scrollable.
-    if scrollable_pages < 2:
-        _fail("missing scroll range on day/settings: " + str(scrollable_pages))
+    # The compact settings page may fit, but the food management page must scroll.
+    app.tab = "settings"
+    app.settings_page = "foods"
+    app._render()
+    await process_frame
+    await process_frame
+    var catalog_range = app.scroll.get_v_scroll_bar().max_value - app.scroll.get_v_scroll_bar().page
+    print("SCROLL PAGE: settings:foods range=", catalog_range)
+    if catalog_range < 150.0:
+        _fail("own-product management page has no scroll range")
+        return
+    if scrollable_pages < 1:
+        _fail("filled day does not scroll")
         return
 
     app.tab = "day"
@@ -104,6 +123,35 @@ func _run() -> void:
         _fail("swipe over day card did not move ScrollContainer")
         return
 
-    print("PASS: vertical scroll range on pages, cards do not swallow touch, swipe moves screen")
+    var after_touch = app.scroll.scroll_vertical
+    app._render()
+    await process_frame
+    await process_frame
+    if abs(app.scroll.scroll_vertical - after_touch) > 20:
+        _fail("rebuilding the day reset scroll from " + str(after_touch) + " to " + str(app.scroll.scroll_vertical))
+        return
+    app.tab = "settings"
+    app.settings_page = "foods"
+    app._render()
+    await process_frame
+    await process_frame
+    app.scroll.scroll_vertical = 190
+    await process_frame
+    app.tab = "day"
+    app._render()
+    await process_frame
+    await process_frame
+    if abs(app.scroll.scroll_vertical - after_touch) > 20:
+        _fail("switching away and back lost saved day position")
+        return
+    app.tab = "settings"
+    app._render()
+    await process_frame
+    await process_frame
+    if abs(app.scroll.scroll_vertical - 190) > 20:
+        _fail("switching back to own products lost scroll position")
+        return
+
+    print("PASS: swipe, independent page positions, no reset after diary rerender")
     app.queue_free()
     quit(0)
