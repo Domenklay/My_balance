@@ -70,6 +70,7 @@ func _ready() -> void:
     scroll = ScrollContainer.new()
     scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
     scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
     shell.add_child(scroll)
     body = VBoxContainer.new()
     body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -200,7 +201,7 @@ func _number(parent: Node, value: float, minimum: float, maximum: float, step: f
     spin.max_value = maximum
     spin.step = step
     spin.value = value
-    spin.custom_minimum_size = Vector2(126, 48)
+    spin.custom_minimum_size = Vector2(92, 48)
     spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     spin.add_theme_font_size_override("font_size", 16)
     _style_field(spin.get_line_edit())
