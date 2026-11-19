@@ -259,35 +259,77 @@ func link_barcode_to_food(food_id: String, code: String) -> bool:
     return false
 
 func save_barcode_food(details: Dictionary) -> String:
+    # Called after the user has reviewed the label and confirmed the product.
+    # If its barcode exists locally, update that card rather than returning
+    # stale nutrition silently. Preserve the ID used by favorites and diary.
     var barcode = str(details.get("barcode", ""))
     if not _is_barcode(barcode):
         return ""
     for field in ["name", "kcal", "p", "f", "c"]:
         if not details.has(field):
             return ""
+    var name = str(details["name"]).strip_edges().substr(0, 160)
+    if name.is_empty():
+        return ""
+    var nutrients = {}
+    for field in ["kcal", "p", "f", "c"]:
+        var value = details[field]
+        if not (value is int or value is float) or not is_finite(float(value)):
+            return ""
+        var limit = 1000.0 if field == "kcal" else 100.0
+        if float(value) < 0.0 or float(value) > limit:
+            return ""
+        nutrients[field] = float(value)
     for saved in data["foods"]:
-        if saved is Dictionary and str(saved.get("barcode", "")) == barcode:
+        if not (saved is Dictionary) or str(saved.get("barcode", "")) != barcode:
+            continue
+        var previous: Dictionary = saved.duplicate(true)
+        saved["name"] = name
+        for field in ["kcal", "p", "f", "c"]:
+            saved[field] = nutrients[field]
+        saved["source"] = str(details.get("source", "Пользователь"))
+        if save():
             return str(saved.get("id", ""))
+        saved.clear()
+        saved.merge(previous, true)
+        return ""
     var item = {
         "id": "barcode_" + barcode,
         "barcode": barcode,
-        "name": str(details["name"]).substr(0, 160),
-        "kcal": float(details["kcal"]),
-        "p": float(details["p"]),
-        "f": float(details["f"]),
-        "c": float(details["c"]),
+        "name": name,
+        "kcal": nutrients["kcal"],
+        "p": nutrients["p"],
+        "f": nutrients["f"],
+        "c": nutrients["c"],
         "source": str(details.get("source", "Пользователь"))
     }
-    if item["name"].is_empty():
-        return ""
-    for field in ["kcal", "p", "f", "c"]:
-        if item[field] < 0.0 or item[field] > 1000.0:
-            return ""
     data["foods"].append(item)
     if not save():
         data["foods"].erase(item)
         return ""
     return str(item["id"])
+
+
+func add_custom_food_without_barcode(food: Dictionary) -> bool:
+    var name = str(food.get("name", "")).strip_edges()
+    if name.is_empty() or name.length() > 160:
+        return false
+    var item = food.duplicate(true)
+    item.erase("barcode")
+    for field in ["kcal", "p", "f", "c"]:
+        var value = item.get(field)
+        if not (value is int or value is float) or not is_finite(float(value)):
+            return false
+        if float(value) < 0.0 or float(value) > (1000.0 if field == "kcal" else 100.0):
+            return false
+    item["name"] = name
+    item["id"] = "u" + str(Time.get_ticks_usec()) + "_" + str(data["foods"].size())
+    item["source"] = "Пользователь"
+    data["foods"].append(item)
+    if save():
+        return true
+    data["foods"].erase(item)
+    return false
 
 func add_food_entry(food: Dictionary, grams: float, meal: String, day: String) -> bool:
     if food.is_empty() or grams <= 0.0 or grams > 5000.0:
