@@ -920,11 +920,13 @@ func _begin_onboarding(from_settings: bool = false) -> void:
         onboarding_draft = previous.duplicate(true)
     else:
         var saved_name = str(store.data.get("profile", {}).get("name", ""))
+        var fresh: bool = not from_settings and store.needs_onboarding()
+        var beginning_weight: float = 70.0 if fresh else float(store.data["settings"]["start"])
         onboarding_draft = {
             "name": "" if saved_name == "Мой профиль" else saved_name,
             "age":30, "height":165.0,
-            "weight":float(store.data["settings"]["start"]),
-            "goal_weight":float(store.data["settings"]["goal"]),
+            "weight":beginning_weight,
+            "goal_weight":beginning_weight if fresh else float(store.data["settings"]["goal"]),
             "formula":"female", "activity":0, "goal":0
         }
     tab = "onboarding"
@@ -944,6 +946,7 @@ func _show_onboarding() -> void:
         return
     if onboarding_step == 0:
         var personal = _card("О тебе")
+        _label(personal, "Значения для возраста, роста и веса предварительные — обязательно проверь их.", 12, MUTED)
         _label(personal, "Имя", 14, MUTED)
         var name = _text_input(personal, "Как к тебе обращаться", str(onboarding_draft.get("name", "")))
         name.name = "OnboardingName"
