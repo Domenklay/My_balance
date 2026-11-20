@@ -574,6 +574,28 @@ func repeat_entry(entry: Dictionary, destination_date: String) -> bool:
     data["entries"].erase(new_entry)
     return false
 
+# Duplicate a complete meal in one atomic save, preserving nutrition snapshots.
+func repeat_meal(source_date: String, meal: String, destination_date: String) -> int:
+    if source_date == destination_date or meal not in ["Завтрак", "Обед", "Перекус", "Ужин"]:
+        return 0
+    var source: Array = day_entries(source_date).filter(
+        func(e): return str(e.get("meal", "")) == meal
+    )
+    if source.is_empty():
+        return 0
+    var duplicates: Array = []
+    for i in range(source.size()):
+        var entry: Dictionary = source[i].duplicate(true)
+        entry["id"] = "meal_" + str(Time.get_ticks_usec()) + "_" + str(data["entries"].size() + i)
+        entry["date"] = destination_date
+        duplicates.append(entry)
+    data["entries"].append_array(duplicates)
+    if save():
+        return duplicates.size()
+    for entry in duplicates:
+        data["entries"].erase(entry)
+    return 0
+
 func food_by_id(id: String) -> Dictionary:
     for f in all_foods():
         if str(f.get("id", "")) == id:
