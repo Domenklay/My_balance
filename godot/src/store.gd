@@ -136,9 +136,12 @@ static func valid_meal_shares(value: Variant) -> bool:
         return false
     var total = 0
     for share in value:
-        if not (share is int) or share < 0 or share > 100:
+        if not (share is int or share is float):
             return false
-        total += share
+        var number: float = float(share)
+        if not is_finite(number) or number < 0.0 or number > 100.0 or not is_equal_approx(number, roundf(number)):
+            return false
+        total += roundi(number)
     return total == 100
 
 func meal_shares() -> Array:
