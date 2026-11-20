@@ -96,6 +96,8 @@ jobs:
         run: /tmp/godot --headless --path godot --script res://tests/recipe_profile_test.gd
       - name: Test food search, favorites and quick-add UI
         run: /tmp/godot --headless --path godot --script res://tests/ui_test.gd
+      - name: Test portion math, saved sizes, 100ml products and diary migration
+        run: /tmp/godot --headless --path godot --script res://tests/portion_test.gd
       - name: Smoke test app startup
         shell: bash
         run: |
