@@ -1791,11 +1791,13 @@ func _quick_food_sheet(food: Dictionary, from_barcode: bool = false) -> void:
         if calculated.is_empty():
             result_label.text = "Количество должно быть не более 5000 " + unit + "."
             return
-        result_label.text = str(snappedf(total, 0.1)) + " " + unit + " · " +
+        result_label.text = (
+            str(snappedf(total, 0.1)) + " " + unit + " · " +
             str(roundi(float(calculated["kcal"]))) + " ккал" +
             "\nБ " + str(snappedf(float(calculated["p"]), 0.1)) +
             " · Ж " + str(snappedf(float(calculated["f"]), 0.1)) +
             " · У " + str(snappedf(float(calculated["c"]), 0.1))
+        )
     measure.item_selected.connect(func(index: int):
         quantity.value = 100.0 if index == 0 else 1.0
         presets.visible = index == 0
