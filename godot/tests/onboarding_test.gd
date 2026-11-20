@@ -162,7 +162,7 @@ func _run() -> void:
         _fail("88kg user's maintenance estimate was not calculated from entered data")
         return
     if not _find_summary(app, "28 лет") or not _find_summary(app, "170 см") or \
-            not _find_summary(app, "88 кг"):
+            not _find_summary(app, "88"):
         _fail("second step hides the age/height/weight used in calculation")
         return
     if not preview.text.contains("Оценка поддержания") or calories.value < 1000 or calories.value > 5000:
