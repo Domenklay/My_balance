@@ -58,6 +58,23 @@ func _run() -> void:
         if hero == null or hero.get_theme_stylebox("panel").bg_color != app.HERO_BG:
             _fail("daily hero missing themed card: " + id)
             return
+        var overview: PanelContainer = app.body.get_child(0) as PanelContainer
+        var activity: PanelContainer = app.body.get_child(2) as PanelContainer
+        if overview == null or overview.get_theme_stylebox("panel").bg_color != Color(str(palette["overview"])):
+            _fail("day overview section color not applied: " + id)
+            return
+        if activity == null or activity.get_theme_stylebox("panel").bg_color != Color(str(palette["activity"])):
+            _fail("activity section color not applied: " + id)
+            return
+        if str(palette["hero"]) == str(palette["activity"]) or str(palette["hero"]) == str(palette["overview"]):
+            _fail("multi-colored cards do not have distinct backgrounds: " + id)
+            return
+        if str(palette["protein_bg"]) == str(palette["fat_bg"]) or str(palette["fat_bg"]) == str(palette["carbs_bg"]):
+            _fail("protein, fat and carb tiles are not individually colored: " + id)
+            return
+        if app.NAV_ACTIVE != Color(str(palette["nav_active"])):
+            _fail("bottom navigation accent was not updated: " + id)
+            return
         if app.tab_buttons.size() != 6:
             _fail("theme broke bottom navigation: " + id)
             return
@@ -87,6 +104,9 @@ func _run() -> void:
             return
         if not app.HIGH_CONTRAST or not bool(app.store.data["settings"]["high_contrast"]):
             _fail("switching theme reset high contrast")
+            return
+        if app.NAV_ACTIVE != Color(str(high["nav_active"])) or app.ACTIVITY_BG != Color(str(high["activity"])):
+            _fail("colorful high-contrast sections not applied to " + id)
             return
         var normal: Dictionary = AppearanceScript.palette(id)
         if str(high["background"]) == str(normal["background"]) or str(high["border"]) == str(normal["border"]):
