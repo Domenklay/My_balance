@@ -20,6 +20,14 @@ func _button(root_node: Node, title: String) -> Button:
             return match_button
     return null
 
+func _find_summary(node: Node, needle: String) -> bool:
+    if node is Label and node.text.contains(needle):
+        return true
+    for c in node.get_children():
+        if _find_summary(c, needle):
+            return true
+    return false
+
 func _run() -> void:
     var store = StoreScript.new()
     store.data = store.default_data()
@@ -35,6 +43,22 @@ func _run() -> void:
             absf(float(estimate["maintenance"]) - 1704.0) > 2 or \
             absf(float(estimate["kcal"]) - 1530.0) > 1:
         _fail("Mifflin adult estimate does not match expected result: " + str(estimate))
+        return
+    var personal_real = details.duplicate(true)
+    personal_real["age"] = 28
+    personal_real["height"] = 170.0
+    personal_real["weight"] = 88.0
+    personal_real["goal_weight"] = 65.0
+    var real_estimate: Dictionary = Onboard.estimate(personal_real)
+    if absf(float(real_estimate.get("bmr", 0)) - 1642) > 1 or \
+            absf(float(real_estimate.get("maintenance", 0)) - 1970) > 1 or \
+            absf(float(real_estimate.get("kcal", 0)) - 1970) > 1:
+        _fail("88kg, 170cm, 28y adult estimate unexpectedly low: " + str(real_estimate))
+        return
+    personal_real["goal"] = 1
+    var weight_loss_estimate: Dictionary = Onboard.estimate(personal_real)
+    if absf(float(weight_loss_estimate.get("kcal", 0)) - 1770) > 1:
+        _fail("88kg/170cm/28y low activity goal should be near 1770 kcal, not 1380")
         return
     for invalid_age in [17, 0, 120]:
         var bad = details.duplicate()
@@ -95,24 +119,32 @@ func _run() -> void:
         _fail("main navigation is visible before questionnaire is completed")
         return
     var name = app.find_child("OnboardingName", true, false) as LineEdit
-    var height = app.find_child("OnboardingHeight", true, false) as SpinBox
-    var weight = app.find_child("OnboardingWeight", true, false) as SpinBox
-    var age = app.find_child("OnboardingAge", true, false) as SpinBox
+    var height = app.find_child("OnboardingHeight", true, false) as LineEdit
+    var weight = app.find_child("OnboardingWeight", true, false) as LineEdit
+    var age = app.find_child("OnboardingAge", true, false) as LineEdit
     if name == null or height == null or weight == null or age == null:
         _fail("first-run fields missing")
         return
-    name.text = "Новая пользовательница"
-    height.value = 165
-    weight.value = 70
-    age.value = 30
+    if not age.text.is_empty() or not height.text.is_empty() or not weight.text.is_empty():
+        _fail("fresh questionnaire silently pre-filled age/height/current weight")
+        return
     var next = _button(app, "Дальше →")
     if next == null:
         _fail("first step has no Continue button")
         return
+    name.text = "Новая пользовательница"
+    next.pressed.emit()
+    await process_frame
+    if app.onboarding_step != 0:
+        _fail("blank personal measurements were accepted")
+        return
+    age.text = "28"
+    height.text = "170"
+    weight.text = "88"
     next.pressed.emit()
     await process_frame
     if app.onboarding_step != 1:
-        _fail("first step did not advance")
+        _fail("first step did not advance after valid inputs")
         return
     var preview = app.find_child("OnboardingEstimate", true, false) as Label
     var calories = app.find_child("OnboardingCalories", true, false) as SpinBox
@@ -125,6 +157,14 @@ func _run() -> void:
     activity.item_selected.emit(1)
     target.select(1)
     target.item_selected.emit(1)
+    if not preview.text.contains("Оценка поддержания") or not preview.text.contains("1970") or \
+            calories.value < 1000 or calories.value > 5000:
+        _fail("88kg user's maintenance estimate was not calculated from entered data")
+        return
+    if not _find_summary(app, "28 лет") or not _find_summary(app, "170 см") or \
+            not _find_summary(app, "88 кг"):
+        _fail("second step hides the age/height/weight used in calculation")
+        return
     if not preview.text.contains("Оценка поддержания") or calories.value < 1000 or calories.value > 5000:
         _fail("activity and goal did not produce live estimate")
         return
