@@ -1559,17 +1559,17 @@ func _show_day() -> void:
     var total = store.day_calories(date)
     var target = float(store.data["settings"]["kcal"])
     var hero = _card("Энергия дня", "hero")
-    _label(hero, "Твой ежедневный ориентир", 13, HERO_MUTED)
+    _label(hero, "Калории за день", 12, HERO_MUTED)
     var hero_content = _row(hero)
     var numbers = VBoxContainer.new()
     numbers.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     numbers.add_theme_constant_override("separation", 2)
     hero_content.add_child(numbers)
-    _label(numbers, str(roundi(total)), 39, WHITE)
+    _label(numbers, str(roundi(total)), 34, WHITE)
     _label(numbers, "из " + str(roundi(target)) + " ккал", 15, HERO_MUTED)
     var ring = RingScript.new()
     ring.name = "DailyCalorieRing"
-    ring.custom_minimum_size = Vector2(112, 112)
+    ring.custom_minimum_size = Vector2(88, 88)
     ring.set_palette(HERO_TRACK, HERO_FILL, WHITE)
     ring.set_value(total, target)
     hero_content.add_child(ring)
@@ -1744,22 +1744,11 @@ func _show_day() -> void:
             walking += int(a.get("minutes", 0))
         else:
             exercise += int(a.get("minutes", 0))
-    var activity_stats = _row(activity)
-    _metric_tile(activity_stats, str(walking) + " мин", "Прогулки", ACTIVITY_TEXT)
-    _metric_tile(activity_stats, str(exercise) + " мин", "Тренировки", ACTIVITY_TEXT)
+    _label(activity, "Прогулки: " + str(walking) +
+        " мин  ·  Тренировки: " + str(exercise) + " мин", 14, ACTIVITY_TEXT)
     var shortcuts = _row(activity)
-    _button(shortcuts, "+ Еда", func(): _jump_to_food())
     _button(shortcuts, "+ Спорт", func(): _navigate_to_tab("activity"), true)
     _button(shortcuts, "+ Вес", func(): _navigate_to_tab("weight"), true)
-
-    var quick_recent: Array = store.recent_foods(5)
-    if not quick_recent.is_empty():
-        var recent_card = _card("Недавно добавляли")
-        _label(recent_card, "Любую запись можно быстро повторить с новым весом.", 12, MUTED)
-        for recent in quick_recent:
-            var recent_item: Dictionary = recent
-            _button(recent_card, str(recent_item.get("name", "Продукт")) + "  ·  +" ,
-                func(): _quick_food_sheet(recent_item), true)
 
     var add = _card("Добавить еду", "tint")
     _button(add, "⌕ Открыть полный каталог продуктов", func(): _navigate_to_tab("search"), true)
@@ -1786,21 +1775,32 @@ func _show_day() -> void:
         , true)
 
     var notes_card = _card("Заметка о дне")
-    var notes = TextEdit.new()
-    notes.custom_minimum_size.y = 110
-    _style_field(notes)
-    notes.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
-    notes.placeholder_text = "Как прошёл день? Голод, настроение, самочувствие…"
-    notes.text = str(store.data["notes"].get(date, ""))
-    _bind_field_focus(notes)
-    notes.text_changed.connect(func():
-        store.data["notes"][date] = notes.text
-        if is_instance_valid(note_status_label):
-            note_status_label.text = "Сохранение…"
-        note_save_timer.start()
-    )
-    notes_card.add_child(notes)
-    note_status_label = _label(notes_card, "Заметка сохраняется автоматически", 12, MUTED)
+    _button(notes_card, "▴ Скрыть заметку" if day_more_expanded else "▾ Открыть заметку",
+        func():
+            if note_save_timer.time_left > 0.0:
+                note_save_timer.stop()
+                store.save()
+            day_more_expanded = not day_more_expanded
+            _render()
+    , true)
+    if day_more_expanded:
+        var notes = TextEdit.new()
+        notes.custom_minimum_size.y = 110
+        _style_field(notes)
+        notes.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+        notes.placeholder_text = "Как прошёл день? Настроение, самочувствие…"
+        notes.text = str(store.data["notes"].get(date, ""))
+        _bind_field_focus(notes)
+        notes.text_changed.connect(func():
+            store.data["notes"][date] = notes.text
+            if is_instance_valid(note_status_label):
+                note_status_label.text = "Сохранение…"
+            note_save_timer.start()
+        )
+        notes_card.add_child(notes)
+        note_status_label = _label(notes_card, "Заметка сохраняется автоматически", 12, MUTED)
+    elif not str(store.data["notes"].get(date, "")).strip_edges().is_empty():
+        _label(notes_card, "Заметка сохранена", 12, MUTED)
 
 func _jump_to_food() -> void:
     # Follow any pending card-rebuild and saved scroll restoration.
