@@ -344,6 +344,62 @@ func all_foods() -> Array:
             result.append(f)
     return result
 
+# Derived from existing diary data: no migration or separate sensitive history.
+func recent_foods(limit: int = 8) -> Array:
+    var seen: Dictionary = {}
+    var result: Array = []
+    var food_index: Dictionary = {}
+    for food in all_foods():
+        food_index[str(food.get("id", ""))] = food
+    for i in range(data["entries"].size() - 1, -1, -1):
+        var entry: Dictionary = data["entries"][i]
+        var id = str(entry.get("food", ""))
+        if id.is_empty() or seen.has(id):
+            continue
+        seen[id] = true
+        if food_index.has(id):
+            result.append(food_index[id])
+        elif entry.get("nutrition") is Dictionary:
+            var snapshot: Dictionary = entry["nutrition"].duplicate(true)
+            snapshot["id"] = id
+            result.append(snapshot)
+        if result.size() >= limit:
+            break
+    return result
+
+func frequent_foods(limit: int = 8) -> Array:
+    var counts: Dictionary = {}
+    var last_used: Dictionary = {}
+    var examples: Dictionary = {}
+    for i in range(data["entries"].size()):
+        var entry: Dictionary = data["entries"][i]
+        var id = str(entry.get("food", ""))
+        if id.is_empty():
+            continue
+        counts[id] = int(counts.get(id, 0)) + 1
+        last_used[id] = i
+        examples[id] = entry
+    var ids: Array = counts.keys()
+    ids.sort_custom(func(a, b):
+        if counts[a] != counts[b]:
+            return counts[a] > counts[b]
+        return last_used[a] > last_used[b]
+    )
+    var food_index: Dictionary = {}
+    for food in all_foods():
+        food_index[str(food.get("id", ""))] = food
+    var result: Array = []
+    for id in ids:
+        if food_index.has(id):
+            result.append(food_index[id])
+        elif examples[id].get("nutrition") is Dictionary:
+            var snapshot: Dictionary = examples[id]["nutrition"].duplicate(true)
+            snapshot["id"] = str(id)
+            result.append(snapshot)
+        if result.size() >= limit:
+            break
+    return result
+
 func food_by_barcode(code: String) -> Dictionary:
     if not _is_barcode(code):
         return {}
