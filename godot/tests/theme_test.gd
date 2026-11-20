@@ -28,6 +28,7 @@ func _run() -> void:
     root.add_child(app)
     await process_frame
     app.store.data = app.store.default_data()
+    app.tab = "day"
     if not app.store.save():
         _fail("could not establish test store")
         return
