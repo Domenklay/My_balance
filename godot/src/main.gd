@@ -65,6 +65,7 @@ var emblem_label: Label
 
 var store = StoreScript.new()
 var date: String = Time.get_date_string_from_system()
+var selected_meal: String = "Завтрак"
 var tab: String = "day"
 var month_shown: String = ""
 var shell: VBoxContainer
@@ -1254,10 +1255,16 @@ func _show_recipes() -> void:
         var no_results = _card("Ничего не найдено")
         _label(no_results, "Попробуй другое название или очисти поиск.", 13, MUTED)
 
+func _open_meal_catalog(meal_name: String) -> void:
+    # A meal section owns the destination meal, not an implicit default.
+    selected_meal = meal_name
+    _navigate_to_tab("search")
+
+
 func _show_food_search() -> void:
     var intro = _card("Каталог продуктов", "hero")
     _label(intro, "Поиск, сравнение КБЖУ и добавление нескольких продуктов подряд.", 14, HERO_MUTED)
-    _label(intro, "Выбранная дата: " + date, 13, HERO_MUTED)
+    _label(intro, "Дата: " + date + " · Приём пищи: " + selected_meal, 13, HERO_MUTED)
     _button(intro, "← Вернуться в дневник", func(): _navigate_to_tab("day"), true)
     var catalog = _card("Найти и добавить продукты")
     _food_form(catalog)
@@ -1314,6 +1321,51 @@ func _show_day() -> void:
     _macro_chip(macros, "ЖИРЫ", store.day_macro(date, "f"), MACRO_FAT)
     _macro_chip(macros, "УГЛЕВОДЫ", store.day_macro(date, "c"), MACRO_CARBS)
 
+    # Daily diary: four permanent sections, even for an empty date.
+    var foods = _card("Питание · " + date)
+    diary_food_card = foods
+    _label(foods, "Каждый приём пищи сохраняется отдельно для выбранного дня.", 12, MUTED)
+    var existing = store.day_entries(date)
+    var sections = [
+        {"meal":"Завтрак", "icon":"☀", "variant":"overview"},
+        {"meal":"Обед", "icon":"◈", "variant":"tint"},
+        {"meal":"Ужин", "icon":"☾", "variant":"activity"},
+        {"meal":"Перекус", "icon":"◇", "variant":"plain"}
+    ]
+    for section_info in sections:
+        var meal_name: String = str(section_info["meal"])
+        var meals_for_day: Array = existing.filter(func(e): return str(e.get("meal", "")) == meal_name)
+        var meal_kcal: float = 0.0
+        for food_entry in meals_for_day:
+            meal_kcal += store.entry_kcal(food_entry)
+        var meal_card = _card(str(section_info["icon"]) + "  " + meal_name, str(section_info["variant"]))
+        meal_card.get_parent().name = "DailyMeal_" + str(["Завтрак", "Обед", "Ужин", "Перекус"].find(meal_name))
+        var header = _row(meal_card)
+        var summary = _label(header, str(roundi(meal_kcal)) + " ккал · " +
+            str(meals_for_day.size()) + " продуктов", 13, TEXT_ACCENT)
+        summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        _button(header, "+ Добавить " + meal_name.to_lower(),
+            func(): _open_meal_catalog(meal_name), true)
+        if meals_for_day.is_empty():
+            _label(meal_card, "Пока ничего не записано.", 13, MUTED)
+        else:
+            for entry in meals_for_day:
+                var f: Dictionary = store.entry_food(entry)
+                var meal_row = _soft_list_row(meal_card)
+                var caption = _label(meal_row, str(f.get("name", "Продукт")) + "\n" +
+                    str(entry.get("grams", 0)) + " " + str(entry.get("unit", "г")) +
+                    " · " + str(roundi(store.entry_kcal(entry))) + " ккал" +
+                    (" · " + str(entry.get("portion_label", "")) if not str(entry.get("portion_label", "")).is_empty() else ""), 13)
+                caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+                _button(meal_row, "✎", func(): _edit_entry(entry), true)
+                _button(meal_row, "×", func(): _confirm_delete("Удалить запись питания?", func():
+                    if store.delete_saved_record("entries", entry):
+                        _render()
+                        _notify_saved("Запись питания удалена")
+                    else:
+                        _message("Не удалось удалить запись питания.")
+                ), true)
+
     var activity = _card("Движение сегодня", "activity")
     var walking = 0
     var exercise = 0
@@ -1362,33 +1414,6 @@ func _show_day() -> void:
             _render()
             call_deferred("_jump_to_food")
         , true)
-
-    var foods = _card("Дневник питания")
-    diary_food_card = foods
-    var existing = store.day_entries(date)
-    if existing.is_empty():
-        _label(foods, "Сегодня ещё нет записей. Выбери продукт выше или повтори блюдо со вчера.", 14, MUTED)
-    for meal in ["Завтрак", "Обед", "Перекус", "Ужин"]:
-        var items = existing.filter(func(e): return str(e.get("meal", "")) == meal)
-        if items.is_empty():
-            continue
-        _label(foods, meal, 17, TEXT_ACCENT)
-        for entry in items:
-            var f: Dictionary = store.entry_food(entry)
-            var r = _soft_list_row(foods)
-            var caption = _label(r, str(f.get("name", "Продукт")) + "\n" + str(entry.get("grams", 0)) +
-                " " + str(entry.get("unit", "г")) + " • " +
-                str(roundi(store.entry_kcal(entry))) + " ккал" +
-                (" · " + str(entry.get("portion_label", "")) if not str(entry.get("portion_label", "")).is_empty() else ""), 14)
-            caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-            _button(r, "✎", func(): _edit_entry(entry), true)
-            _button(r, "×", func(): _confirm_delete("Удалить запись питания?", func():
-                if store.delete_saved_record("entries", entry):
-                    _render()
-                    _notify_saved("Запись питания удалена")
-                else:
-                    _message("Не удалось удалить запись питания.")
-            ), true)
 
     if not existing.is_empty():
         var save_meal_card = _card("Сохранить любимый приём пищи")
@@ -1668,6 +1693,10 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
     var grams = _number(fields, 100, 1, 5000, 1)
     _label(fields, "Приём пищи", 13, MUTED)
     var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
+    var meal_index = ["Завтрак", "Обед", "Перекус", "Ужин"].find(selected_meal)
+    if meal_index >= 0:
+        meal.select(meal_index)
+    meal.item_selected.connect(func(index: int): selected_meal = meal.get_item_text(index))
     var note = BarcodeScript.nutrition_warning(product)
     if not note.is_empty() and not manual:
         _label(fields, "Внимание: " + note, 12, ACCENT)
@@ -1781,6 +1810,10 @@ func _quick_food_sheet(food: Dictionary, from_barcode: bool = false) -> void:
     var result_label = _label(fields, "", 14, TEXT_ACCENT)
     _label(fields, "Приём пищи", 14, MUTED)
     var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
+    var initial_meal = ["Завтрак", "Обед", "Перекус", "Ужин"].find(selected_meal)
+    if initial_meal >= 0:
+        meal.select(initial_meal)
+    meal.item_selected.connect(func(index: int): selected_meal = meal.get_item_text(index))
     var amount_value = func() -> float:
         if measure.selected < 0 or measure.selected >= options.size():
             return 0.0
@@ -1907,6 +1940,10 @@ func _food_form(parent: VBoxContainer) -> void:
         var value: int = option
         _button(grams_presets, str(value) + " г", func(): grams.value = value, true)
     var meal = _choice(parent, ["Завтрак", "Обед", "Перекус", "Ужин"])
+    var meal_index = ["Завтрак", "Обед", "Перекус", "Ужин"].find(selected_meal)
+    if meal_index >= 0:
+        meal.select(meal_index)
+    meal.item_selected.connect(func(index: int): selected_meal = meal.get_item_text(index))
     var preview = _label(parent, "", 14, MUTED)
     var added_count = _label(parent, "Добавлено за сеанс: 0", 12, TEXT_ACCENT)
     var results_box = VBoxContainer.new()
