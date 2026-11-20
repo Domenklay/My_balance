@@ -924,13 +924,13 @@ func _begin_onboarding(from_settings: bool = false) -> void:
         onboarding_draft = previous.duplicate(true)
     else:
         var saved_name = str(store.data.get("profile", {}).get("name", ""))
-        var fresh: bool = not from_settings and store.needs_onboarding()
-        var beginning_weight: float = 70.0 if fresh else float(store.data["settings"]["start"])
+        # Unknown age/height/weight must never be silently pre-filled from examples.
+        var initial_weight: float = float(store.data["settings"]["start"]) if from_settings else 0.0
         onboarding_draft = {
             "name": "" if saved_name == "Мой профиль" else saved_name,
-            "age":30, "height":165.0,
-            "weight":beginning_weight,
-            "goal_weight":beginning_weight if fresh else float(store.data["settings"]["goal"]),
+            "age":0, "height":0.0,
+            "weight":initial_weight,
+            "goal_weight":float(store.data["settings"]["goal"]) if from_settings else 0.0,
             "formula":"female", "activity":0, "goal":0
         }
     tab = "onboarding"
@@ -950,7 +950,7 @@ func _show_onboarding() -> void:
         return
     if onboarding_step == 0:
         var personal = _card("О тебе")
-        _label(personal, "Значения для возраста, роста и веса предварительные — обязательно проверь их.", 12, MUTED)
+        _label(personal, "Возраст, рост и текущий вес обязательно введи сама. Примерные числа больше не подставляются.", 12, MUTED)
         _label(personal, "Имя", 14, MUTED)
         var name = _text_input(personal, "Как к тебе обращаться", str(onboarding_draft.get("name", "")))
         name.name = "OnboardingName"
@@ -960,30 +960,44 @@ func _show_onboarding() -> void:
         age_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         fields.add_child(age_col)
         _label(age_col, "Возраст, лет", 13, MUTED)
-        var age = _number(age_col, float(onboarding_draft.get("age", 30)), 18, 100, 1)
+        var stored_age: int = int(onboarding_draft.get("age", 0))
+        var age = _text_input(age_col, "Возраст", "" if stored_age <= 0 else str(stored_age))
         age.name = "OnboardingAge"
+        age.max_length = 3
         var height_col = VBoxContainer.new()
         height_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         fields.add_child(height_col)
         _label(height_col, "Рост, см", 13, MUTED)
-        var height = _number(height_col, float(onboarding_draft.get("height", 165)), 100, 240, 1)
+        var stored_height: float = float(onboarding_draft.get("height", 0))
+        var height = _text_input(height_col, "Рост", "" if stored_height <= 0 else str(snappedf(stored_height, 0.1)))
         height.name = "OnboardingHeight"
+        height.max_length = 6
         _label(personal, "Текущий вес, кг", 13, MUTED)
-        var weight = _number(personal, float(onboarding_draft.get("weight", 70)), 25, 350, 0.1)
+        var stored_weight: float = float(onboarding_draft.get("weight", 0))
+        var weight = _text_input(personal, "Текущий вес (не желаемый)", "" if stored_weight <= 0 else str(snappedf(stored_weight, 0.1)))
         weight.name = "OnboardingWeight"
+        weight.max_length = 6
         _label(personal, "Вариант формулы расчёта", 13, MUTED)
         var formula = _choice(personal, OnboardingMath.SEX_LABELS)
         formula.name = "OnboardingFormula"
         var options = ["female", "male", "manual"]
         formula.select(maxi(0, options.find(str(onboarding_draft.get("formula", "female")))))
-        _label(personal, "Формула использует разные коэффициенты для взрослых. Можно отказаться от выбора и ввести норму самостоятельно.", 12, MUTED)
+        _label(personal, "В расчёте используются разные коэффициенты. Можно отказаться от формулы и ввести норму вручную.", 12, MUTED)
         _button(personal, "Дальше →", func():
             var next = onboarding_draft.duplicate(true)
+            var age_value = age.text.strip_edges()
+            var height_value = height.text.strip_edges().replace(",", ".")
+            var weight_value = weight.text.strip_edges().replace(",", ".")
+            if not age_value.is_valid_int() or not height_value.is_valid_float() or not weight_value.is_valid_float():
+                _message("Введи возраст, рост и текущий вес цифрами.")
+                return
             next["name"] = name.text.strip_edges()
-            next["age"] = int(age.value)
-            next["height"] = height.value
-            next["weight"] = weight.value
+            next["age"] = age_value.to_int()
+            next["height"] = height_value.to_float()
+            next["weight"] = weight_value.to_float()
             next["formula"] = options[formula.selected]
+            if float(next.get("goal_weight", 0)) <= 0:
+                next["goal_weight"] = next["weight"]
             if str(next["name"]).is_empty():
                 _message("Введи имя для профиля.")
                 return
@@ -997,6 +1011,14 @@ func _show_onboarding() -> void:
         )
     else:
         var choices = _card("Активность и цель")
+        var formula_name = {
+            "female":"Женская формула", "male":"Мужская формула", "manual":"Ручная норма"
+        }.get(str(onboarding_draft.get("formula", "female")), "Ручная норма")
+        _label(choices, "Проверь исходные данные: " +
+            str(onboarding_draft["age"]) + " лет · " +
+            str(roundi(float(onboarding_draft["height"]))) + " см · " +
+            str(snappedf(float(onboarding_draft["weight"]), 0.1)) + " кг\n" +
+            str(formula_name) + ". Если вес неверный — вернись на первый шаг.", 13, TEXT_ACCENT)
         _label(choices, "Твой обычный уровень активности", 13, MUTED)
         var activity = _choice(choices, OnboardingMath.ACTIVITY_LABELS)
         activity.name = "OnboardingActivity"
