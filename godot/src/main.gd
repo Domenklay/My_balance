@@ -1957,14 +1957,17 @@ func _food_form(parent: VBoxContainer) -> void:
     var picker = _choice(parent, [])
     _label(parent, "Категория", 13, MUTED)
     var category = _choice(parent, ["Все", "Базовые", "Брендовые", "Мои продукты", "Избранное"])
-    _label(parent, "Количество, г или мл — согласно продукту", 14, MUTED)
+    var units_hint = _label(parent, "Количество: выбери продукт (г или мл)", 14, MUTED)
+    units_hint.name = "FoodQuantityUnitHint"
     var values = _row(parent)
     var grams = _number(values, 100, 1, 5000)
     grams.custom_minimum_size.x = 160
     var grams_presets = _row(parent)
+    grams_presets.name = "FoodQuantityPresets"
     for option in [50, 100, 150, 200]:
         var value: int = option
-        _button(grams_presets, str(value) + " г", func(): grams.value = value, true)
+        var preset_button = _button(grams_presets, str(value), func(): grams.value = value, true)
+        preset_button.set_meta("quantity_amount", value)
     var meal = _choice(parent, ["Завтрак", "Обед", "Перекус", "Ужин"])
     var meal_index = ["Завтрак", "Обед", "Перекус", "Ужин"].find(selected_meal)
     if meal_index >= 0:
@@ -2097,7 +2100,8 @@ func _rebuild_food_results(results_box: VBoxContainer, filtered: Array,
         var brand = str(item.get("brand", "")).strip_edges()
         _label(info, str(item.get("name", "Продукт")) + (" · " + brand if not brand.is_empty() else ""), 13, INK)
         _label(info, str(roundi(float(item.get("kcal", 0)))) +
-            " ккал / 100 г · Б " + str(snappedf(float(item.get("p", 0)), 0.1)) +
+            " ккал / 100 " + PortionMath.base_unit(item) +
+            " · Б " + str(snappedf(float(item.get("p", 0)), 0.1)) +
             " Ж " + str(snappedf(float(item.get("f", 0)), 0.1)) +
             " У " + str(snappedf(float(item.get("c", 0)), 0.1)), 11, MUTED)
         _button(row, "Порция", func(): _quick_food_sheet(item), true)
@@ -2118,6 +2122,16 @@ func _update_food_preview(picker: OptionButton, filtered: Array, grams: SpinBox,
         star.disabled = true
         return
     var f: Dictionary = filtered[picker.selected]
+    var measure_unit: String = PortionMath.base_unit(f)
+    var outer: Node = picker.get_parent()
+    var units_hint = outer.get_node_or_null("FoodQuantityUnitHint") as Label
+    if units_hint != null:
+        units_hint.text = "Количество, " + measure_unit
+    var presets = outer.get_node_or_null("FoodQuantityPresets") as HBoxContainer
+    if presets != null:
+        for preset in presets.get_children():
+            if preset is Button:
+                preset.text = str(preset.get_meta("quantity_amount", 100)) + " " + measure_unit
     var amount = grams.value / 100.0
     preview.text = str(grams.value) + " " + PortionMath.base_unit(f) + " · " + str(roundi(float(f.get("kcal", 0)) * amount)) + " ккал  •  Б " + str(snappedf(float(f.get("p", 0)) * amount, 0.1)) + "  Ж " + str(snappedf(float(f.get("f", 0)) * amount, 0.1)) + "  У " + str(snappedf(float(f.get("c", 0)) * amount, 0.1))
     star.disabled = false
@@ -2380,21 +2394,26 @@ func _show_settings() -> void:
         field.custom_minimum_size.x = 105
         portion_fields.append(field)
     var shares_preview = _label(portions_card, "", 13, TEXT_ACCENT)
+    var calorie_preview = _label(portions_card, "", 12, MUTED)
+    calorie_preview.name = "MealCaloriePreview"
     var refresh_shares = func(_new_value: float):
-        var sum: int = 0
+        var total_percent: int = 0
+        var values: Array = []
         for field in portion_fields:
-            sum += roundi(field.value)
-        shares_preview.text = "Распределено: " + str(sum) + "% из 100%"
-        if sum != 100:
+            var pct: int = roundi(field.value)
+            total_percent += pct
+            values.append(roundi(kcal.value * float(pct) / 100.0))
+        shares_preview.text = "Распределено: " + str(total_percent) + "% из 100%"
+        if total_percent != 100:
             shares_preview.text += " · нужно ровно 100%"
+        calorie_preview.text = "При " + str(roundi(kcal.value)) + " ккал в день:\n" + (
+            "Завтрак " + str(values[0]) + " · Обед " + str(values[1]) + " ккал\n" +
+            "Ужин " + str(values[2]) + " · Перекус " + str(values[3]) + " ккал"
+        )
     for field in portion_fields:
         field.value_changed.connect(refresh_shares)
+    kcal.value_changed.connect(refresh_shares)
     refresh_shares.call(0.0)
-    _label(portions_card, "Пример при твоей норме " + str(roundi(kcal.value)) + " ккал: " +
-        "завтрак " + str(roundi(kcal.value * float(original_shares[0]) / 100.0)) +
-        " · обед " + str(roundi(kcal.value * float(original_shares[1]) / 100.0)) +
-        " · ужин " + str(roundi(kcal.value * float(original_shares[2]) / 100.0)) +
-        " · перекус " + str(roundi(kcal.value * float(original_shares[3]) / 100.0)), 12, MUTED)
     _button(portions_card, "Сохранить распределение", func():
         var next: Array = []
         for field in portion_fields:
