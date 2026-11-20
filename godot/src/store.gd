@@ -389,6 +389,12 @@ func import_json(raw: String, persist: bool = true) -> bool:
         settings["meal_shares"] = DEFAULT_MEAL_SHARES.duplicate()
     if not valid_meal_shares(settings["meal_shares"]):
         return false
+    # Godot parses all JSON numbers as float. Normalize valid whole
+    # percentages to integers so UI and test data use the same format.
+    var normalized_shares: Array = []
+    for raw_share in settings["meal_shares"]:
+        normalized_shares.append(roundi(float(raw_share)))
+    settings["meal_shares"] = normalized_shares
     # Older diary backups predate appearance controls; import them unchanged
     # and fill in safe defaults. Unknown themes are never applied.
     if not settings.has("theme"):
