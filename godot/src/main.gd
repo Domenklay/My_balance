@@ -43,6 +43,7 @@ var PATTERN_COLOR: Color = Color("#6da48b")
 var PATTERN_STYLE: String = "leaves"
 var PATTERNS: bool = true
 var DARK_MODE: bool = false
+var HIGH_CONTRAST: bool = false
 var current_theme: String = "forest"
 var background_rect: ColorRect
 var wallpaper_pattern: Control
@@ -100,8 +101,9 @@ func _apply_palette() -> void:
     if not AppearanceScript.is_valid_theme(current_theme):
         current_theme = "forest"
     PATTERNS = bool(config.get("patterns", true))
+    HIGH_CONTRAST = bool(config.get("high_contrast", false))
     DARK_MODE = current_theme == "dark"
-    var palette: Dictionary = AppearanceScript.palette(current_theme)
+    var palette: Dictionary = AppearanceScript.palette(current_theme, HIGH_CONTRAST)
     GREEN = Color(str(palette["green"]))
     DEEP = Color(str(palette["deep"]))
     INK = Color(str(palette["ink"]))
@@ -194,6 +196,17 @@ func _toggle_patterns() -> void:
     _refresh_appearance()
     _render()
     _notify_saved("Узоры включены" if not previous else "Узоры выключены")
+
+func _toggle_high_contrast() -> void:
+    var previous = bool(store.data["settings"].get("high_contrast", false))
+    store.data["settings"]["high_contrast"] = not previous
+    if not store.save():
+        store.data["settings"]["high_contrast"] = previous
+        _message("Не удалось сохранить режим контрастности.")
+        return
+    _refresh_appearance()
+    _render()
+    _notify_saved("Повышенная контрастность включена" if not previous else "Обычная контрастность")
 
 func _ready() -> void:
     _apply_palette()
@@ -467,7 +480,7 @@ func _input_style() -> StyleBoxFlat:
     var st = StyleBoxFlat.new()
     st.bg_color = INPUT_BG
     st.border_color = BORDER
-    st.set_border_width_all(1)
+    st.set_border_width_all(2 if HIGH_CONTRAST else 1)
     st.set_corner_radius_all(13)
     st.content_margin_left = 12
     st.content_margin_right = 12
@@ -479,7 +492,7 @@ func _input_focus_style() -> StyleBoxFlat:
     var st = StyleBoxFlat.new()
     st.bg_color = Color(0, 0, 0, 0)
     st.border_color = GREEN
-    st.set_border_width_all(2)
+    st.set_border_width_all(3 if HIGH_CONTRAST else 2)
     st.set_corner_radius_all(11)
     return st
 
@@ -509,6 +522,9 @@ func _button(parent: Node, s: String, call: Callable, secondary: bool = false) -
             st.bg_color = SECONDARY.lightened(0.06) if secondary else GREEN.lightened(0.09)
         elif mode == "pressed":
             st.bg_color = SECONDARY.darkened(0.05) if secondary else GREEN.darkened(0.07)
+        if HIGH_CONTRAST:
+            st.border_color = BORDER if secondary else GREEN.darkened(0.16)
+            st.set_border_width_all(1)
         st.set_corner_radius_all(13)
         st.content_margin_left = 10
         st.content_margin_right = 10
@@ -534,8 +550,8 @@ func _card(title: String, variant: String = "plain") -> VBoxContainer:
     var style = StyleBoxFlat.new()
     style.bg_color = HERO_BG if variant == "hero" else (TINT_BG if variant == "tint" else CARD_BG)
     style.set_corner_radius_all(22)
-    style.border_color = BORDER if variant == "plain" else style.bg_color
-    style.set_border_width_all(1)
+    style.border_color = BORDER if variant == "plain" or HIGH_CONTRAST else style.bg_color
+    style.set_border_width_all(2 if HIGH_CONTRAST else 1)
     style.shadow_color = Color(0.0, 0.0, 0.0, 0.13 if DARK_MODE else 0.08)
     style.shadow_size = 5 if variant == "hero" else 3
     style.shadow_offset = Vector2(0, 3)
@@ -585,6 +601,9 @@ func _soft_list_row(parent: Node) -> HBoxContainer:
     panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     var st = StyleBoxFlat.new()
     st.bg_color = ROW_BG
+    if HIGH_CONTRAST:
+        st.border_color = BORDER
+        st.set_border_width_all(1)
     st.set_corner_radius_all(13)
     st.content_margin_left = 10
     st.content_margin_right = 8
@@ -689,6 +708,9 @@ func _update_tabs() -> void:
         var active = key == tab or (key == "profile" and tab == "settings")
         var box_style = StyleBoxFlat.new()
         box_style.bg_color = GREEN if active else CARD_BG
+        if HIGH_CONTRAST and active:
+            box_style.border_color = HERO_FILL
+            box_style.set_border_width_all(2)
         box_style.set_corner_radius_all(14)
         for state in ["normal", "hover", "pressed"]:
             b.add_theme_stylebox_override(state, box_style)
@@ -2194,7 +2216,7 @@ func _show_settings() -> void:
     _label(appearance, "Активная: " + AppearanceScript.name_for(current_theme), 14, TEXT_ACCENT)
     for id in AppearanceScript.ORDER:
         var theme_id: String = str(id)
-        var sample: Dictionary = AppearanceScript.palette(theme_id)
+        var sample: Dictionary = AppearanceScript.palette(theme_id, HIGH_CONTRAST)
         var sample_row = _soft_list_row(appearance)
         var color_preview = ColorRect.new()
         color_preview.name = "ThemeSwatch_" + theme_id
@@ -2209,6 +2231,9 @@ func _show_settings() -> void:
     _button(appearance, "Узоры: включены" if PATTERNS else "Узоры: выключены",
         func(): _toggle_patterns(), true)
     _label(appearance, "Тонкий рисунок на фоне и карточках. Если отключить, останется чистый минимализм.", 12, MUTED)
+    _button(appearance, "Контраст: повышенный" if HIGH_CONTRAST else "Контраст: обычный",
+        func(): _toggle_high_contrast(), true)
+    _label(appearance, "Повышенный контраст делает текст, карточки, кнопки и поля ввода заметнее во всех четырёх темах.", 12, MUTED)
 
     var my_foods_link = _card("Мои продукты и штрихкоды")
     _label(my_foods_link, "Создание и редактирование продуктов, привязка штрихкодов, обновление каталога.", 13, MUTED)
