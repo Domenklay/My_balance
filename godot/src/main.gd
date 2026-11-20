@@ -1861,6 +1861,11 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
         return str(a.get("name", "")).nocasecmp_to(str(b.get("name", ""))) < 0
     )
     var query = search.text.strip_edges().to_lower()
+    var owned_ids: Dictionary = {}
+    if category != null and category.selected == 3:
+        for own_food in store.data["foods"]:
+            if own_food is Dictionary:
+                owned_ids[str(own_food.get("id", ""))] = true
     for item in all:
         var searchable = str(item.get("name", "")) + " " + str(item.get("brand", ""))
         if not query.is_empty() and not searchable.to_lower().contains(query):
@@ -1877,7 +1882,7 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
                     if str(item.get("brand", "")).is_empty() and str(item.get("barcode", "")).is_empty():
                         continue
                 3:
-                    if not item_id.begins_with("custom") and not store.data["foods"].any(func(f): return str(f.get("id", "")) == item_id):
+                    if not owned_ids.has(item_id):
                         continue
                 4:
                     if not store.is_favorite(item_id):
