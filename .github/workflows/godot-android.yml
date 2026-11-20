@@ -101,6 +101,8 @@ jobs:
         run: /tmp/godot --headless --path godot --script res://tests/theme_test.gd
       - name: Test recipe calculations, history and personal profile
         run: /tmp/godot --headless --path godot --script res://tests/recipe_profile_test.gd
+      - name: Test positive rewards, achievement frames, image avatar and JSON migration
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/rewards_avatar_test.gd
       - name: Test food search, favorites and quick-add UI
         run: /tmp/godot --headless --path godot --script res://tests/ui_test.gd
       - name: Test date-specific breakfast, lunch, dinner and snack sections
