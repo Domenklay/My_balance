@@ -166,6 +166,39 @@ func _run() -> void:
         push_error("FAILED: meal addition did not confirm success")
         quit(1)
         return
+    # New full catalog: accessible from day, with search results and repeated + add.
+    app._navigate_to_tab("day")
+    var catalog_button = _find_button(app, "⌕ Открыть полный каталог продуктов")
+    if catalog_button == null:
+        push_error("FAILED: full catalog entry point missing")
+        quit(1)
+        return
+    catalog_button.pressed.emit()
+    await process_frame
+    if app.tab != "search":
+        push_error("FAILED: full catalog did not open")
+        quit(1)
+        return
+    var results = app.find_child("FoodSearchResults", true, false)
+    if results == null or _find_button(results, "+") == null:
+        push_error("FAILED: catalog nutrition cards or quick add missing")
+        quit(1)
+        return
+    var count_before = app.store.day_entries(app.date).size()
+    var add_from_result = _find_button(results, "+")
+    add_from_result.pressed.emit()
+    await process_frame
+    if app.store.day_entries(app.date).size() != count_before + 1 or app.tab != "search":
+        push_error("FAILED: result quick add must keep catalog open")
+        quit(1)
+        return
+    add_from_result.pressed.emit()
+    await process_frame
+    if app.store.day_entries(app.date).size() != count_before + 2:
+        push_error("FAILED: catalog must allow adding several items in sequence")
+        quit(1)
+        return
+    app._navigate_to_tab("day")
     app.settings_page = "foods"
     app._navigate_to_tab("settings")
     if app.tab != "settings" or app.settings_page != "foods":
@@ -180,5 +213,6 @@ func _run() -> void:
     print("PASS: keyboard focus/IME Done, status notification and settings navigation")
     print("PASS: barcode result card adds the exact product and selected portion to journal")
     print("PASS: Godot dashboard renders, food search filters, favorites toggle, quick-add works")
+    print("PASS: Full food catalog results allow consecutive adds without closing search")
     app.queue_free()
     quit(0)
