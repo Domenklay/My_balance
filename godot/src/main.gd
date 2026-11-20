@@ -7,6 +7,7 @@ const RecipeMath = preload("res://src/recipe_math.gd")
 const PortionMath = preload("res://src/portion_math.gd")
 const RewardsScript = preload("res://src/rewards.gd")
 const ProfilePhotoScript = preload("res://src/profile_photo.gd")
+const OnboardingMath = preload("res://src/onboarding_math.gd")
 const BarcodeScript = preload("res://src/barcode_lookup.gd")
 const AppearanceScript = preload("res://src/appearance.gd")
 const PatternScript = preload("res://src/theme_pattern.gd")
@@ -84,6 +85,11 @@ var recipe_editor_open: bool = false
 var profile_edit_open: bool = false
 var rewards_expanded: bool = false
 var frames_expanded: bool = false
+var profile_more_expanded: bool = false
+var day_more_expanded: bool = false
+var onboarding_step: int = 0
+var onboarding_edit: bool = false
+var onboarding_draft: Dictionary = {}
 var recipe_draft: Dictionary = {}
 var recipe_search_text: String = ""
 var recipe_list_query: String = ""
@@ -338,6 +344,9 @@ func _ready() -> void:
     add_child(note_save_timer)
     _make_tabs()
     _setup_toast()
+    if store.needs_onboarding():
+        tab = "onboarding"
+        onboarding_step = 0
     _render()
 
 func _setup_toast() -> void:
@@ -814,6 +823,9 @@ func _render(reset_position: bool = false) -> void:
     if not old_key.is_empty() and is_instance_valid(scroll):
         _scroll_memory[old_key] = scroll.scroll_vertical
     var new_key = _view_key()
+    var navigation = shell.get_node_or_null("BottomNavigation") as PanelContainer
+    if navigation != null:
+        navigation.visible = tab != "onboarding"
     var desired = 0 if reset_position else int(_scroll_memory.get(new_key, 0))
     if reset_position:
         _scroll_memory[new_key] = 0
@@ -826,6 +838,7 @@ func _render(reset_position: bool = false) -> void:
         child.queue_free()
     match tab:
         "day": _show_day()
+        "onboarding": _show_onboarding()
         "search": _show_food_search()
         "recipes": _show_recipes()
         "profile": _show_profile()
@@ -898,6 +911,147 @@ func _shift_month(delta: int) -> void:
 
 func _avatar_character(id: String) -> String:
     return {"leaf":"❧", "star":"✦", "moon":"☾", "sun":"☀", "flower":"✿", "heart":"♥"}.get(id, "❧")
+
+func _begin_onboarding(from_settings: bool = false) -> void:
+    onboarding_edit = from_settings
+    onboarding_step = 0
+    var previous = store.data["settings"].get("personal", {})
+    if previous is Dictionary and not previous.is_empty():
+        onboarding_draft = previous.duplicate(true)
+    else:
+        var saved_name = str(store.data.get("profile", {}).get("name", ""))
+        onboarding_draft = {
+            "name": "" if saved_name == "Мой профиль" else saved_name,
+            "age":30, "height":165.0,
+            "weight":float(store.data["settings"]["start"]),
+            "goal_weight":float(store.data["settings"]["goal"]),
+            "formula":"female", "activity":0, "goal":0
+        }
+    tab = "onboarding"
+    _render(true)
+
+func _show_onboarding() -> void:
+    var intro = _card("Мой баланс · знакомство", "hero")
+    _label(intro, "Два коротких шага для личного ориентира по калориям.", 14, HERO_MUTED)
+    _label(intro, "Шаг " + str(onboarding_step + 1) + " из 2", 13, SOFT_GOLD)
+    if onboarding_edit:
+        _button(intro, "← Отмена и назад к настройкам", func():
+            tab = "settings"
+            _render(true)
+        , true)
+    if onboarding_draft.is_empty():
+        _begin_onboarding(onboarding_edit)
+        return
+    if onboarding_step == 0:
+        var personal = _card("О тебе")
+        _label(personal, "Имя", 14, MUTED)
+        var name = _text_input(personal, "Как к тебе обращаться", str(onboarding_draft.get("name", "")))
+        name.name = "OnboardingName"
+        name.max_length = 45
+        var fields = _row(personal)
+        var age_col = VBoxContainer.new()
+        age_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        fields.add_child(age_col)
+        _label(age_col, "Возраст, лет", 13, MUTED)
+        var age = _number(age_col, float(onboarding_draft.get("age", 30)), 18, 100, 1)
+        age.name = "OnboardingAge"
+        var height_col = VBoxContainer.new()
+        height_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        fields.add_child(height_col)
+        _label(height_col, "Рост, см", 13, MUTED)
+        var height = _number(height_col, float(onboarding_draft.get("height", 165)), 100, 240, 1)
+        height.name = "OnboardingHeight"
+        _label(personal, "Текущий вес, кг", 13, MUTED)
+        var weight = _number(personal, float(onboarding_draft.get("weight", 70)), 25, 350, 0.1)
+        weight.name = "OnboardingWeight"
+        _label(personal, "Вариант формулы расчёта", 13, MUTED)
+        var formula = _choice(personal, OnboardingMath.SEX_LABELS)
+        formula.name = "OnboardingFormula"
+        var options = ["female", "male", "manual"]
+        formula.select(maxi(0, options.find(str(onboarding_draft.get("formula", "female")))))
+        _label(personal, "Формула использует разные коэффициенты для взрослых. Можно отказаться от выбора и ввести норму самостоятельно.", 12, MUTED)
+        _button(personal, "Дальше →", func():
+            var next = onboarding_draft.duplicate(true)
+            next["name"] = name.text.strip_edges()
+            next["age"] = int(age.value)
+            next["height"] = height.value
+            next["weight"] = weight.value
+            next["formula"] = options[formula.selected]
+            if str(next["name"]).is_empty():
+                _message("Введи имя для профиля.")
+                return
+            if not OnboardingMath.valid_details(next):
+                _message("Проверь возраст, рост и вес. Анкета рассчитана на взрослых от 18 лет.")
+                return
+            onboarding_draft = next
+            onboarding_step = 1
+            _hide_keyboard_and_focus()
+            _render(true)
+        )
+    else:
+        var choices = _card("Активность и цель")
+        _label(choices, "Твой обычный уровень активности", 13, MUTED)
+        var activity = _choice(choices, OnboardingMath.ACTIVITY_LABELS)
+        activity.name = "OnboardingActivity"
+        activity.select(clampi(int(onboarding_draft.get("activity", 0)), 0, 3))
+        _label(choices, "Что хочешь изменить?", 13, MUTED)
+        var goal = _choice(choices, OnboardingMath.GOALS)
+        goal.name = "OnboardingGoal"
+        goal.select(clampi(int(onboarding_draft.get("goal", 0)), 0, 2))
+        _label(choices, "Желаемый вес, кг (можно оставить текущий)", 13, MUTED)
+        var goal_weight = _number(choices, float(onboarding_draft.get("goal_weight", onboarding_draft["weight"])), 25, 350, 0.1)
+        goal_weight.name = "OnboardingGoalWeight"
+        var estimate_label = _label(choices, "", 13, MUTED)
+        estimate_label.name = "OnboardingEstimate"
+        _label(choices, "Мой ориентир, ккал в день", 14, TEXT_ACCENT)
+        var calories = _number(choices, 1800.0, 1000, 5000, 10)
+        calories.name = "OnboardingCalories"
+        var compute_preview = func(_index: int):
+            var details = onboarding_draft.duplicate(true)
+            details["activity"] = activity.selected
+            details["goal"] = goal.selected
+            details["goal_weight"] = goal_weight.value
+            var calculation: Dictionary = OnboardingMath.estimate(details)
+            if calculation.is_empty():
+                estimate_label.text = "Не удалось рассчитать: проверь анкету."
+                return
+            if bool(calculation["automatic"]):
+                calories.value = float(calculation["kcal"])
+                estimate_label.text = "Оценка поддержания: " + str(roundi(float(calculation["maintenance"]))) + " ккал.\n" + str(calculation["message"])
+            else:
+                estimate_label.text = str(calculation["message"])
+        activity.item_selected.connect(compute_preview)
+        goal.item_selected.connect(compute_preview)
+        compute_preview.call(0)
+        var action_buttons = _row(choices)
+        _button(action_buttons, "← Назад", func():
+            onboarding_draft["activity"] = activity.selected
+            onboarding_draft["goal"] = goal.selected
+            onboarding_draft["goal_weight"] = goal_weight.value
+            onboarding_step = 0
+            _render(true)
+        , true)
+        _button(action_buttons, "Сохранить и начать", func():
+            var details = onboarding_draft.duplicate(true)
+            details["activity"] = activity.selected
+            details["goal"] = goal.selected
+            details["goal_weight"] = goal_weight.value
+            if not OnboardingMath.valid_details(details):
+                _message("Проверь указанные параметры.")
+                return
+            if store.complete_onboarding(details, calories.value):
+                onboarding_draft.clear()
+                onboarding_step = 0
+                var return_tab = "settings" if onboarding_edit else "day"
+                onboarding_edit = false
+                tab = return_tab
+                _hide_keyboard_and_focus()
+                _render(true)
+                _notify_saved("Твой ориентир по калориям сохранён")
+            else:
+                _message("Не удалось сохранить анкету. Проверь свободное место.")
+        )
+        _label(choices, "Это ориентировочная оценка для взрослых, не медицинское назначение. При беременности, грудном вскармливании или заболеваниях нужна индивидуальная консультация.", 12, MUTED)
 
 func _show_profile() -> void:
     var profile: Dictionary = store.data.get("profile", {})
