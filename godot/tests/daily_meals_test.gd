@@ -28,7 +28,7 @@ func _find_label(node: Node, label: String) -> bool:
 
 func _find_meal_choice(node: Node) -> OptionButton:
     if node is OptionButton and node.item_count == 4:
-        if node.get_item_text(0) == "Завтрак" and node.get_item_text(1) == "Обед" and                 node.get_item_text(2) == "Перекус" and node.get_item_text(3) == "Ужин":
+        if node.get_item_text(0) == "Завтрак" and node.get_item_text(1) == "Обед" and node.get_item_text(2) == "Перекус" and node.get_item_text(3) == "Ужин":
             return node
     for child in node.get_children():
         var result = _find_meal_choice(child)
@@ -56,7 +56,7 @@ func _run() -> void:
         if card == null:
             _fail("missing empty meal card: " + meal_names[i])
             return
-        if not _find_label(card, "0 ккал"):
+        if not _find_label(card, "0 ккал · 0 продуктов"):
             _fail("zero daily total missing from " + meal_names[i])
             return
         if _find_button(card, "+ Добавить " + meal_names[i].to_lower()) == null:
@@ -77,7 +77,7 @@ func _run() -> void:
         _fail("food catalog did not preselect lunch")
         return
     var results = app.find_child("FoodSearchResults", true, false)
-    var add_button = _find_button(results, "+")
+    var add_button = _find_button(results, "+") if results != null else null
     if add_button == null:
         _fail("food catalog has no add button")
         return
@@ -91,10 +91,11 @@ func _run() -> void:
     app._navigate_to_tab("day")
     await process_frame
     var lunch_card = app.find_child("DailyMeal_1", true, false)
-    if lunch_card == null or _find_label(lunch_card, "0 ккал"):
+    if lunch_card == null or _find_label(lunch_card, "0 ккал · 0 продуктов"):
         _fail("recorded lunch still displayed as empty")
         return
-    if app.find_child("DailyMeal_0", true, false) == null or             not _find_label(app.find_child("DailyMeal_0", true, false), "0 ккал"):
+    var breakfast_card = app.find_child("DailyMeal_0", true, false)
+    if breakfast_card == null or not _find_label(breakfast_card, "0 ккал · 0 продуктов"):
         _fail("lunch contaminated the breakfast section")
         return
 
