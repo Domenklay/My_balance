@@ -1327,25 +1327,90 @@ func _show_day() -> void:
     _label(foods, "Каждый приём пищи сохраняется отдельно для выбранного дня.", 12, MUTED)
     var existing = store.day_entries(date)
     var sections = [
-        {"meal":"Завтрак", "icon":"☀", "variant":"overview"},
-        {"meal":"Обед", "icon":"◈", "variant":"tint"},
-        {"meal":"Ужин", "icon":"☾", "variant":"activity"},
-        {"meal":"Перекус", "icon":"◇", "variant":"plain"}
+        {"meal":"Завтрак", "icon":"☀", "variant":"overview", "accent":ACCENT},
+        {"meal":"Обед", "icon":"◈", "variant":"tint", "accent":TEXT_ACCENT},
+        {"meal":"Ужин", "icon":"☾", "variant":"activity", "accent":ACTIVITY_TEXT},
+        {"meal":"Перекус", "icon":"◇", "variant":"plain", "accent":NAV_ACTIVE}
     ]
-    for section_info in sections:
+    var shares: Array = store.meal_shares()
+    var yesterday: String = store.change_date(date, -1)
+    var saved_templates: Array = store.data.get("meal_templates", [])
+    for section_index in range(sections.size()):
+        var section_info: Dictionary = sections[section_index]
         var meal_name: String = str(section_info["meal"])
         var meals_for_day: Array = existing.filter(func(e): return str(e.get("meal", "")) == meal_name)
-        var meal_kcal: float = 0.0
-        for food_entry in meals_for_day:
-            meal_kcal += store.entry_kcal(food_entry)
+        var meal_stats: Dictionary = store.meal_summary(date, meal_name)
+        var meal_kcal: float = float(meal_stats["kcal"])
+        var share: int = roundi(float(shares[section_index]))
+        var meal_target: float = float(target) * float(share) / 100.0
         var meal_card = _card(str(section_info["icon"]) + "  " + meal_name, str(section_info["variant"]))
         meal_card.get_parent().name = "DailyMeal_" + str(["Завтрак", "Обед", "Ужин", "Перекус"].find(meal_name))
-        var header = _row(meal_card)
-        var summary = _label(header, str(roundi(meal_kcal)) + " ккал · " +
-            str(meals_for_day.size()) + " продуктов", 13, TEXT_ACCENT)
-        summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        _button(header, "+ Добавить " + meal_name.to_lower(),
+        _label(meal_card, str(roundi(meal_kcal)) + " ккал · " +
+            str(meals_for_day.size()) + " продуктов", 14, TEXT_ACCENT)
+        var allowance_text = "Без отдельного ориентира" if share == 0 else (
+            "Ориентир: " + str(roundi(meal_target)) + " ккал (" + str(share) + "% в сутки)"
+        )
+        _label(meal_card, allowance_text, 12, MUTED)
+        if share > 0:
+            var meal_bar = ProgressBar.new()
+            meal_bar.name = "MealProgress_" + str(section_index)
+            meal_bar.min_value = 0.0
+            meal_bar.max_value = maxf(1.0, meal_target)
+            meal_bar.value = minf(meal_kcal, meal_bar.max_value)
+            _style_progress(meal_bar)
+            var meal_fill = StyleBoxFlat.new()
+            meal_fill.bg_color = section_info["accent"]
+            meal_fill.set_corner_radius_all(8)
+            meal_bar.add_theme_stylebox_override("fill", meal_fill)
+            meal_card.add_child(meal_bar)
+        var meal_macros = _row(meal_card)
+        _macro_chip(meal_macros, "БЕЛКИ", float(meal_stats["p"]), MACRO_PROTEIN)
+        _macro_chip(meal_macros, "ЖИРЫ", float(meal_stats["f"]), MACRO_FAT)
+        _macro_chip(meal_macros, "УГЛЕВОДЫ", float(meal_stats["c"]), MACRO_CARBS)
+        _button(meal_card, "+ Добавить " + meal_name.to_lower(),
             func(): _open_meal_catalog(meal_name), true)
+        var actions = _row(meal_card)
+        if not meals_for_day.is_empty():
+            _button(actions, "☆ Сохранить набор", func():
+                _name_meal_template_sheet(meal_name)
+            , true)
+        var yesterday_count: int = store.day_entries(yesterday).filter(
+            func(e): return str(e.get("meal", "")) == meal_name
+        ).size()
+        if yesterday_count > 0:
+            _button(actions, "↻ Со вчера", func():
+                var copied = store.repeat_meal(yesterday, meal_name, date)
+                if copied > 0:
+                    _render()
+                    _notify_saved("Добавлено записей: " + str(copied))
+                else:
+                    _message("Не удалось повторить приём пищи.")
+            , true)
+        for template in saved_templates:
+            if not (template is Dictionary) or template["items"].is_empty():
+                continue
+            if str(template["items"][0].get("meal", "")) != meal_name:
+                continue
+            var template_row = _row(meal_card)
+            var template_name = _label(template_row, "★ " + str(template["name"]), 12, MUTED)
+            template_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            _button(template_row, "+", func():
+                var added = store.apply_meal_template(str(template["id"]), date)
+                if added > 0:
+                    _render()
+                    _notify_saved("Добавлено продуктов: " + str(added))
+                else:
+                    _message("Не удалось добавить любимый набор.")
+            )
+            _button(template_row, "×", func():
+                _confirm_delete("Удалить набор «" + str(template["name"]) + "»?", func():
+                    if store.delete_meal_template(str(template["id"])):
+                        _render()
+                        _notify_saved("Набор удалён")
+                    else:
+                        _message("Не удалось удалить набор.")
+                )
+            , true)
         if meals_for_day.is_empty():
             _label(meal_card, "Пока ничего не записано.", 13, MUTED)
         else:
@@ -1415,75 +1480,6 @@ func _show_day() -> void:
             _render()
             call_deferred("_jump_to_food")
         , true)
-
-    if not existing.is_empty():
-        var save_meal_card = _card("Сохранить любимый приём пищи")
-        _label(save_meal_card, "Создай шаблон из еды, записанной на этот день.", 12, MUTED)
-        for saved_meal in ["Завтрак", "Обед", "Перекус", "Ужин"]:
-            var meal_name: String = saved_meal
-            var meal_items = existing.filter(func(e): return str(e.get("meal", "")) == meal_name)
-            if meal_items.is_empty():
-                continue
-            _button(save_meal_card, "☆ Сохранить " + meal_name.to_lower(), func():
-                _name_meal_template_sheet(meal_name), true)
-    var saved_templates: Array = store.data.get("meal_templates", [])
-    if not saved_templates.is_empty():
-        var template_card = _card("Любимые приёмы пищи")
-        for template_data in saved_templates:
-            var template: Dictionary = template_data
-            var row = _soft_list_row(template_card)
-            var name_label = _label(row, str(template["name"]) + " · " + str(template["items"].size()) + " продуктов", 13)
-            name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-            _button(row, "+", func():
-                var count = store.apply_meal_template(str(template["id"]), date)
-                if count > 0:
-                    _render()
-                    _notify_saved("Добавлено продуктов: " + str(count))
-                else:
-                    _message("Не удалось добавить шаблон.")
-            )
-            _button(row, "×", func():
-                _confirm_delete("Удалить шаблон «" + str(template["name"]) + "»?", func():
-                    if store.delete_meal_template(str(template["id"])):
-                        _render()
-                        _notify_saved("Шаблон удалён")
-                    else:
-                        _message("Не удалось удалить шаблон.")
-                )
-            , true)
-    var yesterday = store.change_date(date, -1)
-    var previous = store.day_entries(yesterday)
-    if not previous.is_empty():
-        var repeats = _card("Повторить со вчера · " + yesterday)
-        _label(repeats, "Нажми «+», чтобы добавить такую же порцию на выбранный день.", 13, MUTED)
-        for prior_meal in ["Завтрак", "Обед", "Перекус", "Ужин"]:
-            var meal_count = previous.filter(func(e): return str(e.get("meal", "")) == prior_meal).size()
-            if meal_count == 0:
-                continue
-            _button(repeats, "Повторить весь " + prior_meal.to_lower() + " (" + str(meal_count) + ")", func():
-                var copied = store.repeat_meal(yesterday, prior_meal, date)
-                if copied > 0:
-                    _render()
-                    _notify_saved("Добавлено записей: " + str(copied))
-                else:
-                    _message("Не удалось скопировать приём пищи.")
-            , true)
-        var count = 0
-        for old in previous:
-            if count >= 8:
-                break
-            count += 1
-            var old_food = store.entry_food(old)
-            var rr = _soft_list_row(repeats)
-            var rl = _label(rr, str(old_food.get("name", "Продукт")) + " • " + str(old.get("grams", 0)) + " г", 13)
-            rl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-            _button(rr, "+", func():
-                if store.repeat_entry(old, date):
-                    _render()
-                    _notify_saved("Блюдо повторено")
-                else:
-                    _message("Не удалось повторить запись. Проверь сохранение.")
-            )
 
     var notes_card = _card("Заметка о дне")
     var notes = TextEdit.new()
@@ -2343,6 +2339,51 @@ func _show_settings() -> void:
             store.data["settings"] = previous_settings
             _message("Не удалось сохранить настройки. Прежние значения оставлены.")
     )
+    var portions_card = _card("Распределение калорий по приёмам пищи")
+    _label(portions_card, "Настрой свои ориентиры. Сумма четырёх процентов должна быть 100%.", 13, MUTED)
+    var original_shares: Array = store.meal_shares()
+    var portion_fields: Array = []
+    for i in range(StoreScript.MEAL_NAMES.size()):
+        var meal_row = _row(portions_card)
+        var meal_caption = _label(meal_row, str(StoreScript.MEAL_NAMES[i]), 14, INK)
+        meal_caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        var field = _number(meal_row, float(original_shares[i]), 0.0, 100.0, 5.0)
+        field.custom_minimum_size.x = 105
+        portion_fields.append(field)
+    var shares_preview = _label(portions_card, "", 13, TEXT_ACCENT)
+    var refresh_shares = func(_new_value: float):
+        var sum: int = 0
+        for field in portion_fields:
+            sum += roundi(field.value)
+        shares_preview.text = "Распределено: " + str(sum) + "% из 100%"
+        if sum != 100:
+            shares_preview.text += " · нужно ровно 100%"
+    for field in portion_fields:
+        field.value_changed.connect(refresh_shares)
+    refresh_shares.call(0.0)
+    _label(portions_card, "Пример при твоей норме " + str(roundi(kcal.value)) + " ккал: " +
+        "завтрак " + str(roundi(kcal.value * float(original_shares[0]) / 100.0)) +
+        " · обед " + str(roundi(kcal.value * float(original_shares[1]) / 100.0)) +
+        " · ужин " + str(roundi(kcal.value * float(original_shares[2]) / 100.0)) +
+        " · перекус " + str(roundi(kcal.value * float(original_shares[3]) / 100.0)), 12, MUTED)
+    _button(portions_card, "Сохранить распределение", func():
+        var next: Array = []
+        for field in portion_fields:
+            next.append(roundi(field.value))
+        if not StoreScript.valid_meal_shares(next):
+            _message("Сумма долей должна быть 100%, каждое число от 0 до 100.")
+            return
+        if store.set_meal_shares(next):
+            _render()
+            _notify_saved("Ориентиры по приёмам пищи сохранены")
+        else:
+            _message("Не удалось сохранить распределение.")
+    )
+    _button(portions_card, "Вернуть 25 / 35 / 30 / 10", func():
+        for i in range(portion_fields.size()):
+            portion_fields[i].value = float(StoreScript.DEFAULT_MEAL_SHARES[i])
+    , true)
+
     var appearance = _card("Оформление")
     _label(appearance, "Выбери тему — она сразу применится ко всем экранам.", 13, MUTED)
     _label(appearance, "Активная: " + AppearanceScript.name_for(current_theme), 14, TEXT_ACCENT)
