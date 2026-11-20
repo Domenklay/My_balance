@@ -49,6 +49,7 @@ func _run() -> void:
     personal_real["height"] = 170.0
     personal_real["weight"] = 88.0
     personal_real["goal_weight"] = 65.0
+    personal_real["goal"] = 0
     var real_estimate: Dictionary = Onboard.estimate(personal_real)
     if absf(float(real_estimate.get("bmr", 0)) - 1642) > 1 or \
             absf(float(real_estimate.get("maintenance", 0)) - 1970) > 1 or \
