@@ -23,6 +23,14 @@ var SECONDARY: Color = Color("#e8f3e9")
 var BACKGROUND: Color = Color("#f0f6f1")
 var CARD_BG: Color = Color("#ffffff")
 var HERO_BG: Color = Color("#123f36")
+var OVERVIEW_BG: Color = Color("#fffaf0")
+var ACTIVITY_BG: Color = Color("#e9effc")
+var TILE_BG: Color = Color("#f2f5fc")
+var NAV_ACTIVE: Color = Color("#42628a")
+var ACTIVITY_TEXT: Color = Color("#344a87")
+var PROTEIN_BG: Color = Color("#d9f0e5")
+var FAT_BG: Color = Color("#ffead0")
+var CARBS_BG: Color = Color("#e5e1fc")
 var TINT_BG: Color = Color("#eaf5e9")
 var ROW_BG: Color = Color("#f4f9f4")
 var HEADER_BG: Color = Color("#123f36")
@@ -122,6 +130,14 @@ func _apply_palette() -> void:
     HEADER_MUTED = Color(str(palette["head_muted"]))
     LOGO_BG = Color(str(palette["icon"]))
     HERO_BG = Color(str(palette["hero"]))
+    OVERVIEW_BG = Color(str(palette["overview"]))
+    ACTIVITY_BG = Color(str(palette["activity"]))
+    TILE_BG = Color(str(palette["tile"]))
+    NAV_ACTIVE = Color(str(palette["nav_active"]))
+    ACTIVITY_TEXT = Color(str(palette["activity_text"]))
+    PROTEIN_BG = Color(str(palette["protein_bg"]))
+    FAT_BG = Color(str(palette["fat_bg"]))
+    CARBS_BG = Color(str(palette["carbs_bg"]))
     HERO_MUTED = Color(str(palette["hero_muted"]))
     CHIP_BG = Color(str(palette["chip"]))
     CHIP_CAPTION = Color(str(palette["hero_muted"]))
@@ -129,9 +145,9 @@ func _apply_palette() -> void:
     HERO_FILL = Color(str(palette["fill"]))
     MINT = HERO_FILL
     TEXT_ACCENT = Color(str(palette["text_accent"]))
-    MACRO_PROTEIN = Color(str(palette["protein"]))
-    MACRO_FAT = Color(str(palette["fat"]))
-    MACRO_CARBS = Color(str(palette["carbs"]))
+    MACRO_PROTEIN = Color(str(palette["protein_text"]))
+    MACRO_FAT = Color(str(palette["fat_text"]))
+    MACRO_CARBS = Color(str(palette["carbs_text"]))
     CHART_GRID = Color(str(palette["grid"]))
     CHART_AREA = Color(str(palette["area"]))
     PATTERN_STYLE = str(palette["pattern"])
@@ -548,7 +564,17 @@ func _card(title: String, variant: String = "plain") -> VBoxContainer:
     panel.mouse_filter = Control.MOUSE_FILTER_PASS
     panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     var style = StyleBoxFlat.new()
-    style.bg_color = HERO_BG if variant == "hero" else (TINT_BG if variant == "tint" else CARD_BG)
+    match variant:
+        "hero":
+            style.bg_color = HERO_BG
+        "tint":
+            style.bg_color = TINT_BG
+        "overview":
+            style.bg_color = OVERVIEW_BG
+        "activity":
+            style.bg_color = ACTIVITY_BG
+        _:
+            style.bg_color = CARD_BG
     style.set_corner_radius_all(22)
     style.border_color = BORDER if variant == "plain" or HIGH_CONTRAST else style.bg_color
     style.set_border_width_all(2 if HIGH_CONTRAST else 1)
@@ -580,7 +606,15 @@ func _macro_chip(parent: Node, caption: String, value: float, tint: Color) -> vo
     panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
     panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     var style = StyleBoxFlat.new()
-    style.bg_color = CHIP_BG
+    match caption:
+        "БЕЛКИ":
+            style.bg_color = PROTEIN_BG
+        "ЖИРЫ":
+            style.bg_color = FAT_BG
+        "УГЛЕВОДЫ":
+            style.bg_color = CARBS_BG
+        _:
+            style.bg_color = CHIP_BG
     style.set_corner_radius_all(12)
     style.content_margin_left = 9
     style.content_margin_right = 7
@@ -591,7 +625,7 @@ func _macro_chip(parent: Node, caption: String, value: float, tint: Color) -> vo
     var content = VBoxContainer.new()
     content.add_theme_constant_override("separation", 3)
     panel.add_child(content)
-    _label(content, caption, 11, CHIP_CAPTION)
+    _label(content, caption, 11, tint)
     _label(content, str(roundi(value)) + " г", 19, tint)
 
 
@@ -707,9 +741,9 @@ func _update_tabs() -> void:
         var b: Button = tab_buttons[key]
         var active = key == tab or (key == "profile" and tab == "settings")
         var box_style = StyleBoxFlat.new()
-        box_style.bg_color = GREEN if active else CARD_BG
+        box_style.bg_color = NAV_ACTIVE if active else CARD_BG
         if HIGH_CONTRAST and active:
-            box_style.border_color = HERO_FILL
+            box_style.border_color = SOFT_GOLD
             box_style.set_border_width_all(2)
         box_style.set_corner_radius_all(14)
         for state in ["normal", "hover", "pressed"]:
@@ -739,7 +773,7 @@ func _metric_tile(parent: Node, value: String, caption: String, tone: Color = Co
     panel.mouse_filter = Control.MOUSE_FILTER_PASS
     panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     var style = StyleBoxFlat.new()
-    style.bg_color = PALE
+    style.bg_color = TILE_BG
     style.set_corner_radius_all(13)
     style.content_margin_left = 12
     style.content_margin_right = 12
@@ -1229,7 +1263,7 @@ func _show_food_search() -> void:
 
 
 func _show_day() -> void:
-    var overview = _card("Обзор дня")
+    var overview = _card("Обзор дня", "overview")
     _date_nav(overview)
     _button(overview, "▾  Скрыть календарь" if calendar_expanded else "▸  Открыть календарь", func():
         calendar_expanded = not calendar_expanded
@@ -1279,7 +1313,7 @@ func _show_day() -> void:
     _macro_chip(macros, "ЖИРЫ", store.day_macro(date, "f"), MACRO_FAT)
     _macro_chip(macros, "УГЛЕВОДЫ", store.day_macro(date, "c"), MACRO_CARBS)
 
-    var activity = _card("Движение сегодня")
+    var activity = _card("Движение сегодня", "activity")
     var walking = 0
     var exercise = 0
     for a in store.day_activities(date):
@@ -1288,8 +1322,8 @@ func _show_day() -> void:
         else:
             exercise += int(a.get("minutes", 0))
     var activity_stats = _row(activity)
-    _metric_tile(activity_stats, str(walking) + " мин", "Прогулки")
-    _metric_tile(activity_stats, str(exercise) + " мин", "Тренировки")
+    _metric_tile(activity_stats, str(walking) + " мин", "Прогулки", ACTIVITY_TEXT)
+    _metric_tile(activity_stats, str(exercise) + " мин", "Тренировки", ACTIVITY_TEXT)
     var shortcuts = _row(activity)
     _button(shortcuts, "+ Еда", func(): _jump_to_food())
     _button(shortcuts, "+ Спорт", func(): _navigate_to_tab("activity"), true)
