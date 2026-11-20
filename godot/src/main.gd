@@ -1376,7 +1376,10 @@ func _show_day() -> void:
         for entry in items:
             var f: Dictionary = store.entry_food(entry)
             var r = _soft_list_row(foods)
-            var caption = _label(r, str(f.get("name", "Продукт")) + "\n" + str(entry.get("grams", 0)) + " г • " + str(roundi(store.entry_kcal(entry))) + " ккал", 14)
+            var caption = _label(r, str(f.get("name", "Продукт")) + "\n" + str(entry.get("grams", 0)) +
+                " " + str(entry.get("unit", "г")) + " • " +
+                str(roundi(store.entry_kcal(entry))) + " ккал" +
+                (" · " + str(entry.get("portion_label", "")) if not str(entry.get("portion_label", "")).is_empty() else ""), 14)
             caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
             _button(r, "✎", func(): _edit_entry(entry), true)
             _button(r, "×", func(): _confirm_delete("Удалить запись питания?", func():
@@ -1651,7 +1654,10 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
     var fields: VBoxContainer = sheet["fields"]
     _label(fields, "Название", 13, MUTED)
     var name = _text_input(fields, "Название продукта", str(product.get("name", "")))
-    _label(fields, "Калории • на 100 г", 13, MUTED)
+    _label(fields, "Основа КБЖУ с этикетки", 13, MUTED)
+    var basis = _choice(fields, ["На 100 г", "На 100 мл"])
+    basis.select(1 if PortionMath.base_unit(product) == "мл" else 0)
+    _label(fields, "Калории • на 100 г / мл", 13, MUTED)
     var kcal = _number(fields, float(product.get("kcal", 0)), 0, 1000, 0.1)
     _label(fields, "Белки • Жиры • Углеводы на 100 г", 13, MUTED)
     var nutrition_row = _row(fields)
@@ -1674,6 +1680,7 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
         record["p"] = protein.value
         record["f"] = fat.value
         record["c"] = carbs.value
+        record["nutrition_unit"] = "мл" if basis.selected == 1 else "г"
         if record["name"].is_empty():
             _sheet_error(sheet, "Укажи название товара.")
             return
@@ -1889,7 +1896,7 @@ func _food_form(parent: VBoxContainer) -> void:
     var picker = _choice(parent, [])
     _label(parent, "Категория", 13, MUTED)
     var category = _choice(parent, ["Все", "Базовые", "Брендовые", "Мои продукты", "Избранное"])
-    _label(parent, "Вес порции, г", 14, MUTED)
+    _label(parent, "Количество, г или мл — согласно продукту", 14, MUTED)
     var values = _row(parent)
     var grams = _number(values, 100, 1, 5000)
     grams.custom_minimum_size.x = 160
@@ -1915,6 +1922,10 @@ func _food_form(parent: VBoxContainer) -> void:
         else:
             _message("Не удалось сохранить избранное.")
     )
+    _button(controls, "Выбрать порцию", func():
+        if picker.selected >= 0 and picker.selected < filtered.size():
+            _quick_food_sheet(filtered[picker.selected])
+    , true)
     _button(controls, "+ Добавить", func():
         if picker.selected < 0 or picker.selected >= filtered.size():
             _message("Выбери продукт. При необходимости отключи фильтр избранного.")
@@ -2024,6 +2035,7 @@ func _rebuild_food_results(results_box: VBoxContainer, filtered: Array,
             " ккал / 100 г · Б " + str(snappedf(float(item.get("p", 0)), 0.1)) +
             " Ж " + str(snappedf(float(item.get("f", 0)), 0.1)) +
             " У " + str(snappedf(float(item.get("c", 0)), 0.1)), 11, MUTED)
+        _button(row, "Порция", func(): _quick_food_sheet(item), true)
         _button(row, "+", func():
             if store.add_food_entry(item, grams.value, meal.get_item_text(meal.selected), date):
                 added_count.set_meta("count", int(added_count.get_meta("count", 0)) + 1)
@@ -2042,7 +2054,7 @@ func _update_food_preview(picker: OptionButton, filtered: Array, grams: SpinBox,
         return
     var f: Dictionary = filtered[picker.selected]
     var amount = grams.value / 100.0
-    preview.text = str(roundi(float(f.get("kcal", 0)) * amount)) + " ккал  •  Б " + str(snappedf(float(f.get("p", 0)) * amount, 0.1)) + "  Ж " + str(snappedf(float(f.get("f", 0)) * amount, 0.1)) + "  У " + str(snappedf(float(f.get("c", 0)) * amount, 0.1))
+    preview.text = str(grams.value) + " " + PortionMath.base_unit(f) + " · " + str(roundi(float(f.get("kcal", 0)) * amount)) + " ккал  •  Б " + str(snappedf(float(f.get("p", 0)) * amount, 0.1)) + "  Ж " + str(snappedf(float(f.get("f", 0)) * amount, 0.1)) + "  У " + str(snappedf(float(f.get("c", 0)) * amount, 0.1))
     star.disabled = false
     star.text = "★ В избранном" if store.is_favorite(str(f.get("id", ""))) else "☆ В избранное"
 
@@ -2057,7 +2069,7 @@ func _edit_entry(entry: Dictionary) -> void:
         if str(available[i].get("id", "")) == current_id:
             selector.select(i)
             break
-    _label(fields, "Количество, г", 13, MUTED)
+    _label(fields, "Количество, г или мл (согласно выбранному продукту)", 13, MUTED)
     var grams = _number(fields, float(entry.get("grams", 100)), 1, 5000)
     _label(fields, "Приём пищи", 13, MUTED)
     var meals = ["Завтрак", "Обед", "Перекус", "Ужин"]
@@ -2076,6 +2088,8 @@ func _edit_entry(entry: Dictionary) -> void:
         entry["nutrition"] = {"name": product["name"], "kcal": product["kcal"],
             "p": product["p"], "f": product["f"], "c": product["c"]}
         entry["grams"] = grams.value
+        entry["unit"] = PortionMath.base_unit(product)
+        entry["portion_label"] = ""
         entry["meal"] = meals[meal.selected]
         if not store.save():
             entry.clear()
@@ -2347,7 +2361,9 @@ func _show_my_foods() -> void:
     var custom_barcode = _text_input(foods_card, "Штрихкод, 8–14 цифр (необязательно)")
     custom_barcode.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
     custom_barcode.max_length = 14
-    _label(foods_card, "Калории на 100 г / мл", 13, MUTED)
+    _label(foods_card, "Основа КБЖУ с упаковки", 13, MUTED)
+    var basis = _choice(foods_card, ["На 100 г", "На 100 мл"])
+    _label(foods_card, "Калории на выбранные 100 единиц", 13, MUTED)
     var k = _number(foods_card, 100, 0, 1000, 0.1)
     _label(foods_card, "Белки · Жиры · Углеводы", 13, MUTED)
     var r = _row(foods_card)
@@ -2362,7 +2378,8 @@ func _show_my_foods() -> void:
         var record = {
             "id": "u" + str(Time.get_ticks_usec()), "name": name.text.strip_edges(),
             "kcal": k.value, "p": p.value, "f": f.value, "c": c.value,
-            "source": "Пользователь"
+            "source": "Пользователь",
+            "nutrition_unit": "мл" if basis.selected == 1 else "г"
         }
         if not barcode.is_empty():
             if BarcodeScript.normalize_code(barcode).is_empty():
@@ -2426,7 +2443,7 @@ func _show_my_foods() -> void:
 
 
 func _edit_custom_food(food: Dictionary) -> void:
-    var sheet = _mobile_sheet("Редактировать продукт", "На 100 г. Ранее внесённые блюда сохранят свои КБЖУ.", "Сохранить", 540.0)
+    var sheet = _mobile_sheet("Редактировать продукт", "КБЖУ на 100 г или 100 мл. Исторические записи останутся прежними.", "Сохранить", 620.0)
     var fields: VBoxContainer = sheet["fields"]
     _label(fields, "Название", 13, MUTED)
     var name = _text_input(fields, "Название", str(food.get("name", "")))
@@ -2434,7 +2451,10 @@ func _edit_custom_food(food: Dictionary) -> void:
     var code = _text_input(fields, "EAN / UPC", str(food.get("barcode", "")))
     code.max_length = 14
     code.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
-    _label(fields, "Калории на 100 г", 13, MUTED)
+    _label(fields, "Основа пищевой ценности", 13, MUTED)
+    var basis = _choice(fields, ["На 100 г", "На 100 мл"])
+    basis.select(1 if PortionMath.base_unit(food) == "мл" else 0)
+    _label(fields, "Калории на 100 г / мл", 13, MUTED)
     var kcal = _number(fields, float(food.get("kcal", 0)), 0, 1000, 0.1)
     _label(fields, "Белки • Жиры • Углеводы на 100 г", 13, MUTED)
     var nutrition_row = _row(fields)
@@ -2444,7 +2464,8 @@ func _edit_custom_food(food: Dictionary) -> void:
     var confirm: Button = sheet["confirm"]
     confirm.pressed.connect(func():
         var changes = {"name": name.text.strip_edges(), "barcode": code.text.strip_edges(),
-            "kcal": kcal.value, "p": p.value, "f": f.value, "c": c.value}
+            "kcal": kcal.value, "p": p.value, "f": f.value, "c": c.value,
+            "nutrition_unit": "мл" if basis.selected == 1 else "г"}
         if store.update_custom_food(str(food.get("id", "")), changes):
             var root_control: Control = sheet["root"]
             root_control.queue_free()
