@@ -365,6 +365,10 @@ func import_json(raw: String, persist: bool = true) -> bool:
             return false
         if float(grams) <= 0.0 or float(grams) > 5000.0:
             return false
+        if str(entry.get("unit", "г")) not in ["г", "мл"]:
+            return false
+        if str(entry.get("portion_label", "")).length() > 36:
+            return false
     var original_data = data
     data = obj
     if persist and not save():
@@ -595,6 +599,7 @@ func add_food_entry(food: Dictionary, grams: float, meal: String, day: String,
         "date": day,
         "food": str(food.get("id", "")),
         "nutrition": {
+            "nutrition_unit": base_unit,
             "name": str(food.get("name", "")),
             "kcal": float(food.get("kcal", 0)),
             "p": float(food.get("p", 0)),
@@ -752,6 +757,8 @@ func save_meal_template(source_date: String, meal: String, title: String) -> boo
             "food": str(entry.get("food", "")),
             "meal": meal,
             "grams": float(entry["grams"]),
+            "unit": str(entry.get("unit", "г")),
+            "portion_label": str(entry.get("portion_label", "")),
             "nutrition": snapshot.duplicate(true)
         })
     var record = {
@@ -777,6 +784,8 @@ func apply_meal_template(template_id: String, destination_date: String) -> int:
                 "food": str(item.get("food", "")),
                 "meal": str(item["meal"]),
                 "grams": float(item["grams"]),
+                "unit": str(item.get("unit", "г")),
+                "portion_label": str(item.get("portion_label", "")),
                 "nutrition": item["nutrition"].duplicate(true)
             })
         data["entries"].append_array(created)
