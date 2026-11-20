@@ -69,6 +69,37 @@ func _run() -> void:
     if store.repeat_meal("2026-11-19", "Ужин", "2026-11-20") != 0:
         _fail("empty meal duplicated")
         return
+    if not store.save_meal_template("2026-11-19", "Обед", "Любимый обед"):
+        _fail("could not save meal template")
+        return
+    if store.data["meal_templates"].size() != 1:
+        _fail("meal template not persisted in data")
+        return
+    var template_id = str(store.data["meal_templates"][0]["id"])
+    if store.apply_meal_template(template_id, "2026-11-21") != 1:
+        _fail("could not apply meal template")
+        return
+    if absf(store.day_calories("2026-11-21") - 355.0) > 0.01:
+        _fail("meal template nutrition snapshot changed")
+        return
+    var after_template = StoreScript.new()
+    if after_template.data["meal_templates"].size() != 1:
+        _fail("meal template did not survive app restart")
+        return
+    if not store.delete_meal_template(template_id) or store.data["meal_templates"].size() != 0:
+        _fail("cannot delete meal template")
+        return
+    if absf(store.day_calories("2026-11-21") - 355.0) > 0.01:
+        _fail("deleting meal template changed diary history")
+        return
+    var recent = store.recent_foods(3)
+    if recent.is_empty() or recent.size() > 3:
+        _fail("recent foods not derived from diary")
+        return
+    var frequent = store.frequent_foods(3)
+    if frequent.is_empty() or frequent.size() > 3:
+        _fail("frequent foods not derived from diary")
+        return
     var saved_kcal = store.day_calories("2026-11-19")
     if absf(saved_kcal - 355.0) > 0.01:
         _fail("recipe snapshot calorie calculation wrong")
