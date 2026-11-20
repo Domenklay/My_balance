@@ -10,6 +10,7 @@ const RecipeMath = preload("res://src/recipe_math.gd")
 const PortionMath = preload("res://src/portion_math.gd")
 const RewardsScript = preload("res://src/rewards.gd")
 const ProfilePhotoScript = preload("res://src/profile_photo.gd")
+const OnboardingMath = preload("res://src/onboarding_math.gd")
 
 const MEAL_NAMES = ["Завтрак", "Обед", "Ужин", "Перекус"]
 const DEFAULT_MEAL_SHARES = [25, 35, 30, 10]
@@ -128,7 +129,8 @@ func _is_barcode(code: String) -> bool:
 func default_data() -> Dictionary:
     return {
         "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true, "high_contrast": false,
-            "meal_shares": DEFAULT_MEAL_SHARES.duplicate()},
+            "meal_shares": DEFAULT_MEAL_SHARES.duplicate(), "onboarding_complete": false,
+            "personal": {}},
         "foods": [], "entries": [], "activities": [], "weights": [], "notes": {}, "favorites": [],
         "recipes": [], "meal_templates": [], "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
             "photo": "", "frame": "plain"}
@@ -174,6 +176,29 @@ func meal_summary(day: String, meal: String) -> Dictionary:
         for nutrient in ["kcal", "p", "f", "c"]:
             result[nutrient] = float(result[nutrient]) + float(food.get(nutrient, 0.0)) * ratio
     return result
+
+func needs_onboarding() -> bool:
+    return not bool(data.get("settings", {}).get("onboarding_complete", false))
+
+func complete_onboarding(personal: Dictionary, calories: float) -> bool:
+    if not OnboardingMath.valid_details(personal):
+        return false
+    if not is_finite(calories) or calories < 1000.0 or calories > 5000.0:
+        return false
+    var old_settings: Dictionary = data["settings"].duplicate(true)
+    var old_profile: Dictionary = data["profile"].duplicate(true)
+    var settings: Dictionary = data["settings"]
+    settings["personal"] = personal.duplicate(true)
+    settings["onboarding_complete"] = true
+    settings["kcal"] = roundi(calories)
+    settings["start"] = float(personal["weight"])
+    settings["goal"] = float(personal["goal_weight"])
+    data["profile"]["name"] = str(personal["name"]).strip_edges()
+    if save():
+        return true
+    data["settings"] = old_settings
+    data["profile"] = old_profile
+    return false
 
 func save() -> bool:
     var serialized = JSON.stringify(data)
@@ -410,6 +435,18 @@ func import_json(raw: String, persist: bool = true) -> bool:
             return false
         ids[recipe_id] = true
     var settings: Dictionary = obj["settings"]
+    # Backups created before 0.7.9 already represent an established diary.
+    # Never show a first-run form to people installing an update.
+    if not settings.has("onboarding_complete"):
+        settings["onboarding_complete"] = true
+    if not (settings["onboarding_complete"] is bool):
+        return false
+    if not settings.has("personal"):
+        settings["personal"] = {}
+    if not (settings["personal"] is Dictionary):
+        return false
+    if not settings["personal"].is_empty() and not OnboardingMath.valid_details(settings["personal"]):
+        return false
     if not (settings.has("kcal") and settings.has("start") and settings.has("goal")):
         return false
     for name in ["kcal", "start", "goal"]:
