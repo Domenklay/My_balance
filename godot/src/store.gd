@@ -9,6 +9,9 @@ const BarcodeScript = preload("res://src/barcode_lookup.gd")
 const RecipeMath = preload("res://src/recipe_math.gd")
 const PortionMath = preload("res://src/portion_math.gd")
 
+const MEAL_NAMES = ["Завтрак", "Обед", "Ужин", "Перекус"]
+const DEFAULT_MEAL_SHARES = [25, 35, 30, 10]
+
 const DEFAULT_PRODUCTS = [
     ["Овсяные хлопья (сухие)",370,13,7,62],
     ["Молоко 2%",50,3.2,2,4.8],
@@ -122,10 +125,49 @@ func _is_barcode(code: String) -> bool:
 
 func default_data() -> Dictionary:
     return {
-        "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true, "high_contrast": false},
+        "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true, "high_contrast": false,
+            "meal_shares": DEFAULT_MEAL_SHARES.duplicate()},
         "foods": [], "entries": [], "activities": [], "weights": [], "notes": {}, "favorites": [],
         "recipes": [], "meal_templates": [], "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат"}
     }
+
+static func valid_meal_shares(value: Variant) -> bool:
+    if not (value is Array) or value.size() != 4:
+        return false
+    var total = 0
+    for share in value:
+        if not (share is int) or share < 0 or share > 100:
+            return false
+        total += share
+    return total == 100
+
+func meal_shares() -> Array:
+    var saved = data.get("settings", {}).get("meal_shares", DEFAULT_MEAL_SHARES)
+    return saved.duplicate() if valid_meal_shares(saved) else DEFAULT_MEAL_SHARES.duplicate()
+
+func set_meal_shares(shares: Array) -> bool:
+    if not valid_meal_shares(shares):
+        return false
+    var old: Dictionary = data["settings"].duplicate(true)
+    data["settings"]["meal_shares"] = shares.duplicate()
+    if save():
+        return true
+    data["settings"] = old
+    return false
+
+func meal_summary(day: String, meal: String) -> Dictionary:
+    var result: Dictionary = {"kcal": 0.0, "p": 0.0, "f": 0.0, "c": 0.0, "count": 0}
+    if meal not in MEAL_NAMES:
+        return result
+    for entry in day_entries(day):
+        if str(entry.get("meal", "")) != meal:
+            continue
+        result["count"] = int(result["count"]) + 1
+        var food: Dictionary = entry_food(entry)
+        var ratio = float(entry.get("grams", 0.0)) / 100.0
+        for nutrient in ["kcal", "p", "f", "c"]:
+            result[nutrient] = float(result[nutrient]) + float(food.get(nutrient, 0.0)) * ratio
+    return result
 
 func save() -> bool:
     var serialized = JSON.stringify(data)
@@ -339,6 +381,10 @@ func import_json(raw: String, persist: bool = true) -> bool:
     if float(settings["start"]) < 20.0 or float(settings["start"]) > 400.0:
         return false
     if float(settings["goal"]) < 20.0 or float(settings["goal"]) > 400.0:
+        return false
+    if not settings.has("meal_shares"):
+        settings["meal_shares"] = DEFAULT_MEAL_SHARES.duplicate()
+    if not valid_meal_shares(settings["meal_shares"]):
         return false
     # Older diary backups predate appearance controls; import them unchanged
     # and fill in safe defaults. Unknown themes are never applied.
