@@ -42,6 +42,11 @@ func _run() -> void:
         _fail("valid calorie shares were rejected")
         return
     var readback = StoreScript.new()
+    print("MEAL DEBUG save=", store.data["settings"]["meal_shares"],
+        " loaded=", readback.data["settings"].get("meal_shares", "absent"),
+        " validated=", StoreScript.valid_meal_shares(readback.data["settings"].get("meal_shares", [])),
+        " import=", readback.import_json(store.export_json(), false))
+    print("MEAL DEBUG after import=", readback.meal_shares())
     if readback.meal_shares() != [20, 40, 30, 10]:
         _fail("distribution was not saved or loaded")
         return
