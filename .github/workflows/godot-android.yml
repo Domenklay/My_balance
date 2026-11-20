@@ -101,6 +101,8 @@ jobs:
         run: /tmp/godot --headless --path godot --script res://tests/theme_test.gd
       - name: Test recipe calculations, history and personal profile
         run: /tmp/godot --headless --path godot --script res://tests/recipe_profile_test.gd
+      - name: Test first-launch questionnaire, calorie estimate, legacy update and manual override
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/onboarding_test.gd
       - name: Test positive rewards, achievement frames, image avatar and JSON migration
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/rewards_avatar_test.gd
       - name: Test food search, favorites and quick-add UI
