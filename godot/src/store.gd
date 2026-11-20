@@ -123,7 +123,7 @@ func default_data() -> Dictionary:
     return {
         "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true},
         "foods": [], "entries": [], "activities": [], "weights": [], "notes": {}, "favorites": [],
-        "recipes": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат"}
+        "recipes": [], "meal_templates": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат"}
     }
 
 func save() -> bool:
@@ -265,6 +265,39 @@ func import_json(raw: String, persist: bool = true) -> bool:
         obj["profile"] = {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат"}
     if not obj.has("favorites"):
         obj["favorites"] = []
+    if not obj.has("meal_templates"):
+        obj["meal_templates"] = []
+    if not (obj["meal_templates"] is Array) or obj["meal_templates"].size() > 100:
+        return false
+    var template_ids: Dictionary = {}
+    for template in obj["meal_templates"]:
+        if not (template is Dictionary):
+            return false
+        if not (template.get("id") is String and template.get("name") is String and template.get("items") is Array):
+            return false
+        var template_id: String = template["id"]
+        if template_id.is_empty() or template_id.length() > 100 or template_ids.has(template_id):
+            return false
+        template_ids[template_id] = true
+        if template["name"].strip_edges().is_empty() or template["name"].length() > 70:
+            return false
+        if template["items"].is_empty() or template["items"].size() > 30:
+            return false
+        for item in template["items"]:
+            if not (item is Dictionary and item.get("nutrition") is Dictionary):
+                return false
+            if str(item.get("meal", "")) not in ["Завтрак", "Обед", "Перекус", "Ужин"]:
+                return false
+            var grams = item.get("grams", 0)
+            if not (grams is float or grams is int) or not is_finite(float(grams)) or float(grams) <= 0.0 or float(grams) > 5000.0:
+                return false
+            var nutrition: Dictionary = item["nutrition"]
+            if not (nutrition.get("name") is String) or nutrition["name"].is_empty() or nutrition["name"].length() > 160:
+                return false
+            for nutrient in ["kcal", "p", "f", "c"]:
+                var n = nutrition.get(nutrient)
+                if not (n is float or n is int) or not is_finite(float(n)) or float(n) < 0.0 or float(n) > (1000.0 if nutrient == "kcal" else 100.0):
+                    return false
     if not (obj["favorites"] is Array) or obj["favorites"].size() > 500:
         return false
     for id in obj["favorites"]:
@@ -651,6 +684,75 @@ func repeat_meal(source_date: String, meal: String, destination_date: String) ->
     for entry in duplicates:
         data["entries"].erase(entry)
     return 0
+
+# Meal templates store a snapshot of each item's nutrition, independent of
+# later edits or deletion of source foods and recipes.
+func save_meal_template(source_date: String, meal: String, title: String) -> bool:
+    var name = title.strip_edges()
+    if name.is_empty() or name.length() > 70 or data["meal_templates"].size() >= 100:
+        return false
+    if meal not in ["Завтрак", "Обед", "Перекус", "Ужин"]:
+        return false
+    var source: Array = day_entries(source_date).filter(
+        func(e): return str(e.get("meal", "")) == meal
+    )
+    if source.is_empty() or source.size() > 30:
+        return false
+    var items: Array = []
+    for entry in source:
+        var snapshot: Dictionary = entry_food(entry)
+        if snapshot.is_empty():
+            return false
+        items.append({
+            "food": str(entry.get("food", "")),
+            "meal": meal,
+            "grams": float(entry["grams"]),
+            "nutrition": snapshot.duplicate(true)
+        })
+    var record = {
+        "id": "template_" + str(Time.get_ticks_usec()) + "_" + str(data["meal_templates"].size()),
+        "name": name,
+        "items": items
+    }
+    data["meal_templates"].append(record)
+    if save():
+        return true
+    data["meal_templates"].erase(record)
+    return false
+
+func apply_meal_template(template_id: String, destination_date: String) -> int:
+    for template in data["meal_templates"]:
+        if str(template.get("id", "")) != template_id:
+            continue
+        var created: Array = []
+        for item in template["items"]:
+            created.append({
+                "id": "template_entry_" + str(Time.get_ticks_usec()) + "_" + str(data["entries"].size() + created.size()),
+                "date": destination_date,
+                "food": str(item.get("food", "")),
+                "meal": str(item["meal"]),
+                "grams": float(item["grams"]),
+                "nutrition": item["nutrition"].duplicate(true)
+            })
+        data["entries"].append_array(created)
+        if save():
+            return created.size()
+        for record in created:
+            data["entries"].erase(record)
+        return 0
+    return 0
+
+func delete_meal_template(template_id: String) -> bool:
+    for i in range(data["meal_templates"].size()):
+        if str(data["meal_templates"][i].get("id", "")) != template_id:
+            continue
+        var record = data["meal_templates"][i]
+        data["meal_templates"].remove_at(i)
+        if save():
+            return true
+        data["meal_templates"].insert(i, record)
+        return false
+    return false
 
 func food_by_id(id: String) -> Dictionary:
     for f in all_foods():
