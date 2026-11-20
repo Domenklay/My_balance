@@ -7,6 +7,7 @@ const OFFLINE_CATALOG_PATH = "res://data/barcode_catalog.json"
 const UPDATE_CATALOG_PATH = "user://barcode_catalog_verified.json"
 const BarcodeScript = preload("res://src/barcode_lookup.gd")
 const RecipeMath = preload("res://src/recipe_math.gd")
+const PortionMath = preload("res://src/portion_math.gd")
 
 const DEFAULT_PRODUCTS = [
     ["Овсяные хлопья (сухие)",370,13,7,62],
@@ -123,7 +124,7 @@ func default_data() -> Dictionary:
     return {
         "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true, "high_contrast": false},
         "foods": [], "entries": [], "activities": [], "weights": [], "notes": {}, "favorites": [],
-        "recipes": [], "meal_templates": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат"}
+        "recipes": [], "meal_templates": [], "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат"}
     }
 
 func save() -> bool:
@@ -265,6 +266,15 @@ func import_json(raw: String, persist: bool = true) -> bool:
         obj["profile"] = {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат"}
     if not obj.has("favorites"):
         obj["favorites"] = []
+    if not obj.has("food_portions"):
+        obj["food_portions"] = []
+    if not (obj["food_portions"] is Array) or obj["food_portions"].size() > 500:
+        return false
+    var portion_ids: Dictionary = {}
+    for portion in obj["food_portions"]:
+        if not PortionMath.valid_portion(portion) or portion_ids.has(str(portion["id"])):
+            return false
+        portion_ids[str(portion["id"])] = true
     if not obj.has("meal_templates"):
         obj["meal_templates"] = []
     if not (obj["meal_templates"] is Array) or obj["meal_templates"].size() > 100:
@@ -481,6 +491,8 @@ func save_barcode_food(details: Dictionary) -> String:
     var barcode = str(details.get("barcode", ""))
     if not _is_barcode(barcode):
         return ""
+    if str(details.get("nutrition_unit", "г")) not in ["г", "мл"]:
+        return ""
     for field in ["name", "kcal", "p", "f", "c"]:
         if not details.has(field):
             return ""
@@ -504,6 +516,14 @@ func save_barcode_food(details: Dictionary) -> String:
         for field in ["kcal", "p", "f", "c"]:
             saved[field] = nutrients[field]
         saved["source"] = str(details.get("source", "Пользователь"))
+        if str(saved.get("nutrition_unit", "г")) != str(details.get("nutrition_unit", "г")):
+            # Existing custom sizes refer to a defined measurement basis.
+            for portion in data["food_portions"]:
+                if str(portion.get("food_id", "")) == str(saved.get("id", "")):
+                    saved.clear()
+                    saved.merge(previous, true)
+                    return ""
+        saved["nutrition_unit"] = str(details.get("nutrition_unit", "г"))
         if save():
             return str(saved.get("id", ""))
         saved.clear()
@@ -517,7 +537,8 @@ func save_barcode_food(details: Dictionary) -> String:
         "p": nutrients["p"],
         "f": nutrients["f"],
         "c": nutrients["c"],
-        "source": str(details.get("source", "Пользователь"))
+        "source": str(details.get("source", "Пользователь")),
+        "nutrition_unit": str(details.get("nutrition_unit", "г"))
     }
     data["foods"].append(item)
     if not save():
@@ -529,6 +550,8 @@ func save_barcode_food(details: Dictionary) -> String:
 func add_custom_food_without_barcode(food: Dictionary) -> bool:
     var name = str(food.get("name", "")).strip_edges()
     if name.is_empty() or name.length() > 160:
+        return false
+    if str(food.get("nutrition_unit", "г")) not in ["г", "мл"]:
         return false
     var item = food.duplicate(true)
     item.erase("barcode")
@@ -560,9 +583,13 @@ func delete_saved_record(collection: String, record: Dictionary) -> bool:
     records.insert(index, record)
     return false
 
-func add_food_entry(food: Dictionary, grams: float, meal: String, day: String) -> bool:
-    if food.is_empty() or grams <= 0.0 or grams > 5000.0:
+func add_food_entry(food: Dictionary, grams: float, meal: String, day: String,
+        portion_label: String = "") -> bool:
+    if food.is_empty() or not is_finite(grams) or grams <= 0.0 or grams > 5000.0:
         return false
+    if meal not in ["Завтрак", "Обед", "Перекус", "Ужин"] or portion_label.length() > 36:
+        return false
+    var base_unit: String = PortionMath.base_unit(food)
     var entry = {
         "id": str(Time.get_ticks_usec()) + "_" + str(data["entries"].size()),
         "date": day,
@@ -575,6 +602,8 @@ func add_food_entry(food: Dictionary, grams: float, meal: String, day: String) -
             "c": float(food.get("c", 0))
         },
         "grams": grams,
+        "unit": base_unit,
+        "portion_label": portion_label,
         "meal": meal
     }
     data["entries"].append(entry)
@@ -586,6 +615,9 @@ func add_food_entry(food: Dictionary, grams: float, meal: String, day: String) -
 func update_custom_food(id: String, changes: Dictionary) -> bool:
     var name = str(changes.get("name", "")).strip_edges()
     if name.is_empty() or name.length() > 160:
+        return false
+    var base_unit = str(changes.get("nutrition_unit", "г"))
+    if base_unit not in ["г", "мл"]:
         return false
     var code = str(changes.get("barcode", "")).strip_edges()
     if not code.is_empty() and not _is_barcode(code):
@@ -606,9 +638,14 @@ func update_custom_food(id: String, changes: Dictionary) -> bool:
     for food in data["foods"]:
         if not (food is Dictionary) or str(food.get("id", "")) != id:
             continue
+        if str(food.get("nutrition_unit", "г")) != base_unit:
+            for portion in data["food_portions"]:
+                if str(portion.get("food_id", "")) == id:
+                    return false
         var old = food.duplicate(true)
         for key in ["name", "kcal", "p", "f", "c"]:
             food[key] = changes[key]
+        food["nutrition_unit"] = base_unit
         if code.is_empty():
             food.erase("barcode")
         else:
@@ -630,12 +667,15 @@ func delete_custom_food(id: String) -> bool:
         return false
     var original = data["foods"].duplicate(true)
     var previous_favorites = data["favorites"].duplicate()
+    var previous_portions = data["food_portions"].duplicate(true)
+    data["food_portions"] = data["food_portions"].filter(func(p): return str(p.get("food_id", "")) != id)
     data["foods"].erase(found)
     data["favorites"].erase(id)
     if save():
         return true
     data["foods"] = original
     data["favorites"] = previous_favorites
+    data["food_portions"] = previous_portions
     return false
 
 func is_favorite(food_id: String) -> bool:
@@ -757,6 +797,46 @@ func delete_meal_template(template_id: String) -> bool:
             return true
         data["meal_templates"].insert(i, record)
         return false
+    return false
+
+func portion_options(food: Dictionary) -> Array:
+    return PortionMath.options(food, data["food_portions"])
+
+func save_food_portion(food_id: String, label: String, amount: float) -> bool:
+    var food: Dictionary = food_by_id(food_id)
+    var title = label.strip_edges()
+    if food.is_empty() or title.is_empty() or data["food_portions"].size() >= 500:
+        return false
+    var existing_count = 0
+    for p in data["food_portions"]:
+        if str(p.get("food_id", "")) == food_id:
+            existing_count += 1
+            if str(p.get("label", "")).to_lower() == title.to_lower():
+                return false
+    if existing_count >= 12:
+        return false
+    var record: Dictionary = {
+        "id": "size_" + str(Time.get_ticks_usec()) + "_" + str(data["food_portions"].size()),
+        "food_id": food_id, "label": title, "amount": amount,
+        "unit": PortionMath.base_unit(food)
+    }
+    if not PortionMath.valid_portion(record):
+        return false
+    data["food_portions"].append(record)
+    if save():
+        return true
+    data["food_portions"].erase(record)
+    return false
+
+func delete_food_portion(portion_id: String) -> bool:
+    for i in range(data["food_portions"].size()):
+        if str(data["food_portions"][i].get("id", "")) == portion_id:
+            var old = data["food_portions"][i]
+            data["food_portions"].remove_at(i)
+            if save():
+                return true
+            data["food_portions"].insert(i, old)
+            return false
     return false
 
 func food_by_id(id: String) -> Dictionary:
