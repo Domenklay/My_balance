@@ -70,6 +70,35 @@ func _run() -> void:
             return
         print("PASS THEME: " + id + " background/card/nav/ornament")
 
+    # Check both contrast modes for each existing theme. Keep the chosen
+    # theme and contrast setting independent from one another.
+    app._toggle_high_contrast()
+    await process_frame
+    if not app.HIGH_CONTRAST or not bool(app.store.data["settings"]["high_contrast"]):
+        _fail("high contrast toggle was not persisted")
+        return
+    for selected_theme in AppearanceScript.ORDER:
+        var id: String = str(selected_theme)
+        app._choose_theme(id)
+        await process_frame
+        var high: Dictionary = AppearanceScript.palette(id, true)
+        if app.BACKGROUND != Color(str(high["background"])) or app.INK != Color(str(high["ink"])):
+            _fail("high contrast palette was not applied to " + id)
+            return
+        if not app.HIGH_CONTRAST or not bool(app.store.data["settings"]["high_contrast"]):
+            _fail("switching theme reset high contrast")
+            return
+        var normal: Dictionary = AppearanceScript.palette(id)
+        if str(high["background"]) == str(normal["background"]) or str(high["border"]) == str(normal["border"]):
+            _fail("high contrast must visibly separate cards/inputs for " + id)
+            return
+    app.tab = "settings"
+    app.settings_page = "main"
+    app._render()
+    await process_frame
+    if _find_button(app, "Контраст: повышенный") == null:
+        _fail("contrast control missing from settings")
+        return
     app._choose_theme("dark")
     app._toggle_patterns()
     await process_frame
@@ -86,21 +115,22 @@ func _run() -> void:
         return
     save_settings.pressed.emit()
     await process_frame
-    if str(app.store.data["settings"]["theme"]) != "dark" or bool(app.store.data["settings"]["patterns"]):
+    if str(app.store.data["settings"]["theme"]) != "dark" or bool(app.store.data["settings"]["patterns"]) or not bool(app.store.data["settings"]["high_contrast"]):
         _fail("updating personal goals erased appearance settings")
         return
     var persistent = StoreScript.new()
-    if str(persistent.data["settings"]["theme"]) != "dark" or bool(persistent.data["settings"]["patterns"]):
+    if str(persistent.data["settings"]["theme"]) != "dark" or bool(persistent.data["settings"]["patterns"]) or not bool(persistent.data["settings"]["high_contrast"]):
         _fail("dark theme or pattern toggle did not survive relaunch")
         return
 
     var old_backup = persistent.data.duplicate(true)
     old_backup["settings"].erase("theme")
     old_backup["settings"].erase("patterns")
+    old_backup["settings"].erase("high_contrast")
     if not persistent.import_json(JSON.stringify(old_backup)):
         _fail("legacy JSON backup cannot be imported")
         return
-    if str(persistent.data["settings"]["theme"]) != "forest" or not bool(persistent.data["settings"]["patterns"]):
+    if str(persistent.data["settings"]["theme"]) != "forest" or not bool(persistent.data["settings"]["patterns"]) or bool(persistent.data["settings"]["high_contrast"]):
         _fail("legacy JSON lacked safe default visual settings")
         return
     var invalid = persistent.data.duplicate(true)
@@ -108,6 +138,11 @@ func _run() -> void:
     if persistent.import_json(JSON.stringify(invalid)):
         _fail("unsupported theme name was accepted from backup")
         return
-    print("PASS THEME: four palettes, dark persistence, toggle, legacy import and settings safety")
+    var bad_contrast = persistent.data.duplicate(true)
+    bad_contrast["settings"]["high_contrast"] = "true"
+    if persistent.import_json(JSON.stringify(bad_contrast)):
+        _fail("nonboolean contrast setting accepted")
+        return
+    print("PASS THEME: four palettes, both contrast modes, persistence, migration and settings safety")
     app.queue_free()
     quit(0)
