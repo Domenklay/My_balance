@@ -1367,6 +1367,7 @@ func _show_day() -> void:
                 ), true)
 
     var activity = _card("Движение сегодня", "activity")
+    activity.get_parent().name = "DailyActivity"
     var walking = 0
     var exercise = 0
     for a in store.day_activities(date):
