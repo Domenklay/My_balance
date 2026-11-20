@@ -58,12 +58,82 @@ const HIGH_OVERRIDES = {
     }
 }
 
+# A richer, themed color system: neutral surfaces, contrasting section cards,
+# and distinctly colored nutrition tiles. Kept separate from contrast settings.
+const COLOR_VARIANTS = {
+    "forest": {
+        "background":"#edf1ee", "surface":"#ffffff", "row":"#f2f3f7",
+        "header":"#173b35", "hero":"#263e62", "hero_muted":"#e0eaff",
+        "overview":"#fffaf0", "activity":"#e9effc", "tile":"#f2f5fc",
+        "tint":"#eef7f1", "secondary":"#e2eaf4", "border":"#bac6cc",
+        "chip":"#304770", "track":"#516589", "fill":"#ffd38a",
+        "nav_active":"#42628a", "activity_text":"#344a87",
+        "protein_bg":"#d9f0e5", "fat_bg":"#ffead0",
+        "carbs_bg":"#e5e1fc", "protein_text":"#225944",
+        "fat_text":"#77501e", "carbs_text":"#484180",
+        "accent":"#d48959", "pattern_color":"#88ad9f"
+    },
+    "mint": {
+        "background":"#eef4f6", "surface":"#ffffff", "row":"#f0f2fa",
+        "header":"#174b50", "hero":"#374e78", "hero_muted":"#e3edff",
+        "overview":"#fff8e9", "activity":"#ede9fa", "tile":"#f1eefa",
+        "tint":"#e5f6f0", "secondary":"#e1e8fb", "border":"#b8cbd2",
+        "chip":"#435985", "track":"#677a9b", "fill":"#ffd392",
+        "nav_active":"#65599b", "activity_text":"#564a8b",
+        "protein_bg":"#d9f3e8", "fat_bg":"#ffe5c9",
+        "carbs_bg":"#e0e5ff", "protein_text":"#20604f",
+        "fat_text":"#80511d", "carbs_text":"#414a8b",
+        "accent":"#cf7c64", "pattern_color":"#80a9b7"
+    },
+    "sand": {
+        "background":"#f3ece6", "surface":"#fffdf9", "row":"#f7f0f6",
+        "header":"#514054", "hero":"#694762", "hero_muted":"#fff0e9",
+        "overview":"#fffaed", "activity":"#f0e9fa", "tile":"#f9eff5",
+        "tint":"#f8e7d9", "secondary":"#efe0f2", "border":"#cdbabe",
+        "chip":"#785468", "track":"#a6788e", "fill":"#ffdc93",
+        "nav_active":"#885171", "activity_text":"#784d83",
+        "protein_bg":"#e2f2df", "fat_bg":"#ffe7c7",
+        "carbs_bg":"#e8def5", "protein_text":"#3e6034",
+        "fat_text":"#87501d", "carbs_text":"#624481",
+        "accent":"#b9765e", "pattern_color":"#b69ea5"
+    },
+    "dark": {
+        "background":"#11151f", "surface":"#222838", "row":"#293147",
+        "header":"#131a25", "hero":"#302b55", "hero_muted":"#e2dffc",
+        "overview":"#222d3d", "activity":"#2a283d", "tile":"#333349",
+        "tint":"#203a3d", "secondary":"#323951", "border":"#5c6880",
+        "chip":"#3d375f", "track":"#5b568a", "fill":"#ffc77a",
+        "nav_active":"#665eaa", "activity_text":"#d7b9ff",
+        "protein_bg":"#234c4c", "fat_bg":"#5d413c",
+        "carbs_bg":"#403e69", "protein_text":"#b1f4df",
+        "fat_text":"#ffdcac", "carbs_text":"#d3ccff",
+        "accent":"#f5a987", "pattern_color":"#797aaf",
+        "muted":"#c8d1e2", "head_muted":"#d5ddef",
+        "ink":"#f5f7ff", "input":"#293347",
+        "green":"#367c76", "text_accent":"#b8d8ff"
+    }
+}
+
+const COLOR_HIGH_ADJUSTMENTS = {
+    "forest": {"border":"#8e9eae", "background":"#e4ebeb", "activity":"#dce5f9", "nav_active":"#304f7d"},
+    "mint": {"border":"#889baa", "background":"#e3eeee", "activity":"#e5def5", "nav_active":"#51478e"},
+    "sand": {"border":"#ab969f", "background":"#eee2dc", "activity":"#e9def5", "nav_active":"#72405e"},
+    "dark": {"border":"#94a6c4", "background":"#0c111a", "overview":"#26354a", "activity":"#342e4c", "nav_active":"#7d6cce"}
+}
+
 static func palette(id: String, high_contrast: bool = false) -> Dictionary:
     var base: Dictionary = _base_palette(id)
     if high_contrast:
         var overrides: Dictionary = HIGH_OVERRIDES.get(id, HIGH_OVERRIDES["forest"])
         for key in overrides:
             base[key] = overrides[key]
+    var colors: Dictionary = COLOR_VARIANTS.get(id, COLOR_VARIANTS["forest"])
+    for key in colors:
+        base[key] = colors[key]
+    if high_contrast:
+        var contrast_colors: Dictionary = COLOR_HIGH_ADJUSTMENTS.get(id, COLOR_HIGH_ADJUSTMENTS["forest"])
+        for key in contrast_colors:
+            base[key] = contrast_colors[key]
     return base
 
 static func _base_palette(id: String) -> Dictionary:
