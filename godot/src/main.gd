@@ -763,6 +763,7 @@ func _render(reset_position: bool = false) -> void:
         child.queue_free()
     match tab:
         "day": _show_day()
+        "search": _show_food_search()
         "recipes": _show_recipes()
         "profile": _show_profile()
         "activity": _show_activity()
@@ -1196,6 +1197,15 @@ func _show_recipes() -> void:
         var no_results = _card("Ничего не найдено")
         _label(no_results, "Попробуй другое название или очисти поиск.", 13, MUTED)
 
+func _show_food_search() -> void:
+    var intro = _card("Каталог продуктов", "hero")
+    _label(intro, "Поиск, сравнение КБЖУ и добавление нескольких продуктов подряд.", 14, HERO_MUTED)
+    _label(intro, "Выбранная дата: " + date, 13, HERO_MUTED)
+    _button(intro, "← Вернуться в дневник", func(): _navigate_to_tab("day"), true)
+    var catalog = _card("Найти и добавить продукты")
+    _food_form(catalog)
+
+
 func _show_day() -> void:
     var overview = _card("Обзор дня")
     _date_nav(overview)
@@ -1273,6 +1283,7 @@ func _show_day() -> void:
                 func(): _quick_food_sheet(recent_item), true)
 
     var add = _card("Добавить еду", "tint")
+    _button(add, "⌕ Открыть полный каталог продуктов", func(): _navigate_to_tab("search"), true)
     food_entry_card = add
     if food_form_expanded:
         _button(add, "▴ Свернуть поиск продуктов", func():
@@ -1776,6 +1787,8 @@ func _food_form(parent: VBoxContainer) -> void:
     favorite_only.add_theme_font_size_override("font_size", 13)
     parent.add_child(favorite_only)
     var picker = _choice(parent, [])
+    _label(parent, "Категория", 13, MUTED)
+    var category = _choice(parent, ["Все", "Базовые", "Брендовые", "Мои продукты", "Избранное"])
     _label(parent, "Вес порции, г", 14, MUTED)
     var values = _row(parent)
     var grams = _number(values, 100, 1, 5000)
@@ -1786,6 +1799,11 @@ func _food_form(parent: VBoxContainer) -> void:
         _button(grams_presets, str(value) + " г", func(): grams.value = value, true)
     var meal = _choice(parent, ["Завтрак", "Обед", "Перекус", "Ужин"])
     var preview = _label(parent, "", 14, MUTED)
+    var added_count = _label(parent, "Добавлено за сеанс: 0", 12, TEXT_ACCENT)
+    var results_box = VBoxContainer.new()
+    results_box.name = "FoodSearchResults"
+    results_box.add_theme_constant_override("separation", 7)
+    parent.add_child(results_box)
     var controls = _row(parent)
     var star = _button(controls, "☆ В избранное", Callable(), true)
     star.pressed.connect(func():
@@ -1793,7 +1811,7 @@ func _food_form(parent: VBoxContainer) -> void:
             return
         var food: Dictionary = filtered[picker.selected]
         if store.toggle_favorite(str(food.get("id", ""))):
-            _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star)
+            _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star, category, results_box, meal, added_count)
         else:
             _message("Не удалось сохранить избранное.")
     )
@@ -1803,16 +1821,20 @@ func _food_form(parent: VBoxContainer) -> void:
             return
         var f: Dictionary = filtered[picker.selected]
         if store.add_food_entry(f, grams.value, meal.get_item_text(meal.selected), date):
-            _render()
+            added_count.set_meta("count", int(added_count.get_meta("count", 0)) + 1)
+            added_count.text = "Добавлено за сеанс: " + str(added_count.get_meta("count"))
             _notify_saved("Продукт добавлен в дневник")
         else:
             _message("Ошибка сохранения. Запись не добавлена; проверь свободное место.")
     )
     search.text_changed.connect(func(_value: String):
-        _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star)
+        _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star, category, results_box, meal, added_count)
     )
     favorite_only.toggled.connect(func(_value: bool):
-        _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star)
+        _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star, category, results_box, meal, added_count)
+    )
+    category.item_selected.connect(func(_value: int):
+        _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star, category, results_box, meal, added_count)
     )
     picker.item_selected.connect(func(_value: int):
         _update_food_preview(picker, filtered, grams, preview, star)
@@ -1820,10 +1842,12 @@ func _food_form(parent: VBoxContainer) -> void:
     grams.value_changed.connect(func(_value: float):
         _update_food_preview(picker, filtered, grams, preview, star)
     )
-    _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star)
+    _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star, category, results_box, meal, added_count)
 
 func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only: CheckButton,
-        filtered: Array, grams: SpinBox, preview: Label, star: Button) -> void:
+        filtered: Array, grams: SpinBox, preview: Label, star: Button,
+        category: OptionButton = null, results_box: VBoxContainer = null,
+        meal: OptionButton = null, added_count: Label = null) -> void:
     var previous_id = ""
     if picker.selected >= 0 and picker.selected < filtered.size():
         previous_id = str(filtered[picker.selected].get("id", ""))
@@ -1841,8 +1865,23 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
         var searchable = str(item.get("name", "")) + " " + str(item.get("brand", ""))
         if not query.is_empty() and not searchable.to_lower().contains(query):
             continue
-        if favorite_only.button_pressed and not store.is_favorite(str(item.get("id", ""))):
+        var item_id = str(item.get("id", ""))
+        if favorite_only.button_pressed and not store.is_favorite(item_id):
             continue
+        if category != null:
+            match category.selected:
+                1:
+                    if not item_id.begins_with("d"):
+                        continue
+                2:
+                    if str(item.get("brand", "")).is_empty() and str(item.get("barcode", "")).is_empty():
+                        continue
+                3:
+                    if not item_id.begins_with("custom") and not store.data["foods"].any(func(f): return str(f.get("id", "")) == item_id):
+                        continue
+                4:
+                    if not store.is_favorite(item_id):
+                        continue
         filtered.append(item)
     picker.clear()
     var selection = 0
@@ -1859,6 +1898,35 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
     if not filtered.is_empty():
         picker.select(selection)
     _update_food_preview(picker, filtered, grams, preview, star)
+    if results_box != null and meal != null and added_count != null:
+        _rebuild_food_results(results_box, filtered, grams, meal, added_count)
+
+func _rebuild_food_results(results_box: VBoxContainer, filtered: Array,
+        grams: SpinBox, meal: OptionButton, added_count: Label) -> void:
+    for child in results_box.get_children():
+        results_box.remove_child(child)
+        child.queue_free()
+    _label(results_box, "Найдено: " + str(filtered.size()) + " · первые 12 результатов", 12, MUTED)
+    for index in range(mini(12, filtered.size())):
+        var item: Dictionary = filtered[index]
+        var row = _soft_list_row(results_box)
+        var info = VBoxContainer.new()
+        info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        row.add_child(info)
+        var brand = str(item.get("brand", "")).strip_edges()
+        _label(info, str(item.get("name", "Продукт")) + (" · " + brand if not brand.is_empty() else ""), 13, INK)
+        _label(info, str(roundi(float(item.get("kcal", 0)))) +
+            " ккал / 100 г · Б " + str(snappedf(float(item.get("p", 0)), 0.1)) +
+            " Ж " + str(snappedf(float(item.get("f", 0)), 0.1)) +
+            " У " + str(snappedf(float(item.get("c", 0)), 0.1)), 11, MUTED)
+        _button(row, "+", func():
+            if store.add_food_entry(item, grams.value, meal.get_item_text(meal.selected), date):
+                added_count.set_meta("count", int(added_count.get_meta("count", 0)) + 1)
+                added_count.text = "Добавлено за сеанс: " + str(added_count.get_meta("count"))
+                _notify_saved("Продукт добавлен")
+            else:
+                _message("Не удалось сохранить продукт.")
+        )
 
 func _update_food_preview(picker: OptionButton, filtered: Array, grams: SpinBox,
         preview: Label, star: Button) -> void:
