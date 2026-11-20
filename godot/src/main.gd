@@ -70,6 +70,7 @@ var recipe_editor_open: bool = false
 var profile_edit_open: bool = false
 var recipe_draft: Dictionary = {}
 var recipe_search_text: String = ""
+var recipe_list_query: String = ""
 var recipe_manual_open: bool = false
 var _rendered_view: String = ""
 var _scroll_memory: Dictionary = {}
@@ -875,6 +876,19 @@ func _show_profile() -> void:
         ("+" if latest - float(settings["start"]) > 0 else "") +
         str(snappedf(latest - float(settings["start"]), 0.1)) + " кг", 13, MUTED)
     _label(overview, "Ориентир питания: " + str(roundi(float(settings["kcal"]))) + " ккал в сутки", 14, TEXT_ACCENT)
+    var start_weight = float(settings["start"])
+    var goal_weight = float(settings["goal"])
+    if not is_equal_approx(start_weight, goal_weight):
+        var progress = clampf((start_weight - latest) / (start_weight - goal_weight), 0.0, 1.0)
+        _label(overview, "Путь к цели: " + str(roundi(progress * 100.0)) + "%", 14, TEXT_ACCENT)
+        var progress_bar = ProgressBar.new()
+        progress_bar.min_value = 0.0
+        progress_bar.max_value = 100.0
+        progress_bar.value = progress * 100.0
+        _style_progress(progress_bar)
+        overview.add_child(progress_bar)
+        _label(overview, "Осталось до цели: " + str(snappedf(absf(latest - goal_weight), 0.1)) + " кг", 13, MUTED)
+
 
     var records = _card("Мои достижения")
     var dates = {}
@@ -1136,11 +1150,29 @@ func _show_recipes() -> void:
     _label(intro, "Сохраняй домашние блюда и быстро добавляй порции в дневник.", 14, HERO_MUTED)
     _button(intro, "+ Создать рецепт", func(): _begin_recipe_editor(), true)
     var recipes: Array = store.data.get("recipes", [])
+    if not recipes.is_empty():
+        var filter_card = _card("Поиск по рецептам")
+        var query_field = _text_input(filter_card, "Название блюда", recipe_list_query)
+        query_field.clear_button_enabled = true
+        _button(filter_card, "Найти", func():
+            recipe_list_query = query_field.text.strip_edges()
+            _hide_keyboard_and_focus()
+            _render()
+        , true)
+        if not recipe_list_query.is_empty():
+            _button(filter_card, "Показать все рецепты", func():
+                recipe_list_query = ""
+                _render()
+            , true)
     if recipes.is_empty():
         var empty = _card("Пока нет рецептов")
         _label(empty, "Добавь ингредиенты с их сырым весом, взвесь готовое блюдо — и приложение рассчитает КБЖУ на 100 г.", 14, MUTED)
+    var matched = 0
     for saved in recipes:
         var recipe: Dictionary = saved
+        if not recipe_list_query.is_empty() and not str(recipe.get("name", "")).to_lower().contains(recipe_list_query.to_lower()):
+            continue
+        matched += 1
         var details = RecipeMath.calculate(recipe["ingredients"], float(recipe["cooked_weight"]))
         if details.is_empty():
             continue
@@ -1160,6 +1192,9 @@ func _show_recipes() -> void:
                     _message("Не удалось удалить рецепт.")
             )
         , true)
+    if matched == 0 and not recipes.is_empty():
+        var no_results = _card("Ничего не найдено")
+        _label(no_results, "Попробуй другое название или очисти поиск.", 13, MUTED)
 
 func _show_day() -> void:
     var overview = _card("Обзор дня")
@@ -1280,6 +1315,18 @@ func _show_day() -> void:
     if not previous.is_empty():
         var repeats = _card("Повторить со вчера · " + yesterday)
         _label(repeats, "Нажми «+», чтобы добавить такую же порцию на выбранный день.", 13, MUTED)
+        for prior_meal in ["Завтрак", "Обед", "Перекус", "Ужин"]:
+            var meal_count = previous.filter(func(e): return str(e.get("meal", "")) == prior_meal).size()
+            if meal_count == 0:
+                continue
+            _button(repeats, "Повторить весь " + prior_meal.to_lower() + " (" + str(meal_count) + ")", func():
+                var copied = store.repeat_meal(yesterday, prior_meal, date)
+                if copied > 0:
+                    _render()
+                    _notify_saved("Добавлено записей: " + str(copied))
+                else:
+                    _message("Не удалось скопировать приём пищи.")
+            , true)
         var count = 0
         for old in previous:
             if count >= 8:
