@@ -5,6 +5,8 @@ const GraphScript = preload("res://src/weight_graph.gd")
 const RingScript = preload("res://src/calorie_ring.gd")
 const RecipeMath = preload("res://src/recipe_math.gd")
 const PortionMath = preload("res://src/portion_math.gd")
+const RewardsScript = preload("res://src/rewards.gd")
+const ProfilePhotoScript = preload("res://src/profile_photo.gd")
 const BarcodeScript = preload("res://src/barcode_lookup.gd")
 const AppearanceScript = preload("res://src/appearance.gd")
 const PatternScript = preload("res://src/theme_pattern.gd")
@@ -80,6 +82,8 @@ var food_form_expanded: bool = false
 var settings_page: String = "main"
 var recipe_editor_open: bool = false
 var profile_edit_open: bool = false
+var rewards_expanded: bool = false
+var frames_expanded: bool = false
 var recipe_draft: Dictionary = {}
 var recipe_search_text: String = ""
 var recipe_list_query: String = ""
@@ -900,19 +904,39 @@ func _show_profile() -> void:
     var hero = _card("", "hero")
     var intro = _row(hero)
     var badge = PanelContainer.new()
-    badge.custom_minimum_size = Vector2(72, 72)
+    badge.custom_minimum_size = Vector2(74, 74)
     var badge_style = StyleBoxFlat.new()
     badge_style.bg_color = CHIP_BG
-    badge_style.set_corner_radius_all(23)
-    badge_style.content_margin_left = 14
-    badge_style.content_margin_right = 14
-    badge_style.content_margin_top = 10
-    badge_style.content_margin_bottom = 10
+    badge_style.set_corner_radius_all(37)
+    var frame_data: Dictionary = RewardsScript.frame_by_id(str(profile.get("frame", "plain")))
+    badge_style.border_color = Color(str(frame_data.get("color", "#9AAFA8")))
+    badge_style.set_border_width_all(4 if str(profile.get("frame", "plain")) != "plain" else 1)
+    var photo_texture = ProfilePhotoScript.decode_photo(str(profile.get("photo", "")))
+    var inset = 1 if photo_texture != null else 14
+    badge_style.content_margin_left = inset
+    badge_style.content_margin_right = inset
+    badge_style.content_margin_top = 1 if photo_texture != null else 10
+    badge_style.content_margin_bottom = 1 if photo_texture != null else 10
     badge.add_theme_stylebox_override("panel", badge_style)
     intro.add_child(badge)
-    var avatar = _label(badge, _avatar_character(str(profile.get("avatar", "leaf"))), 37, SOFT_GOLD)
-    avatar.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    avatar.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    if photo_texture != null:
+        var avatar_picture = TextureRect.new()
+        avatar_picture.name = "ProfileAvatarPhoto"
+        avatar_picture.texture = photo_texture
+        avatar_picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+        avatar_picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+        avatar_picture.custom_minimum_size = Vector2(66, 66)
+        avatar_picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        var crop_shader = Shader.new()
+        crop_shader.code = "shader_type canvas_item; void fragment() { vec4 pixel = texture(TEXTURE, UV); float mask = 1.0 - smoothstep(0.48, 0.5, distance(UV, vec2(0.5))); COLOR = vec4(pixel.rgb, pixel.a * mask); }"
+        var crop_material = ShaderMaterial.new()
+        crop_material.shader = crop_shader
+        avatar_picture.material = crop_material
+        badge.add_child(avatar_picture)
+    else:
+        var avatar = _label(badge, _avatar_character(str(profile.get("avatar", "leaf"))), 37, SOFT_GOLD)
+        avatar.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        avatar.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     var identity = VBoxContainer.new()
     identity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     identity.add_theme_constant_override("separation", 4)
@@ -950,16 +974,58 @@ func _show_profile() -> void:
         _label(overview, "Осталось до цели: " + str(snappedf(absf(latest - goal_weight), 0.1)) + " кг", 13, MUTED)
 
 
-    var records = _card("Мои достижения")
-    var dates = {}
-    for entry in store.data["entries"]:
-        dates[str(entry.get("date", ""))] = true
-    var row = _row(records)
-    _metric_tile(row, str(dates.size()), "Дней с дневником")
-    _metric_tile(row, str(store.data["recipes"].size()), "Моих рецептов")
-    _label(records, "Здесь отображаются только твои записи. Данные хранятся на устройстве.", 12, MUTED)
+    var summary: Dictionary = store.reward_summary()
+    var records = _card("Мои поощрения", "tint")
+    _label(records, "За регулярные записи и заботу о себе — без штрафов за калории или вес.", 12, MUTED)
+    var rewards_row = _row(records)
+    _metric_tile(rewards_row, "★ " + str(summary["points"]), "Звёзд")
+    _metric_tile(rewards_row, str(summary["level"]), "Уровень")
+    var level_bar = ProgressBar.new()
+    level_bar.name = "RewardLevelProgress"
+    level_bar.min_value = 0
+    level_bar.max_value = 100
+    level_bar.value = float(summary["level_progress"])
+    _style_progress(level_bar)
+    records.add_child(level_bar)
+    _label(records, str(100 - int(summary["level_progress"])) + " звёзд до следующего уровня", 12, MUTED)
+    var habit_row = _row(records)
+    _metric_tile(habit_row, str(summary["days"]), "Дней с дневником")
+    _metric_tile(habit_row, str(summary["streak"]), "Дней подряд")
+    _label(records, "За день с записями +10 ★, за разные приёмы пищи до +15 ★. За день движения +5 ★, за рецепт +10 ★.", 12, MUTED)
+    var awards = _card("Мои достижения")
+    _label(awards, str(summary["earned"]) + " из " + str(RewardsScript.AWARDS.size()) + " открыто", 13, TEXT_ACCENT)
+    var shown = 0
+    for award in RewardsScript.AWARDS:
+        var earned = bool(summary["badges"].get(str(award["id"]), false))
+        if not rewards_expanded and not earned and shown >= 3:
+            continue
+        if not rewards_expanded and shown >= 4:
+            break
+        var award_line = _soft_list_row(awards)
+        var title = ("✦ " if earned else "◇ ") + str(award["title"])
+        var caption = _label(award_line, title + " · " + str(award["hint"]), 12,
+            TEXT_ACCENT if earned else MUTED)
+        caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        shown += 1
+    _button(awards, "▴ Скрыть достижения" if rewards_expanded else "▾ Показать все достижения",
+        func():
+            rewards_expanded = not rewards_expanded
+            _render()
+    , true)
 
     var edit = _card("Личная страница")
+    _button(edit, "📷 Выбрать фото для аватара", func(): _pick_avatar_photo(), true)
+    if not str(profile.get("photo", "")).is_empty():
+        _button(edit, "Удалить фото (вернуть значок)", func():
+            _confirm_delete("Удалить фото профиля? Значок останется доступен.", func():
+                if store.update_avatar_photo(""):
+                    _render()
+                    _notify_saved("Фото аватара удалено")
+                else:
+                    _message("Не удалось удалить фото.")
+            )
+        , true)
+    _label(edit, "Фото останется только на устройстве и войдёт в JSON-резервную копию.", 12, MUTED)
     if not profile_edit_open:
         _button(edit, "✎ Изменить имя и значок", func():
             profile_edit_open = true
@@ -994,6 +1060,37 @@ func _show_profile() -> void:
             else:
                 _message("Проверь имя и подпись или свободное место.")
         )
+    var frames_card = _card("Награды для аватара")
+    var frame_name: String = str(frame_data.get("name", "Обычная"))
+    _label(frames_card, "Рамка профиля: " + frame_name + ". Новые цвета открываются за звёзды.", 13, MUTED)
+    _button(frames_card, "▴ Скрыть рамки" if frames_expanded else "▾ Выбрать рамку",
+        func():
+            frames_expanded = not frames_expanded
+            _render()
+    , true)
+    if frames_expanded:
+        for unlocked_frame in RewardsScript.FRAMES:
+            var frame_id: String = str(unlocked_frame["id"])
+            var limit: int = int(unlocked_frame["points"])
+            var available: bool = int(summary["points"]) >= limit
+            var frame_row = _soft_list_row(frames_card)
+            var swatch = ColorRect.new()
+            swatch.color = Color(str(unlocked_frame["color"]))
+            swatch.custom_minimum_size = Vector2(24, 24)
+            frame_row.add_child(swatch)
+            var label_frame = _label(frame_row, str(unlocked_frame["name"]) +
+                (" · доступна" if available else " · от " + str(limit) + " ★"), 12, INK)
+            label_frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            var select_button = _button(frame_row,
+                "✓" if str(profile.get("frame", "plain")) == frame_id else "Выбрать",
+                func():
+                    if store.choose_avatar_frame(frame_id):
+                        _render()
+                        _notify_saved("Рамка изменена")
+                    else:
+                        _message("Для этой рамки пока недостаточно звёзд.")
+            , true)
+            select_button.disabled = not available
     var shortcuts = _card("Мой баланс")
     _button(shortcuts, "Мои рецепты", func(): _navigate_to_tab("recipes"), true)
     _button(shortcuts, "История веса", func(): _navigate_to_tab("weight"), true)
@@ -1001,6 +1098,63 @@ func _show_profile() -> void:
         settings_page = "main"
         _navigate_to_tab("settings")
     , true)
+
+func _pick_avatar_photo() -> void:
+    var supported = PackedStringArray([
+        "*.jpg,*.jpeg,*.png,*.webp;Фотографии;image/jpeg,image/png,image/webp"
+    ])
+    # Android 10+ uses SAF: FileAccess can read the selected content:// URI
+    # without broad gallery/storage permissions.
+    if DisplayServer.has_feature(DisplayServer.FEATURE_NATIVE_DIALOG_FILE):
+        var result = DisplayServer.file_dialog_show(
+            "Выбрать фото профиля", "", "", false,
+            DisplayServer.FILE_DIALOG_MODE_OPEN_FILE, supported,
+            func(accepted: bool, paths: PackedStringArray, _filter_index: int):
+                if accepted and not paths.is_empty():
+                    _read_avatar_photo(paths[0])
+        )
+        if result == OK:
+            return
+    var picker = FileDialog.new()
+    picker.use_native_dialog = true
+    picker.access = FileDialog.ACCESS_FILESYSTEM
+    picker.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+    picker.filters = supported
+    add_child(picker)
+    picker.file_selected.connect(func(path: String):
+        _read_avatar_photo(path)
+        picker.queue_free()
+    )
+    picker.canceled.connect(func(): picker.queue_free())
+    picker.popup_centered_ratio(0.85)
+
+
+func _read_avatar_photo(path: String) -> void:
+    var file = FileAccess.open(path, FileAccess.READ)
+    if file == null:
+        _message("Не получилось открыть фото. Выбери JPEG, PNG или WebP.")
+        return
+    if file.get_length() > ProfilePhotoScript.MAX_SOURCE_BYTES or file.get_length() <= 0:
+        file.close()
+        _message("Фото слишком большое. Выбери файл до 16 МБ.")
+        return
+    var bytes = file.get_buffer(file.get_length())
+    file.close()
+    _apply_avatar_photo_bytes(bytes)
+
+
+func _apply_avatar_photo_bytes(bytes: PackedByteArray) -> bool:
+    var encoded: String = ProfilePhotoScript.make_photo(bytes)
+    if encoded.is_empty():
+        _message("Не удалось обработать фото. Нужны JPEG, PNG или WebP до 16 МБ.")
+        return false
+    if not store.update_avatar_photo(encoded):
+        _message("Не удалось сохранить фото. Проверь свободное место.")
+        return false
+    _render()
+    _notify_saved("Фото профиля сохранено")
+    return true
+
 
 func _begin_recipe_editor(recipe: Dictionary = {}) -> void:
     recipe_editor_open = true
