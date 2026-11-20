@@ -60,6 +60,15 @@ func _run() -> void:
     if not store.add_recipe_portion(recipe_id, 200.0, "Обед", "2026-11-19"):
         _fail("could not add saved recipe portion")
         return
+    if store.repeat_meal("2026-11-19", "Обед", "2026-11-20") != 1:
+        _fail("could not repeat complete meal")
+        return
+    if store.day_entries("2026-11-20").size() != 1 or absf(store.day_calories("2026-11-20") - 355.0) > 0.01:
+        _fail("repeated meal did not preserve nutrition snapshot")
+        return
+    if store.repeat_meal("2026-11-19", "Ужин", "2026-11-20") != 0:
+        _fail("empty meal duplicated")
+        return
     var saved_kcal = store.day_calories("2026-11-19")
     if absf(saved_kcal - 355.0) > 0.01:
         _fail("recipe snapshot calorie calculation wrong")
