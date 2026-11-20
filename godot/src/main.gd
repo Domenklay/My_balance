@@ -543,7 +543,7 @@ func _button(parent: Node, s: String, call: Callable, secondary: bool = false) -
     b.text = s
     # Let a swipe begun over a button reach the parent ScrollContainer.
     b.mouse_filter = Control.MOUSE_FILTER_PASS
-    var compact = s in ["◀", "▶", "‹", "›", "✎", "×", "+"]
+    var compact = s in ["◀", "▶", "‹", "›", "▦", "✎", "×", "+"]
     b.custom_minimum_size = Vector2(46 if compact else 0, 47)
     b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER if compact else Control.SIZE_EXPAND_FILL
     b.add_theme_font_size_override("font_size", 14)
@@ -859,6 +859,10 @@ func _date_nav(parent: Node) -> void:
     day_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     day_label.custom_minimum_size.y = 45
     _button(r, "▶", func(): date = store.change_date(date, 1); month_shown = date.substr(0, 7); _render(), true)
+    _button(r, "▦", func():
+        calendar_expanded = not calendar_expanded
+        _render()
+    , true)
 
 func _calendar(parent: Node) -> void:
     var top = _row(parent)
@@ -1550,19 +1554,14 @@ func _show_food_search() -> void:
 
 
 func _show_day() -> void:
-    var overview = _card("Обзор дня", "overview")
+    var overview = _card("", "overview")
     _date_nav(overview)
-    _button(overview, "▾  Скрыть календарь" if calendar_expanded else "▸  Открыть календарь", func():
-        calendar_expanded = not calendar_expanded
-        _render()
-    , true)
     if calendar_expanded:
         _calendar(overview)
 
     var total = store.day_calories(date)
     var target = float(store.data["settings"]["kcal"])
     var hero = _card("Энергия дня", "hero")
-    _label(hero, "Калории за день", 12, HERO_MUTED)
     var hero_content = _row(hero)
     var numbers = VBoxContainer.new()
     numbers.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1572,24 +1571,10 @@ func _show_day() -> void:
     _label(numbers, "из " + str(roundi(target)) + " ккал", 15, HERO_MUTED)
     var ring = RingScript.new()
     ring.name = "DailyCalorieRing"
-    ring.custom_minimum_size = Vector2(88, 88)
+    ring.custom_minimum_size = Vector2(78, 78)
     ring.set_palette(HERO_TRACK, HERO_FILL, WHITE)
     ring.set_value(total, target)
     hero_content.add_child(ring)
-    var track = ProgressBar.new()
-    track.min_value = 0
-    track.max_value = maxf(1.0, target)
-    track.value = minf(total, target)
-    _style_progress(track)
-    var track_bg = StyleBoxFlat.new()
-    track_bg.bg_color = HERO_TRACK
-    track_bg.set_corner_radius_all(8)
-    var track_fg = StyleBoxFlat.new()
-    track_fg.bg_color = HERO_FILL
-    track_fg.set_corner_radius_all(8)
-    track.add_theme_stylebox_override("background", track_bg)
-    track.add_theme_stylebox_override("fill", track_fg)
-    hero.add_child(track)
     var remaining = target - total
     if remaining >= 0.0:
         _label(hero, "До дневного ориентира — " + str(roundi(remaining)) + " ккал", 13, HERO_MUTED)
@@ -1602,9 +1587,8 @@ func _show_day() -> void:
 
     # Compact sections are always present. Only the selected meal unfolds.
     # Expansion state is in-memory, keyed by date: diary records are untouched.
-    var foods = _card("Питание · " + date)
+    var foods = _card("Приёмы пищи")
     diary_food_card = foods
-    _label(foods, "Раскрой нужный приём пищи для просмотра продуктов и повторения блюд.", 12, MUTED)
     var existing = store.day_entries(date)
     var sections = [
         {"meal":"Завтрак", "icon":"☀", "variant":"overview", "accent":ACCENT},
@@ -1635,9 +1619,6 @@ func _show_day() -> void:
             if meal_kcal > meal_target:
                 _label(meal_card, "Превышение: +" +
                     str(roundi(meal_kcal - meal_target)) + " ккал", 12, ACCENT)
-            else:
-                _label(meal_card, "Осталось " +
-                    str(roundi(meal_target - meal_kcal)) + " ккал", 12, MUTED)
             var meal_bar = ProgressBar.new()
             meal_bar.name = "MealProgress_" + str(section_index)
             meal_bar.min_value = 0.0
