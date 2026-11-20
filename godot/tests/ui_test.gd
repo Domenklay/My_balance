@@ -31,6 +31,7 @@ func _run() -> void:
     root.add_child(app)
     await process_frame
     app.store.data = app.store.default_data()
+    app.tab = "day"
     if not app.store.save():
         push_error("FAILED: cannot initialize UI test journal")
         quit(1)
