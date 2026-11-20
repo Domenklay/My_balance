@@ -121,7 +121,7 @@ func _is_barcode(code: String) -> bool:
 
 func default_data() -> Dictionary:
     return {
-        "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true},
+        "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true, "high_contrast": false},
         "foods": [], "entries": [], "activities": [], "weights": [], "notes": {}, "favorites": [],
         "recipes": [], "meal_templates": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат"}
     }
@@ -339,6 +339,11 @@ func import_json(raw: String, persist: bool = true) -> bool:
     if not settings.has("patterns"):
         settings["patterns"] = true
     if not (settings["patterns"] is bool):
+        return false
+    # Legacy backups predate the optional readability setting.
+    if not settings.has("high_contrast"):
+        settings["high_contrast"] = false
+    if not (settings["high_contrast"] is bool):
         return false
     if obj["foods"].size() > 10000 or obj["entries"].size() > 50000 or obj["weights"].size() > 5000 or obj["activities"].size() > 50000:
         return false
