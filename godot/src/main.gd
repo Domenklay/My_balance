@@ -1263,6 +1263,15 @@ func _show_day() -> void:
     _button(shortcuts, "+ Спорт", func(): _navigate_to_tab("activity"), true)
     _button(shortcuts, "+ Вес", func(): _navigate_to_tab("weight"), true)
 
+    var quick_recent: Array = store.recent_foods(5)
+    if not quick_recent.is_empty():
+        var recent_card = _card("Недавно добавляли")
+        _label(recent_card, "Любую запись можно быстро повторить с новым весом.", 12, MUTED)
+        for recent in quick_recent:
+            var recent_item: Dictionary = recent
+            _button(recent_card, str(recent_item.get("name", "Продукт")) + "  ·  +" ,
+                func(): _quick_food_sheet(recent_item), true)
+
     var add = _card("Добавить еду", "tint")
     food_entry_card = add
     if food_form_expanded:
@@ -1642,6 +1651,32 @@ func _request_catalog_update() -> void:
         _message("Загрузка проверенного каталога из GitHub запущена.")
 
 
+func _quick_food_sheet(food: Dictionary) -> void:
+    var sheet = _mobile_sheet(str(food.get("name", "Продукт")), "Выбери количество и приём пищи.", "Добавить в дневник", 490.0)
+    var fields: VBoxContainer = sheet["fields"]
+    _label(fields, "Количество, г", 14, MUTED)
+    var grams = _number(fields, 100, 1, 5000, 1)
+    var presets = _row(fields)
+    for option in [50, 100, 150, 200]:
+        var value: int = option
+        _button(presets, str(value) + " г", func(): grams.value = value, true)
+    _label(fields, "Приём пищи", 14, MUTED)
+    var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
+    var preview = _label(fields, "", 14, TEXT_ACCENT)
+    var update_preview = func(_v: float):
+        preview.text = str(roundi(float(food.get("kcal", 0)) * grams.value / 100.0)) + " ккал"
+    grams.value_changed.connect(update_preview)
+    update_preview.call(grams.value)
+    var confirm: Button = sheet["confirm"]
+    confirm.pressed.connect(func():
+        if store.add_food_entry(food, grams.value, meal.get_item_text(meal.selected), date):
+            sheet["root"].queue_free()
+            _render()
+            _notify_saved("Продукт добавлен")
+        else:
+            _sheet_error(sheet, "Не удалось сохранить запись.")
+    )
+
 func _food_form(parent: VBoxContainer) -> void:
     var barcode_panel = VBoxContainer.new()
     barcode_panel.add_theme_constant_override("separation", 6)
@@ -1668,6 +1703,13 @@ func _food_form(parent: VBoxContainer) -> void:
     barcode_find.custom_minimum_size.x = 74
     barcode_message = _label(barcode_panel, "Встроено " + str(store.bundled_foods.size()) + " товаров с кодами. Другие ищем через интернет.", 12, MUTED)
     parent.add_child(HSeparator.new())
+    var frequent: Array = store.frequent_foods(6)
+    if not frequent.is_empty():
+        _label(parent, "Часто используемые", 16, TEXT_ACCENT)
+        for frequent_food in frequent:
+            var item: Dictionary = frequent_food
+            _button(parent, "＋ " + str(item.get("name", "Продукт")),
+                func(): _quick_food_sheet(item), true)
     _label(parent, "Или найди в сохранённых продуктах", 16, TEXT_ACCENT)
     var filtered: Array = []
     var search = _text_input(parent, "Поиск продукта по названию")
@@ -1685,6 +1727,10 @@ func _food_form(parent: VBoxContainer) -> void:
     var values = _row(parent)
     var grams = _number(values, 100, 1, 5000)
     grams.custom_minimum_size.x = 160
+    var grams_presets = _row(parent)
+    for option in [50, 100, 150, 200]:
+        var value: int = option
+        _button(grams_presets, str(value) + " г", func(): grams.value = value, true)
     var meal = _choice(parent, ["Завтрак", "Обед", "Перекус", "Ужин"])
     var preview = _label(parent, "", 14, MUTED)
     var controls = _row(parent)
@@ -1739,7 +1785,8 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
     )
     var query = search.text.strip_edges().to_lower()
     for item in all:
-        if not query.is_empty() and not str(item.get("name", "")).to_lower().contains(query):
+        var searchable = str(item.get("name", "")) + " " + str(item.get("brand", ""))
+        if not query.is_empty() and not searchable.to_lower().contains(query):
             continue
         if favorite_only.button_pressed and not store.is_favorite(str(item.get("id", ""))):
             continue
@@ -1750,6 +1797,9 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
         var f: Dictionary = filtered[i]
         var id = str(f.get("id", ""))
         var label = ("★ " if store.is_favorite(id) else "") + str(f.get("name", "Продукт"))
+        var brand = str(f.get("brand", "")).strip_edges()
+        if not brand.is_empty() and not label.to_lower().contains(brand.to_lower()):
+            label += " · " + brand
         picker.add_item(label)
         if id == previous_id:
             selection = i
