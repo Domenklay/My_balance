@@ -13,9 +13,12 @@ func _run() -> void:
     if scene == null:
         _fail("main scene missing")
         return
+    print("SCROLL DEBUG: scene instantiated")
     var app = scene.instantiate()
     root.add_child(app)
+    print("SCROLL DEBUG: app mounted; waiting one frame")
     await process_frame
+    print("SCROLL DEBUG: frame received")
     app.store.data = app.store.default_data()
     # Populate a realistic long diary; compact empty pages can legitimately fit.
     var sample_food = app.store.all_foods()[0]
@@ -29,8 +32,10 @@ func _run() -> void:
         })
     var scrollable_pages = 0
     for page in ["day", "recipes", "activity", "weight", "stats", "profile", "settings"]:
+        print("SCROLL DEBUG: before page render: ", page)
         app.tab = page
         app._render()
+        print("SCROLL DEBUG: after page render: ", page)
         await process_frame
         await process_frame
         var scrolling: ScrollContainer = app.scroll
@@ -52,6 +57,7 @@ func _run() -> void:
                 _fail("could not scroll " + page + " programmatically")
                 return
     # The compact settings page may fit, but the food management page must scroll.
+    print("SCROLL DEBUG: before own-foods settings")
     app.tab = "settings"
     app.settings_page = "foods"
     app._render()
