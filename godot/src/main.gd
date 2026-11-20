@@ -4,6 +4,7 @@ const StoreScript = preload("res://src/store.gd")
 const GraphScript = preload("res://src/weight_graph.gd")
 const RingScript = preload("res://src/calorie_ring.gd")
 const RecipeMath = preload("res://src/recipe_math.gd")
+const PortionMath = preload("res://src/portion_math.gd")
 const BarcodeScript = preload("res://src/barcode_lookup.gd")
 const AppearanceScript = preload("res://src/appearance.gd")
 const PatternScript = preload("res://src/theme_pattern.gd")
@@ -1640,33 +1641,7 @@ func _sheet_error(sheet: Dictionary, message: String) -> void:
     label.visible = true
 
 func _show_barcode_portion(food: Dictionary) -> void:
-    var sheet = _mobile_sheet("Продукт найден", "Проверь данные с упаковки перед добавлением.", "Добавить", 485.0)
-    var fields: VBoxContainer = sheet["fields"]
-    _label(fields, str(food.get("name", "Продукт")), 18, INK)
-    _label(fields, str(food.get("barcode", "")) + " • " + str(food.get("source", "Каталог")), 12, MUTED)
-    _label(fields, "На 100 г: " + str(food.get("kcal", 0)) + " ккал", 16, TEXT_ACCENT)
-    _label(fields, "Белки " + str(food.get("p", 0)) + " г  •  Жиры " +
-        str(food.get("f", 0)) + " г  •  Углеводы " + str(food.get("c", 0)) + " г", 13, INK)
-    var warning = BarcodeScript.nutrition_warning(food)
-    if not warning.is_empty():
-        _label(fields, "Проверь этикетку: " + warning, 13, ACCENT)
-    _label(fields, "Вес порции, г", 14, MUTED)
-    var grams = _number(fields, 100, 1, 5000)
-    _label(fields, "Приём пищи", 14, MUTED)
-    var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
-    var calculated = _label(fields, "", 16, TEXT_ACCENT)
-    var refresh = func(): calculated.text = str(roundi(float(food.get("kcal", 0)) * grams.value / 100.0)) + " ккал за порцию"
-    grams.value_changed.connect(func(_v: float): refresh.call())
-    refresh.call()
-    var confirm: Button = sheet["confirm"]
-    confirm.pressed.connect(func():
-        if store.add_food_entry(food, grams.value, meal.get_item_text(meal.selected), date):
-            var root_control: Control = sheet["root"]
-            root_control.queue_free()
-            _barcode_add_success()
-        else:
-            _sheet_error(sheet, "Не удалось сохранить порцию. Проверь память устройства.")
-    )
+    _quick_food_sheet(food, true)
 
 func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void:
     var description = "Внеси КБЖУ с этикетки на 100 г / мл." if manual else "Open Food Facts: сравни КБЖУ с этикеткой."
@@ -1771,28 +1746,97 @@ func _name_meal_template_sheet(meal_name: String) -> void:
             _sheet_error(sheet, "Не удалось сохранить. Проверь название и состав.")
     )
 
-func _quick_food_sheet(food: Dictionary) -> void:
-    var sheet = _mobile_sheet(str(food.get("name", "Продукт")), "Выбери количество и приём пищи.", "Добавить в дневник", 490.0)
+func _quick_food_sheet(food: Dictionary, from_barcode: bool = false) -> void:
+    var unit: String = PortionMath.base_unit(food)
+    var description = "Проверь КБЖУ на упаковке (на 100 " + unit + ")." if from_barcode else "Выбери меру и количество. Свои размеры порций сохраняются."
+    var sheet = _mobile_sheet("Продукт найден" if from_barcode else str(food.get("name", "Продукт")),
+        description, "Добавить" if from_barcode else "Добавить в дневник", 680.0)
     var fields: VBoxContainer = sheet["fields"]
-    _label(fields, "Количество, г", 14, MUTED)
-    var grams = _number(fields, 100, 1, 5000, 1)
+    _label(fields, str(food.get("name", "Продукт")), 17, INK)
+    _label(fields, str(roundi(float(food.get("kcal", 0)))) + " ккал / 100 " + unit +
+        " · Б " + str(food.get("p", 0)) + " Ж " + str(food.get("f", 0)) +
+        " У " + str(food.get("c", 0)), 12, MUTED)
+    _label(fields, "Единица измерения", 14, MUTED)
+    var options: Array = store.portion_options(food)
+    var labels: Array = []
+    for option in options:
+        var caption = str(option["label"])
+        if not str(option["id"]).is_empty():
+            caption += " · " + str(snappedf(float(option["amount"]), 0.1)) + " " + unit
+        labels.append(caption)
+    var measure = _choice(fields, labels)
+    _label(fields, "Количество", 14, MUTED)
+    var quantity = _number(fields, 100.0, 0.1, 5000.0, 0.1)
     var presets = _row(fields)
-    for option in [50, 100, 150, 200]:
-        var value: int = option
-        _button(presets, str(value) + " г", func(): grams.value = value, true)
+    for amount in [50, 100, 150, 200]:
+        var value: int = amount
+        _button(presets, str(value) + " " + unit, func(): quantity.value = value, true)
+    var result_label = _label(fields, "", 14, TEXT_ACCENT)
     _label(fields, "Приём пищи", 14, MUTED)
     var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
-    var preview = _label(fields, "", 14, TEXT_ACCENT)
-    var update_preview = func(_v: float):
-        preview.text = str(roundi(float(food.get("kcal", 0)) * grams.value / 100.0)) + " ккал"
-    grams.value_changed.connect(update_preview)
-    update_preview.call(grams.value)
+    var amount_value = func() -> float:
+        if measure.selected < 0 or measure.selected >= options.size():
+            return 0.0
+        return PortionMath.quantity_to_base(options[measure.selected], quantity.value)
+    var refresh = func(_v: float):
+        var total: float = float(amount_value.call())
+        var calculated: Dictionary = PortionMath.nutrients(food, total)
+        if calculated.is_empty():
+            result_label.text = "Количество должно быть не более 5000 " + unit + "."
+            return
+        result_label.text = str(snappedf(total, 0.1)) + " " + unit + " · " +
+            str(roundi(float(calculated["kcal"]))) + " ккал" +
+            "\nБ " + str(snappedf(float(calculated["p"]), 0.1)) +
+            " · Ж " + str(snappedf(float(calculated["f"]), 0.1)) +
+            " · У " + str(snappedf(float(calculated["c"]), 0.1))
+    measure.item_selected.connect(func(index: int):
+        quantity.value = 100.0 if index == 0 else 1.0
+        presets.visible = index == 0
+        refresh.call(quantity.value)
+    )
+    quantity.value_changed.connect(refresh)
+    refresh.call(quantity.value)
+    _label(fields, "Своя мера для этого продукта", 14, TEXT_ACCENT)
+    _label(fields, "Например: шт., ломтик, баночка, упаковка. Укажи вес или объём с этикетки.", 12, MUTED)
+    var custom = _text_input(fields, "Название меры (например, 1 упаковка)")
+    custom.max_length = 36
+    _label(fields, "Количество " + unit + " в одной мере", 12, MUTED)
+    var custom_amount = _number(fields, 100.0, 0.1, 5000.0, 0.1)
+    _button(fields, "Сохранить свою меру", func():
+        if store.save_food_portion(str(food.get("id", "")), custom.text, custom_amount.value):
+            sheet["root"].queue_free()
+            _quick_food_sheet(food, from_barcode)
+            _notify_saved("Мера сохранена")
+        else:
+            _sheet_error(sheet, "Не удалось сохранить меру. Проверь название, количество и дубликаты.")
+    , true)
+    if options.size() > 1:
+        _button(fields, "Удалить выбранную меру", func():
+            if measure.selected <= 0:
+                _sheet_error(sheet, "Сначала выбери сохранённую меру.")
+                return
+            var option: Dictionary = options[measure.selected]
+            if store.delete_food_portion(str(option["id"])):
+                sheet["root"].queue_free()
+                _quick_food_sheet(food, from_barcode)
+                _notify_saved("Мера удалена")
+            else:
+                _sheet_error(sheet, "Не удалось удалить меру.")
+        , true)
     var confirm: Button = sheet["confirm"]
     confirm.pressed.connect(func():
-        if store.add_food_entry(food, grams.value, meal.get_item_text(meal.selected), date):
+        var total: float = float(amount_value.call())
+        if total <= 0.0:
+            _sheet_error(sheet, "Допускается не более 5000 " + unit + " за запись.")
+            return
+        var portion_label = "" if measure.selected == 0 else str(options[measure.selected]["label"])
+        if store.add_food_entry(food, total, meal.get_item_text(meal.selected), date, portion_label):
             sheet["root"].queue_free()
-            _render()
-            _notify_saved("Продукт добавлен")
+            if from_barcode:
+                _barcode_add_success()
+            else:
+                _render()
+                _notify_saved("Продукт добавлен")
         else:
             _sheet_error(sheet, "Не удалось сохранить запись.")
     )
