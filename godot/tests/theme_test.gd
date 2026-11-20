@@ -59,7 +59,7 @@ func _run() -> void:
             _fail("daily hero missing themed card: " + id)
             return
         var overview: PanelContainer = app.body.get_child(0) as PanelContainer
-        var activity: PanelContainer = app.body.get_child(2) as PanelContainer
+        var activity: PanelContainer = app.body.get_node_or_null("DailyActivity") as PanelContainer
         if overview == null or overview.get_theme_stylebox("panel").bg_color != Color(str(palette["overview"])):
             _fail("day overview section color not applied: " + id)
             return
