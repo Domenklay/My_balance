@@ -153,14 +153,14 @@ func _run() -> void:
     if preview == null or calories == null or activity == null or target == null:
         _fail("activity/goal/calorie result controls missing")
         return
+    if not preview.text.contains("Оценка поддержания") or not preview.text.contains("1970") or \
+            absf(calories.value - 1970.0) > 1.0:
+        _fail("88kg user's sedentary maintenance estimate did not use entered personal data")
+        return
     activity.select(1)
     activity.item_selected.emit(1)
     target.select(1)
     target.item_selected.emit(1)
-    if not preview.text.contains("Оценка поддержания") or not preview.text.contains("1970") or \
-            calories.value < 1000 or calories.value > 5000:
-        _fail("88kg user's maintenance estimate was not calculated from entered data")
-        return
     if not _find_summary(app, "28 лет") or not _find_summary(app, "170 см") or \
             not _find_summary(app, "88"):
         _fail("second step hides the age/height/weight used in calculation")
