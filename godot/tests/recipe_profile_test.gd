@@ -136,10 +136,11 @@ func _run() -> void:
     var legacy = store.default_data()
     legacy.erase("recipes")
     legacy.erase("profile")
+    legacy.erase("meal_templates")
     if not store.import_json(JSON.stringify(legacy)):
         _fail("previous versions' backup rejected")
         return
-    if store.data["recipes"].size() != 0 or str(store.data["profile"]["avatar"]) != "leaf":
+    if store.data["recipes"].size() != 0 or store.data["meal_templates"].size() != 0 or str(store.data["profile"]["avatar"]) != "leaf":
         _fail("legacy data migration did not create profile or recipes")
         return
     var fail = FailingStore.new()
