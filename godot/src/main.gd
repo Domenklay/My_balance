@@ -1319,6 +1319,41 @@ func _show_day() -> void:
                     _message("Не удалось удалить запись питания.")
             ), true)
 
+    if not existing.is_empty():
+        var save_meal_card = _card("Сохранить любимый приём пищи")
+        _label(save_meal_card, "Создай шаблон из еды, записанной на этот день.", 12, MUTED)
+        for saved_meal in ["Завтрак", "Обед", "Перекус", "Ужин"]:
+            var meal_name: String = saved_meal
+            var meal_items = existing.filter(func(e): return str(e.get("meal", "")) == meal_name)
+            if meal_items.is_empty():
+                continue
+            _button(save_meal_card, "☆ Сохранить " + meal_name.to_lower(), func():
+                _name_meal_template_sheet(meal_name), true)
+    var saved_templates: Array = store.data.get("meal_templates", [])
+    if not saved_templates.is_empty():
+        var template_card = _card("Любимые приёмы пищи")
+        for template_data in saved_templates:
+            var template: Dictionary = template_data
+            var row = _soft_list_row(template_card)
+            var name_label = _label(row, str(template["name"]) + " · " + str(template["items"].size()) + " продуктов", 13)
+            name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            _button(row, "+", func():
+                var count = store.apply_meal_template(str(template["id"]), date)
+                if count > 0:
+                    _render()
+                    _notify_saved("Добавлено продуктов: " + str(count))
+                else:
+                    _message("Не удалось добавить шаблон.")
+            )
+            _button(row, "×", func():
+                _confirm_delete("Удалить шаблон «" + str(template["name"]) + "»?", func():
+                    if store.delete_meal_template(str(template["id"])):
+                        _render()
+                        _notify_saved("Шаблон удалён")
+                    else:
+                        _message("Не удалось удалить шаблон.")
+                )
+            , true)
     var yesterday = store.change_date(date, -1)
     var previous = store.day_entries(yesterday)
     if not previous.is_empty():
@@ -1650,6 +1685,24 @@ func _request_catalog_update() -> void:
     else:
         _message("Загрузка проверенного каталога из GitHub запущена.")
 
+
+func _name_meal_template_sheet(meal_name: String) -> void:
+    var sheet = _mobile_sheet("Сохранить приём пищи",
+        "Шаблон можно использовать в любой день. КБЖУ сохраняются на момент создания.",
+        "Сохранить", 400.0)
+    var fields: VBoxContainer = sheet["fields"]
+    var title_field = _text_input(fields, "Название шаблона", "Мой " + meal_name.to_lower())
+    title_field.max_length = 70
+    var confirm: Button = sheet["confirm"]
+    confirm.pressed.connect(func():
+        if store.save_meal_template(date, meal_name, title_field.text):
+            sheet["root"].queue_free()
+            _hide_keyboard_and_focus()
+            _render()
+            _notify_saved("Приём пищи сохранён")
+        else:
+            _sheet_error(sheet, "Не удалось сохранить. Проверь название и состав.")
+    )
 
 func _quick_food_sheet(food: Dictionary) -> void:
     var sheet = _mobile_sheet(str(food.get("name", "Продукт")), "Выбери количество и приём пищи.", "Добавить в дневник", 490.0)
