@@ -8,6 +8,8 @@ const UPDATE_CATALOG_PATH = "user://barcode_catalog_verified.json"
 const BarcodeScript = preload("res://src/barcode_lookup.gd")
 const RecipeMath = preload("res://src/recipe_math.gd")
 const PortionMath = preload("res://src/portion_math.gd")
+const RewardsScript = preload("res://src/rewards.gd")
+const ProfilePhotoScript = preload("res://src/profile_photo.gd")
 
 const MEAL_NAMES = ["Завтрак", "Обед", "Ужин", "Перекус"]
 const DEFAULT_MEAL_SHARES = [25, 35, 30, 10]
@@ -128,7 +130,8 @@ func default_data() -> Dictionary:
         "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true, "high_contrast": false,
             "meal_shares": DEFAULT_MEAL_SHARES.duplicate()},
         "foods": [], "entries": [], "activities": [], "weights": [], "notes": {}, "favorites": [],
-        "recipes": [], "meal_templates": [], "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат"}
+        "recipes": [], "meal_templates": [], "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
+            "photo": "", "frame": "plain"}
     }
 
 static func valid_meal_shares(value: Variant) -> bool:
@@ -203,21 +206,47 @@ func _valid_profile(profile: Dictionary) -> bool:
     var name = profile.get("name")
     var motto = profile.get("motto")
     var avatar = profile.get("avatar")
+    var photo = profile.get("photo", "")
+    var frame = profile.get("frame", "plain")
     if not (name is String and motto is String and avatar is String):
         return false
     if name.strip_edges().is_empty() or name.length() > 45 or motto.length() > 140:
         return false
-    return avatar in ["leaf", "star", "moon", "sun", "flower", "heart"]
+    if avatar not in ["leaf", "star", "moon", "sun", "flower", "heart"]:
+        return false
+    if not (frame is String) or RewardsScript.frame_by_id(frame).is_empty():
+        return false
+    return ProfilePhotoScript.valid_photo(photo)
 
 func update_profile(changes: Dictionary) -> bool:
-    if not _valid_profile(changes):
+    var previous: Dictionary = data["profile"].duplicate(true)
+    var updated: Dictionary = previous.duplicate(true)
+    for key in changes:
+        updated[key] = changes[key]
+    if not _valid_profile(updated):
         return false
-    var previous = data["profile"].duplicate(true)
-    data["profile"] = changes.duplicate(true)
+    data["profile"] = updated
     if save():
         return true
     data["profile"] = previous
     return false
+
+func update_avatar_photo(encoded: String) -> bool:
+    if not ProfilePhotoScript.valid_photo(encoded):
+        return false
+    return update_profile({"photo": encoded})
+
+func choose_avatar_frame(id: String) -> bool:
+    var frame: Dictionary = RewardsScript.frame_by_id(id)
+    if frame.is_empty():
+        return false
+    var points: int = int(RewardsScript.calculate(data, Time.get_date_string_from_system())["points"])
+    if points < int(frame["points"]):
+        return false
+    return update_profile({"frame": id})
+
+func reward_summary() -> Dictionary:
+    return RewardsScript.calculate(data, Time.get_date_string_from_system())
 
 func recipe_by_id(recipe_id: String) -> Dictionary:
     for recipe in data.get("recipes", []):
@@ -308,7 +337,14 @@ func import_json(raw: String, persist: bool = true) -> bool:
     if not obj.has("recipes"):
         obj["recipes"] = []
     if not obj.has("profile"):
-        obj["profile"] = {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат"}
+        obj["profile"] = {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
+            "photo": "", "frame": "plain"}
+    if obj["profile"] is Dictionary:
+        var previous_profile: Dictionary = obj["profile"]
+        if not previous_profile.has("photo"):
+            previous_profile["photo"] = ""
+        if not previous_profile.has("frame"):
+            previous_profile["frame"] = "plain"
     if not obj.has("favorites"):
         obj["favorites"] = []
     if not obj.has("food_portions"):
