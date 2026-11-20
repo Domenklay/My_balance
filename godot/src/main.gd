@@ -66,6 +66,7 @@ var emblem_label: Label
 var store = StoreScript.new()
 var date: String = Time.get_date_string_from_system()
 var selected_meal: String = "Завтрак"
+var _expanded_meals: Dictionary = {}
 var tab: String = "day"
 var month_shown: String = ""
 var shell: VBoxContainer
@@ -1321,10 +1322,11 @@ func _show_day() -> void:
     _macro_chip(macros, "ЖИРЫ", store.day_macro(date, "f"), MACRO_FAT)
     _macro_chip(macros, "УГЛЕВОДЫ", store.day_macro(date, "c"), MACRO_CARBS)
 
-    # Daily diary: four permanent sections, even for an empty date.
+    # Compact sections are always present. Only the selected meal unfolds.
+    # Expansion state is in-memory, keyed by date: diary records are untouched.
     var foods = _card("Питание · " + date)
     diary_food_card = foods
-    _label(foods, "Каждый приём пищи сохраняется отдельно для выбранного дня.", 12, MUTED)
+    _label(foods, "Раскрой нужный приём пищи для просмотра продуктов и повторения блюд.", 12, MUTED)
     var existing = store.day_entries(date)
     var sections = [
         {"meal":"Завтрак", "icon":"☀", "variant":"overview", "accent":ACCENT},
@@ -1343,15 +1345,21 @@ func _show_day() -> void:
         var meal_kcal: float = float(meal_stats["kcal"])
         var share: int = roundi(float(shares[section_index]))
         var meal_target: float = float(target) * float(share) / 100.0
+        var section_key = date + "|" + meal_name
+        var expanded: bool = bool(_expanded_meals.get(section_key, false))
         var meal_card = _card(str(section_info["icon"]) + "  " + meal_name, str(section_info["variant"]))
-        meal_card.get_parent().name = "DailyMeal_" + str(["Завтрак", "Обед", "Ужин", "Перекус"].find(meal_name))
+        meal_card.get_parent().name = "DailyMeal_" + str(section_index)
         _label(meal_card, str(roundi(meal_kcal)) + " ккал · " +
             str(meals_for_day.size()) + " продуктов", 14, TEXT_ACCENT)
-        var allowance_text = "Без отдельного ориентира" if share == 0 else (
-            "Ориентир: " + str(roundi(meal_target)) + " ккал (" + str(share) + "% в сутки)"
-        )
-        _label(meal_card, allowance_text, 12, MUTED)
         if share > 0:
+            _label(meal_card, "Ориентир: " + str(roundi(meal_target)) + " ккал (" +
+                str(share) + "% в сутки)", 12, MUTED)
+            if meal_kcal > meal_target:
+                _label(meal_card, "Превышение: +" +
+                    str(roundi(meal_kcal - meal_target)) + " ккал", 12, ACCENT)
+            else:
+                _label(meal_card, "Осталось " +
+                    str(roundi(meal_target - meal_kcal)) + " ккал", 12, MUTED)
             var meal_bar = ProgressBar.new()
             meal_bar.name = "MealProgress_" + str(section_index)
             meal_bar.min_value = 0.0
@@ -1359,39 +1367,79 @@ func _show_day() -> void:
             meal_bar.value = minf(meal_kcal, meal_bar.max_value)
             _style_progress(meal_bar)
             var meal_fill = StyleBoxFlat.new()
-            meal_fill.bg_color = section_info["accent"]
+            meal_fill.bg_color = Color("#E0705D") if meal_kcal > meal_target else section_info["accent"]
             meal_fill.set_corner_radius_all(8)
             meal_bar.add_theme_stylebox_override("fill", meal_fill)
             meal_card.add_child(meal_bar)
-        var meal_macros = _row(meal_card)
-        _macro_chip(meal_macros, "БЕЛКИ", float(meal_stats["p"]), MACRO_PROTEIN)
-        _macro_chip(meal_macros, "ЖИРЫ", float(meal_stats["f"]), MACRO_FAT)
-        _macro_chip(meal_macros, "УГЛЕВОДЫ", float(meal_stats["c"]), MACRO_CARBS)
-        _button(meal_card, "+ Добавить " + meal_name.to_lower(),
+        else:
+            _label(meal_card, "Без отдельного ориентира", 12, MUTED)
+            if meal_kcal > 0:
+                _label(meal_card, "Учтено " + str(roundi(meal_kcal)) +
+                    " ккал без установленной доли", 12, TEXT_ACCENT)
+        # One compact macro line instead of three vertically stacked tiles.
+        var macro_line = (
+            "БЕЛКИ " + str(snappedf(float(meal_stats["p"]), 0.1)) + " г  ·  " +
+            "ЖИРЫ " + str(snappedf(float(meal_stats["f"]), 0.1)) + " г  ·  " +
+            "УГЛЕВОДЫ " + str(snappedf(float(meal_stats["c"]), 0.1)) + " г"
+        )
+        _label(meal_card, macro_line, 12, MUTED)
+        var controls = _row(meal_card)
+        _button(controls, "▴ Свернуть" if expanded else "▾ Подробнее", func():
+            _expanded_meals[section_key] = not expanded
+            _render()
+        , true)
+        _button(controls, "+ Добавить " + meal_name.to_lower(),
             func(): _open_meal_catalog(meal_name), true)
-        var actions = _row(meal_card)
-        if not meals_for_day.is_empty():
-            _button(actions, "☆ Сохранить набор", func():
+        if not expanded:
+            continue
+        var details = VBoxContainer.new()
+        details.name = "MealDetails_" + str(section_index)
+        details.add_theme_constant_override("separation", 8)
+        meal_card.add_child(details)
+        if meals_for_day.is_empty():
+            _label(details, "Пока ничего не записано.", 13, MUTED)
+        else:
+            for entry in meals_for_day:
+                var f: Dictionary = store.entry_food(entry)
+                var meal_row = _soft_list_row(details)
+                var caption = _label(meal_row, str(f.get("name", "Продукт")) + "\n" +
+                    str(entry.get("grams", 0)) + " " + str(entry.get("unit", "г")) +
+                    " · " + str(roundi(store.entry_kcal(entry))) + " ккал" +
+                    (" · " + str(entry.get("portion_label", "")) if not str(entry.get("portion_label", "")).is_empty() else ""), 13)
+                caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+                _button(meal_row, "✎", func(): _edit_entry(entry), true)
+                _button(meal_row, "×", func(): _confirm_delete("Удалить запись питания?", func():
+                    if store.delete_saved_record("entries", entry):
+                        _render()
+                        _notify_saved("Запись питания удалена")
+                    else:
+                        _message("Не удалось удалить запись питания.")
+                ), true)
+            _button(details, "☆ Сохранить набор", func():
                 _name_meal_template_sheet(meal_name)
             , true)
         var yesterday_count: int = store.day_entries(yesterday).filter(
             func(e): return str(e.get("meal", "")) == meal_name
         ).size()
         if yesterday_count > 0:
-            _button(actions, "↻ Со вчера", func():
-                var copied = store.repeat_meal(yesterday, meal_name, date)
-                if copied > 0:
-                    _render()
-                    _notify_saved("Добавлено записей: " + str(copied))
-                else:
-                    _message("Не удалось повторить приём пищи.")
+            _button(details, "↻ Повторить со вчера", func():
+                _confirm_action("Повторить «" + meal_name.to_lower() + "» со вчера?",
+                    "Добавить " + str(yesterday_count) + " записей в " + date +
+                    "? Повторное добавление создаст дубликаты.", func():
+                    var copied = store.repeat_meal(yesterday, meal_name, date)
+                    if copied > 0:
+                        _render()
+                        _notify_saved("Добавлено записей: " + str(copied))
+                    else:
+                        _message("Не удалось повторить приём пищи.")
+                )
             , true)
         for template in saved_templates:
             if not (template is Dictionary) or template["items"].is_empty():
                 continue
             if str(template["items"][0].get("meal", "")) != meal_name:
                 continue
-            var template_row = _row(meal_card)
+            var template_row = _row(details)
             var template_name = _label(template_row, "★ " + str(template["name"]), 12, MUTED)
             template_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
             _button(template_row, "+", func():
@@ -1411,25 +1459,6 @@ func _show_day() -> void:
                         _message("Не удалось удалить набор.")
                 )
             , true)
-        if meals_for_day.is_empty():
-            _label(meal_card, "Пока ничего не записано.", 13, MUTED)
-        else:
-            for entry in meals_for_day:
-                var f: Dictionary = store.entry_food(entry)
-                var meal_row = _soft_list_row(meal_card)
-                var caption = _label(meal_row, str(f.get("name", "Продукт")) + "\n" +
-                    str(entry.get("grams", 0)) + " " + str(entry.get("unit", "г")) +
-                    " · " + str(roundi(store.entry_kcal(entry))) + " ккал" +
-                    (" · " + str(entry.get("portion_label", "")) if not str(entry.get("portion_label", "")).is_empty() else ""), 13)
-                caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-                _button(meal_row, "✎", func(): _edit_entry(entry), true)
-                _button(meal_row, "×", func(): _confirm_delete("Удалить запись питания?", func():
-                    if store.delete_saved_record("entries", entry):
-                        _render()
-                        _notify_saved("Запись питания удалена")
-                    else:
-                        _message("Не удалось удалить запись питания.")
-                ), true)
 
     var activity = _card("Движение сегодня", "activity")
     activity.get_parent().name = "DailyActivity"
@@ -2616,6 +2645,16 @@ func _read_backup_file(path: String) -> void:
     )
     confirmation.canceled.connect(func(): confirmation.queue_free())
     confirmation.popup_centered(Vector2i(365, 210))
+
+func _confirm_action(title: String, description: String, action: Callable) -> void:
+    var dialog = ConfirmationDialog.new()
+    dialog.title = title
+    dialog.dialog_text = description
+    dialog.ok_button_text = "Повторить"
+    add_child(dialog)
+    dialog.confirmed.connect(func(): action.call(); dialog.queue_free())
+    dialog.canceled.connect(func(): dialog.queue_free())
+    dialog.popup_centered(Vector2i(350, 190))
 
 func _confirm_delete(prompt: String, action: Callable) -> void:
     var dialog = ConfirmationDialog.new()
