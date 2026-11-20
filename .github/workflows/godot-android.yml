@@ -103,6 +103,8 @@ jobs:
         run: /tmp/godot --headless --path godot --script res://tests/recipe_profile_test.gd
       - name: Test food search, favorites and quick-add UI
         run: /tmp/godot --headless --path godot --script res://tests/ui_test.gd
+      - name: Test date-specific breakfast, lunch, dinner and snack sections
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/daily_meals_test.gd
       - name: Test portion math, saved sizes, 100ml products and diary migration
         run: /tmp/godot --headless --path godot --script res://tests/portion_test.gd
       - name: Smoke test app startup
