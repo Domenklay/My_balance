@@ -89,7 +89,7 @@ jobs:
       - name: Test barcode parsing and offline nutrition cache
         run: /tmp/godot --headless --path godot --script res://tests/barcode_test.gd
       - name: Verify touch swipe and scroll range across tabs
-        run: /tmp/godot --headless --path godot --script res://tests/scroll_test.gd
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/scroll_test.gd
       - name: Test themes, dark mode, ornaments and saved settings
         run: /tmp/godot --headless --path godot --script res://tests/theme_test.gd
       - name: Test recipe calculations, history and personal profile
