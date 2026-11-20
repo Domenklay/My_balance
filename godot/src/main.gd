@@ -2118,6 +2118,9 @@ func _update_food_preview(picker: OptionButton, filtered: Array, grams: SpinBox,
         preview: Label, star: Button) -> void:
     if picker.selected < 0 or picker.selected >= filtered.size():
         preview.text = "Нет подходящих продуктов."
+        var hint = picker.get_parent().get_node_or_null("FoodQuantityUnitHint") as Label
+        if hint != null:
+            hint.text = "Количество: выбери продукт (г или мл)"
         star.text = "☆ В избранное"
         star.disabled = true
         return
@@ -2364,6 +2367,7 @@ func _show_settings() -> void:
     var card = _card("Личные настройки")
     _label(card, "Калории в сутки")
     var kcal = _number(card, float(store.data["settings"]["kcal"]), 1000, 5000)
+    kcal.name = "DailyCalorieTarget"
     _label(card, "Вес на старте")
     var start = _number(card, float(store.data["settings"]["start"]), 20, 400, 0.1)
     _label(card, "Моя цель")
@@ -2390,7 +2394,8 @@ func _show_settings() -> void:
         var meal_row = _row(portions_card)
         var meal_caption = _label(meal_row, str(StoreScript.MEAL_NAMES[i]), 14, INK)
         meal_caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        var field = _number(meal_row, float(original_shares[i]), 0.0, 100.0, 5.0)
+        var field = _number(meal_row, float(original_shares[i]), 0.0, 100.0, 1.0)
+        field.name = "MealShareField_" + str(i)
         field.custom_minimum_size.x = 105
         portion_fields.append(field)
     var shares_preview = _label(portions_card, "", 13, TEXT_ACCENT)
