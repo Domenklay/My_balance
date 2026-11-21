@@ -1741,13 +1741,7 @@ func _show_day() -> void:
     numbers.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     numbers.add_theme_constant_override("separation", 2)
     hero_content.add_child(numbers)
-    var calorie_heading = _row(numbers)
-    _label(calorie_heading, "Энергия дня", 16, WHITE)
-    var edit_goal = _button(calorie_heading, "✎ Норма", func(): _show_calorie_goal_editor(), true)
-    edit_goal.name = "EditDailyCalorieGoal"
-    edit_goal.size_flags_horizontal = Control.SIZE_SHRINK_END
-    edit_goal.custom_minimum_size.y = 34
-    edit_goal.add_theme_font_size_override("font_size", 12)
+    _label(numbers, "Энергия дня", 16, WHITE)
     _label(numbers, str(roundi(total)) + " из " + str(roundi(target)) + " ккал", 21, WHITE)
     var remaining: float = target - total
     _label(numbers,
@@ -1761,6 +1755,13 @@ func _show_day() -> void:
     ring.size_flags_horizontal = Control.SIZE_SHRINK_END
     ring.set_palette(HERO_TRACK, HERO_FILL, WHITE)
     ring.set_value(total, target)
+    var edit_goal = _button(hero_content, "✎", func(): _show_calorie_goal_editor(), true)
+    edit_goal.name = "EditDailyCalorieGoal"
+    edit_goal.tooltip_text = "Изменить норму калорий"
+    edit_goal.custom_minimum_size = Vector2(35, 36)
+    edit_goal.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+    edit_goal.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+    edit_goal.add_theme_font_size_override("font_size", 18)
     hero_content.add_child(ring)
     var macros = _row(hero)
     macros.add_theme_constant_override("separation", 5)
