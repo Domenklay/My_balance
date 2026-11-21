@@ -1752,7 +1752,7 @@ func _show_day() -> void:
         title_row.add_theme_constant_override("separation", 4)
         var accent = ColorRect.new()
         accent.name = "MealAccent_" + str(section_index)
-        accent.color = Color(str(section_info["accent"]))
+        accent.color = section_info["accent"]
         accent.custom_minimum_size = Vector2(4, 28)
         accent.mouse_filter = Control.MOUSE_FILTER_IGNORE
         title_row.add_child(accent)
@@ -1786,6 +1786,7 @@ func _show_day() -> void:
         add_button.name = "MealQuickAdd_" + str(section_index)
         add_button.tooltip_text = "Добавить продукт в " + meal_name.to_lower()
         add_button.custom_minimum_size = Vector2(37, 38)
+        add_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
         add_button.add_theme_font_size_override("font_size", 21)
         var expand_button = _button(title_row, "⌃" if expanded else "⌄", func():
             _expanded_meals[section_key] = not expanded
@@ -1794,6 +1795,7 @@ func _show_day() -> void:
         expand_button.name = "MealExpand_" + str(section_index)
         expand_button.tooltip_text = "Свернуть" if expanded else "Подробнее"
         expand_button.custom_minimum_size = Vector2(37, 38)
+        expand_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
         expand_button.add_theme_font_size_override("font_size", 19)
         if meal_kcal > 0 and share > 0:
             var meal_bar = ProgressBar.new()
