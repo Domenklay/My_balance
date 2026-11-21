@@ -18,6 +18,9 @@ func _draw() -> void:
     if not enabled or size.x <= 0.0 or size.y <= 0.0:
         return
     var tint = Color(ink.r, ink.g, ink.b, opacity)
+    if kind == "botanical":
+        _draw_botanical(tint)
+        return
     var spacing = 72.0
     var cols = int(ceil(size.x / spacing)) + 1
     var rows = int(ceil(size.y / spacing)) + 1
@@ -40,3 +43,44 @@ func _draw() -> void:
                     draw_line(c, c + Vector2(22, 28), tint, 1.1, true)
                     draw_arc(c + Vector2(4, 11), 8.0, -2.8, -0.35, 15, tint, 1.0, true)
                     draw_arc(c + Vector2(14, 22), 8.0, -2.8, -0.35, 15, tint, 1.0, true)
+
+
+# Large corner foliage instead of a repeating line-doodle texture. The leaves
+# are painted behind interactive controls and never alter touch hitboxes.
+func _draw_leaf(center: Vector2, direction: Vector2, length: float, tint: Color) -> void:
+    var axis = direction.normalized()
+    var side = Vector2(-axis.y, axis.x)
+    var start = center - axis * length * 0.5
+    var end = center + axis * length * 0.5
+    var polygon = PackedVector2Array([
+        start, center - side * (length * 0.22), end,
+        center + side * (length * 0.22)
+    ])
+    draw_colored_polygon(polygon, tint)
+    draw_line(start, end, tint.lightened(0.08), 0.85, true)
+
+
+func _draw_branch(root: Vector2, mirror: float, tint: Color) -> void:
+    var p1 = root
+    var p2 = root + Vector2(38.0 * mirror, 31.0)
+    var p3 = root + Vector2(79.0 * mirror, 50.0)
+    draw_line(p1, p2, tint, 2.0, true)
+    draw_line(p2, p3, tint, 1.8, true)
+    _draw_leaf(root + Vector2(20.0 * mirror, 12.0), Vector2(0.45 * mirror, -1.0), 33.0, tint)
+    _draw_leaf(root + Vector2(38.0 * mirror, 33.0), Vector2(0.95 * mirror, 0.4), 39.0, tint)
+    _draw_leaf(root + Vector2(59.0 * mirror, 32.0), Vector2(0.3 * mirror, -1.0), 28.0, tint)
+    _draw_leaf(root + Vector2(75.0 * mirror, 50.0), Vector2(0.9 * mirror, 0.25), 30.0, tint)
+
+
+func _draw_botanical(tint: Color) -> void:
+    var width = size.x
+    var height = size.y
+    if width < 56.0 or height < 45.0:
+        return
+    var top = Color(tint.r, tint.g, tint.b, minf(tint.a * 1.7, 0.28))
+    _draw_branch(Vector2(-3.0, 1.0), 1.0, top)
+    _draw_branch(Vector2(width + 3.0, -8.0), -1.0, top)
+    # Bottom corner clusters are kept off the main text column.
+    if height > 190.0:
+        _draw_branch(Vector2(-5.0, height - 78.0), 1.0, tint)
+        _draw_branch(Vector2(width + 4.0, height - 105.0), -1.0, tint)
