@@ -112,6 +112,7 @@ var recipe_draft: Dictionary = {}
 var recipe_search_text: String = ""
 var recipe_list_query: String = ""
 var recipe_manual_open: bool = false
+var recipe_actions_expanded: Dictionary = {}
 var _rendered_view: String = ""
 var _scroll_memory: Dictionary = {}
 var _render_serial: int = 0
@@ -1493,6 +1494,90 @@ func _apply_avatar_photo_bytes(bytes: PackedByteArray) -> bool:
     return true
 
 
+# Optional photographs use the same validated, locally stored JPEG data as
+# avatar photos. Never load remote images or modify the recipe before Save.
+func _recipe_photo_thumb(parent: Node, recipe: Dictionary, side: int = 74) -> void:
+    var frame = PanelContainer.new()
+    frame.name = "RecipePhotoThumb"
+    frame.custom_minimum_size = Vector2(side, side)
+    frame.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+    var backing = StyleBoxFlat.new()
+    backing.bg_color = TINT_BG if not DARK_MODE else CHIP_BG
+    backing.border_color = BORDER
+    backing.set_border_width_all(1)
+    backing.set_corner_radius_all(14)
+    backing.content_margin_left = 5
+    backing.content_margin_right = 5
+    backing.content_margin_top = 5
+    backing.content_margin_bottom = 5
+    frame.add_theme_stylebox_override("panel", backing)
+    parent.add_child(frame)
+    var art = TextureRect.new()
+    art.name = "RecipePhotoImage"
+    var saved_image: ImageTexture = ProfilePhotoScript.decode_photo(str(recipe.get("photo", "")))
+    art.texture = saved_image if saved_image != null else NAV_TEXTURES["recipes"]
+    art.modulate = Color.WHITE if saved_image != null else TEXT_ACCENT
+    art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED if saved_image != null else TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+    art.custom_minimum_size = Vector2(side - 10, side - 10)
+    art.clip_contents = true
+    art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    frame.add_child(art)
+
+
+func _pick_recipe_photo() -> void:
+    var filters = PackedStringArray([
+        "*.jpg,*.jpeg,*.png,*.webp;Фото блюда;image/jpeg,image/png,image/webp"
+    ])
+    if DisplayServer.has_feature(DisplayServer.FEATURE_NATIVE_DIALOG_FILE):
+        var status = DisplayServer.file_dialog_show(
+            "Фото блюда", "", "", false, DisplayServer.FILE_DIALOG_MODE_OPEN_FILE,
+            filters,
+            func(accepted: bool, paths: PackedStringArray, _filter_index: int):
+                if accepted and not paths.is_empty():
+                    _read_recipe_photo(paths[0])
+        )
+        if status == OK:
+            return
+    var picker = FileDialog.new()
+    picker.use_native_dialog = true
+    picker.access = FileDialog.ACCESS_FILESYSTEM
+    picker.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+    picker.filters = filters
+    add_child(picker)
+    picker.file_selected.connect(func(path: String):
+        _read_recipe_photo(path)
+        picker.queue_free()
+    )
+    picker.canceled.connect(func(): picker.queue_free())
+    picker.popup_centered_ratio(0.85)
+
+
+func _read_recipe_photo(path: String) -> void:
+    var source = FileAccess.open(path, FileAccess.READ)
+    if source == null:
+        _message("Не удалось открыть фото блюда. Выбери JPEG, PNG или WebP.")
+        return
+    if source.get_length() <= 0 or source.get_length() > ProfilePhotoScript.MAX_SOURCE_BYTES:
+        source.close()
+        _message("Фото должно быть не больше 16 МБ.")
+        return
+    var raw = source.get_buffer(source.get_length())
+    source.close()
+    _apply_recipe_photo_bytes(raw)
+
+
+func _apply_recipe_photo_bytes(raw: PackedByteArray) -> bool:
+    var picture = ProfilePhotoScript.make_photo(raw)
+    if picture.is_empty():
+        _message("Фото не обработано. Поддерживаются JPEG, PNG и WebP до 16 МБ.")
+        return false
+    recipe_draft["photo"] = picture
+    _render()
+    _notify_saved("Фото добавлено к черновику. Сохрани рецепт.")
+    return true
+
+
 func _begin_recipe_editor(recipe: Dictionary = {}) -> void:
     recipe_editor_open = true
     recipe_search_text = ""
@@ -1500,7 +1585,7 @@ func _begin_recipe_editor(recipe: Dictionary = {}) -> void:
     if recipe.is_empty():
         recipe_draft = {
             "id": "", "name": "", "cooked_weight": 500.0,
-            "servings": 4.0, "ingredients": []
+            "servings": 4.0, "ingredients": [], "photo": ""
         }
     else:
         recipe_draft = recipe.duplicate(true)
@@ -1513,11 +1598,11 @@ func _recipe_sync_form(name: LineEdit, cooked: SpinBox, portions: SpinBox) -> vo
     recipe_draft["servings"] = portions.value
 
 func _refresh_recipe_food_search(search: LineEdit, picker: OptionButton, filtered: Array) -> void:
-    var needle = search.text.strip_edges().to_lower()
+    var needle = search.text.strip_edges()
     filtered.clear()
     picker.clear()
     for food in store.all_foods():
-        if needle.is_empty() or str(food.get("name", "")).to_lower().contains(needle):
+        if FoodSearchScript.matches(food, needle):
             filtered.append(food)
             picker.add_item(str(food.get("name", "Продукт")))
             if filtered.size() >= 75:
@@ -1550,6 +1635,26 @@ func _show_recipe_editor() -> void:
     var cooked = _number(toolbar, float(recipe_draft.get("cooked_weight", 500)), 1, 50000, 1)
     _label(toolbar, "На сколько порций разделить", 13, MUTED)
     var portions = _number(toolbar, float(recipe_draft.get("servings", 4)), 1, 100, 1)
+    var picture_row = _row(toolbar)
+    _recipe_photo_thumb(picture_row, recipe_draft, 70)
+    var picture_actions = VBoxContainer.new()
+    picture_actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    picture_actions.add_theme_constant_override("separation", 4)
+    picture_row.add_child(picture_actions)
+    var photo_button = _button(picture_actions, "📷 Фото блюда", func():
+        _recipe_sync_form(name, cooked, portions)
+        _pick_recipe_photo()
+    , true)
+    photo_button.name = "RecipeChoosePhoto"
+    photo_button.custom_minimum_size.y = 38
+    if not str(recipe_draft.get("photo", "")).is_empty():
+        var remove_photo = _button(picture_actions, "Удалить фото", func():
+            _recipe_sync_form(name, cooked, portions)
+            recipe_draft["photo"] = ""
+            _render()
+        , true)
+        remove_photo.name = "RecipeRemovePhoto"
+        remove_photo.custom_minimum_size.y = 34
     var preview: Label = null
     var info = _card("Ингредиенты", "tint")
     var parts: Array = recipe_draft.get("ingredients", [])
@@ -1727,22 +1832,61 @@ func _show_recipes() -> void:
         var details = RecipeMath.calculate(recipe["ingredients"], float(recipe["cooked_weight"]))
         if details.is_empty():
             continue
-        var card = _card(str(recipe.get("name", "Блюдо")))
-        _label(card, str(roundi(details["kcal"])) + " ккал / 100 г   ·   " + str(roundi(details["total_kcal"])) + " ккал во всём блюде", 15, TEXT_ACCENT)
-        _label(card, "Готовый вес: " + str(roundi(float(recipe["cooked_weight"]))) + " г   •   Порций: " + str(roundi(float(recipe["servings"]))) + "   •   Ингредиентов: " + str(recipe["ingredients"].size()), 12, MUTED)
-        _label(card, "Б " + str(snappedf(details["p"], 0.1)) + " г   Ж " + str(snappedf(details["f"], 0.1)) + " г   У " + str(snappedf(details["c"], 0.1)) + " г  / 100 г", 13, INK)
-        _button(card, "+ Добавить порцию в дневник", func(): _recipe_portion_sheet(recipe))
+        var recipe_id: String = str(recipe.get("id", ""))
+        var card = _card("")
+        card.get_parent().name = "RecipeCard_" + recipe_id
+        _compact_card(card, 11, 7)
+        var overview = _row(card)
+        overview.add_theme_constant_override("separation", 10)
+        _recipe_photo_thumb(overview, recipe, 76)
+        var summary = VBoxContainer.new()
+        summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        summary.add_theme_constant_override("separation", 3)
+        overview.add_child(summary)
+        var title = _label(summary, str(recipe.get("name", "Блюдо")), 16, INK)
+        title.name = "RecipeCardTitle"
+        title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        var serving_count: float = maxf(1.0, float(recipe.get("servings", 1.0)))
+        var serving_grams: float = float(recipe["cooked_weight"]) / serving_count
+        var portion_summary = _label(summary,
+            str(roundi(float(details["total_kcal"]) / serving_count)) +
+            " ккал / порция · " + str(roundi(serving_grams)) + " г", 13, TEXT_ACCENT)
+        portion_summary.name = "RecipeCardKcal"
+        var macros = _label(summary, "Б " +
+            str(snappedf(float(details["total_p"]) / serving_count, 0.1)) +
+            "  Ж " + str(snappedf(float(details["total_f"]) / serving_count, 0.1)) +
+            "  У " + str(snappedf(float(details["total_c"]) / serving_count, 0.1)) +
+            " г / порция", 11, MUTED)
+        macros.name = "RecipeCardMacros"
         var actions = _row(card)
-        _button(actions, "✎ Изменить", func(): _begin_recipe_editor(recipe), true)
-        _button(actions, "Удалить", func():
-            _confirm_delete("Удалить рецепт «" + str(recipe["name"]) + "»? Уже записанные порции останутся в дневнике.", func():
-                if store.delete_recipe(str(recipe["id"])):
-                    _render()
-                    _notify_saved("Рецепт удалён")
-                else:
-                    _message("Не удалось удалить рецепт.")
-            )
+        actions.add_theme_constant_override("separation", 6)
+        var add_portion = _button(actions, "+ Добавить порцию в дневник",
+            func(): _recipe_portion_sheet(recipe))
+        add_portion.custom_minimum_size.y = 42
+        add_portion.add_theme_font_size_override("font_size", 12)
+        var options = _button(actions, "⋯", func():
+            recipe_actions_expanded[recipe_id] = not bool(recipe_actions_expanded.get(recipe_id, false))
+            _render()
         , true)
+        options.name = "RecipeCardMore"
+        options.tooltip_text = "Действия с рецептом"
+        options.custom_minimum_size = Vector2(44, 42)
+        options.size_flags_horizontal = Control.SIZE_SHRINK_END
+        options.add_theme_font_size_override("font_size", 22)
+        if bool(recipe_actions_expanded.get(recipe_id, false)):
+            var more = _row(card)
+            more.name = "RecipeCardActions"
+            _button(more, "✎ Изменить", func(): _begin_recipe_editor(recipe), true)
+            _button(more, "Удалить", func():
+                _confirm_delete("Удалить рецепт «" + str(recipe["name"]) + "»? Уже записанные порции останутся в дневнике.", func():
+                    if store.delete_recipe(recipe_id):
+                        recipe_actions_expanded.erase(recipe_id)
+                        _render()
+                        _notify_saved("Рецепт удалён")
+                    else:
+                        _message("Не удалось удалить рецепт.")
+                )
+            , true)
     if matched == 0 and not recipes.is_empty():
         var no_results = _card("Ничего не найдено")
         _label(no_results, "Попробуй другое название или очисти поиск.", 13, MUTED)
