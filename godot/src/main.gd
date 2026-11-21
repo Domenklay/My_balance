@@ -1688,8 +1688,14 @@ func _show_day() -> void:
         title_row.add_theme_constant_override("separation", 6)
         var meal_title = _label(title_row, str(section_info["icon"]) + " " + meal_name, 16, INK)
         meal_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        meal_title.autowrap_mode = TextServer.AUTOWRAP_OFF
+        meal_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
         var count_label = _label(title_row, str(roundi(meal_kcal)) + " ккал · " +
             str(meals_for_day.size()) + " продуктов", 12, TEXT_ACCENT)
+        count_label.custom_minimum_size.x = 146
+        count_label.size_flags_horizontal = Control.SIZE_SHRINK_END
+        count_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+        count_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
         count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
         if share > 0:
             _label(meal_card, "Ориентир: " + str(roundi(meal_target)) + " ккал (" +
