@@ -105,6 +105,8 @@ jobs:
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/onboarding_test.gd
       - name: Test compact home and profile, collapsible notes and rewards
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/compact_layout_test.gd
+      - name: Verify square header and one-row day meals with preserved interactions
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/visual_polish_test.gd
       - name: Test positive rewards, achievement frames, image avatar and JSON migration
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/rewards_avatar_test.gd
       - name: Test food search, favorites and quick-add UI
