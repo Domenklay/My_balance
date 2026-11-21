@@ -12,6 +12,7 @@ const ProfilePhotoScript = preload("res://src/profile_photo.gd")
 const ProfileProgressScript = preload("res://src/profile_progress.gd")
 const OnboardingMath = preload("res://src/onboarding_math.gd")
 const BarcodeScript = preload("res://src/barcode_lookup.gd")
+const PRODUCT_PLACEHOLDER = preload("res://assets/products/package.svg")
 const FoodSearchScript = preload("res://src/food_search.gd")
 const AppearanceScript = preload("res://src/appearance.gd")
 const PatternScript = preload("res://src/theme_pattern.gd")
@@ -2787,6 +2788,84 @@ func _sheet_error(sheet: Dictionary, message: String) -> void:
     var label: Label = sheet["message"]
     label.text = message
     label.visible = true
+
+# Display a small product photo when OFF supplied a safe CDN URL. No
+# image fetch is made for bundled/offline products without an image.
+func _barcode_product_overview(parent: Node, product: Dictionary, sheet_root: Node) -> void:
+    var row = _row(parent)
+    row.name = "BarcodeProductOverview"
+    row.add_theme_constant_override("separation", 10)
+    var photo = TextureRect.new()
+    photo.name = "BarcodeProductImage"
+    photo.texture = PRODUCT_PLACEHOLDER
+    photo.modulate = TEXT_ACCENT
+    photo.custom_minimum_size = Vector2(72, 72)
+    photo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    photo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+    photo.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+    photo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    row.add_child(photo)
+    var texts = VBoxContainer.new()
+    texts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    texts.add_theme_constant_override("separation", 3)
+    row.add_child(texts)
+    var brand = str(product.get("brand", "")).strip_edges()
+    if not brand.is_empty():
+        var b = _label(texts, brand, 13, INK)
+        b.name = "BarcodeProductBrand"
+        b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    var quantity = str(product.get("quantity", "")).strip_edges()
+    if not quantity.is_empty():
+        var q = _label(texts, "Упаковка: " + quantity, 12, MUTED)
+        q.name = "BarcodeProductPackage"
+        q.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    var source = str(product.get("source", ""))
+    _label(texts, "Источник: Open Food Facts" if source == "Open Food Facts"
+        else "Сохранённый продукт", 11, MUTED)
+    var image_url: String = BarcodeScript.safe_image_url(
+        str(product.get("image_url", "")))
+    if image_url.is_empty():
+        return
+    var http = HTTPRequest.new()
+    http.name = "BarcodeImageRequest"
+    http.body_size_limit = 800000
+    http.timeout = 8.0
+    sheet_root.add_child(http)
+    http.request_completed.connect(func(result: int, status: int,
+            _headers: PackedStringArray, bytes: PackedByteArray):
+        if not is_instance_valid(photo) or result != HTTPRequest.RESULT_SUCCESS or \
+                status != 200 or bytes.is_empty() or bytes.size() > 800000:
+            return
+        var picture = Image.new()
+        var path: String = image_url.to_lower()
+        var error: int = picture.load_png_from_buffer(bytes) if path.ends_with(".png") else \
+            picture.load_jpg_from_buffer(bytes)
+        if error != OK or picture.get_width() < 1 or picture.get_height() < 1 or \
+                picture.get_width() > 2048 or picture.get_height() > 2048:
+            return
+        photo.texture = ImageTexture.create_from_image(picture)
+        photo.modulate = WHITE
+    )
+    http.request(image_url, PackedStringArray(["User-Agent: MyBalance/0.7.31"]))
+
+
+# Blank or malformed nutritional fields must never silently become zero.
+func _barcode_nutrition_value(raw: String, maximum: float) -> float:
+    var formatted = raw.strip_edges().replace(",", ".")
+    if formatted.is_empty() or not formatted.is_valid_float():
+        return -1.0
+    var value: float = formatted.to_float()
+    if not is_finite(value) or value < 0.0 or value > maximum:
+        return -1.0
+    return value
+
+
+func _barcode_prefill(product: Dictionary, key: String) -> String:
+    var value = float(product.get(key, -1.0))
+    if value < 0.0:
+        return ""
+    return str(snappedf(value, 0.1))
+
 
 func _show_barcode_portion(food: Dictionary) -> void:
     _quick_food_sheet(food, true)
