@@ -3543,8 +3543,7 @@ func _meal_templates_sheet() -> void:
             add_button.name = "TemplateQuickAdd_" + template_id
             add_button.custom_minimum_size = Vector2(37, 39)
             var edit = _button(panel, "✎", func():
-                sheet["root"].queue_free()
-                _edit_meal_template_sheet(template_id)
+                _open_template_editor_from_list(template_id, sheet)
             , true)
             edit.name = "TemplateEdit_" + template_id
             edit.custom_minimum_size = Vector2(37, 39)
@@ -3555,6 +3554,16 @@ func _meal_templates_sheet() -> void:
             remove.custom_minimum_size = Vector2(37, 39)
     var close: Button = sheet["confirm"]
     close.pressed.connect(func(): sheet["root"].queue_free())
+
+
+func _open_template_editor_from_list(template_id: String, sheet: Dictionary) -> void:
+    # Free the old sheet's node name before opening a second one.
+    # queue_free alone keeps the old ProductSheet registered this frame, so
+    # Godot auto-renames the new sheet and downstream navigation cannot find it.
+    var old_root: Control = sheet["root"]
+    old_root.get_parent().remove_child(old_root)
+    old_root.queue_free()
+    _edit_meal_template_sheet(template_id)
 
 
 func _prompt_apply_template(template_id: String, title: String, count: int,
