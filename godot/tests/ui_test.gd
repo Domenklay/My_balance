@@ -127,9 +127,16 @@ func _run() -> void:
         push_error("FAILED: UI cannot set a favorite")
         quit(1)
         return
-    var add_button = _find_button(parent, "+ Добавить")
-    if add_button == null:
-        push_error("FAILED: quick-add button missing")
+    # The advanced batch action adds only an explicitly visible chosen weight.
+    var advanced_toggle = _find_button(parent, "▾ Дополнительные настройки")
+    if advanced_toggle == null:
+        push_error("FAILED: advanced chosen-weight controls missing")
+        quit(1)
+        return
+    advanced_toggle.pressed.emit()
+    var add_button = _find_button(parent, "+ Добавить выбранный вес")
+    if add_button == null or not add_button.visible:
+        push_error("FAILED: explicit chosen-weight action missing")
         quit(1)
         return
     add_button.pressed.emit()
@@ -206,24 +213,30 @@ func _run() -> void:
         quit(1)
         return
     var results = app.find_child("FoodSearchResults", true, false)
-    if results == null or _find_button(results, "+") == null:
-        push_error("FAILED: catalog nutrition cards or quick add missing")
+    if results == null or _find_button(results, "＋ Порция") == null:
+        push_error("FAILED: catalog food cards must offer portion chooser")
         quit(1)
         return
     var count_before = app.store.day_entries(app.date).size()
-    var add_from_result = _find_button(results, "+")
-    add_from_result.pressed.emit()
-    await process_frame
-    if app.store.day_entries(app.date).size() != count_before + 1 or app.tab != "search":
-        push_error("FAILED: result quick add must keep catalog open")
-        quit(1)
-        return
-    add_from_result.pressed.emit()
-    await process_frame
-    if app.store.day_entries(app.date).size() != count_before + 2:
-        push_error("FAILED: catalog must allow adding several items in sequence")
-        quit(1)
-        return
+    # A result tap must never silently append the default 100 g.
+    for repetition in range(2):
+        results = app.find_child("FoodSearchResults", true, false)
+        var add_from_result = _find_button(results, "＋ Порция")
+        add_from_result.pressed.emit()
+        await process_frame
+        var chooser = app.get_node_or_null("ProductSheet")
+        var confirm = chooser.find_child("ProductSheetConfirm", true, false) as Button if chooser != null else null
+        if chooser == null or confirm == null or \
+                app.store.day_entries(app.date).size() != count_before + repetition:
+            push_error("FAILED: result click must open a portion editor without writing")
+            quit(1)
+            return
+        confirm.pressed.emit()
+        await process_frame
+        if app.store.day_entries(app.date).size() != count_before + repetition + 1 or app.tab != "search":
+            push_error("FAILED: confirmed portions must allow consecutive adds in catalog")
+            quit(1)
+            return
     app._navigate_to_tab("day")
     app.settings_page = "foods"
     app._navigate_to_tab("settings")
