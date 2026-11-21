@@ -1330,7 +1330,7 @@ func apply_meal_template(template_id: String, destination_date: String) -> int:
                 "unit": str(item.get("unit", "г")),
                 "portion_label": str(item.get("portion_label", "")),
                 "nutrition": item["nutrition"].duplicate(true)
-            }
+            })
             if float(item.get("portion_count", 0.0)) > 0.0:
                 created[created.size() - 1]["portion_count"] = float(item["portion_count"])
                 created[created.size() - 1]["portion_id"] = str(item.get("portion_id", ""))
