@@ -3241,7 +3241,11 @@ func _quick_food_sheet(food: Dictionary, from_barcode: bool = false,
     var save_measure = _button(custom_fields, "Сохранить меру", func():
         var title: String = custom.text.strip_edges()
         if store.save_food_portion(str(food.get("id", "")), title, custom_amount.value):
-            sheet["root"].queue_free()
+            # Detach immediately so the replacement keeps the stable
+            # ProductSheet node name (queued_free alone retains it one frame).
+            var previous_sheet: Control = sheet["root"]
+            remove_child(previous_sheet)
+            previous_sheet.queue_free()
             _quick_food_sheet(food, from_barcode, title)
             _notify_saved("Мера сохранена")
         else:
@@ -3255,7 +3259,9 @@ func _quick_food_sheet(food: Dictionary, from_barcode: bool = false,
                 return
             var option: Dictionary = options[measure.selected]
             if store.delete_food_portion(str(option["id"])):
-                sheet["root"].queue_free()
+                var previous_sheet: Control = sheet["root"]
+                remove_child(previous_sheet)
+                previous_sheet.queue_free()
                 _quick_food_sheet(food, from_barcode)
                 _notify_saved("Мера удалена, старые записи сохранены")
             else:
