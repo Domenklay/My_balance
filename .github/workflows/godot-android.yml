@@ -127,6 +127,8 @@ jobs:
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/recent_product_search_test.gd
       - name: Test Russian text, online product search and correct nutrition data
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/russian_product_search_test.gd
+      - name: Verify 100g/100ml nutrition basis, compact catalog and barcode entry
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/catalog_0723_test.gd
       - name: Test per-meal calories, macros, editable shares and legacy JSON
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/meal_targets_test.gd
       - name: Test compact journal, overage, safe repeats, live percentages and ml units
