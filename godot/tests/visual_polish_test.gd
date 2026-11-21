@@ -22,6 +22,9 @@ func _run() -> void:
     root.add_child(app)
     await process_frame
     app.store.data = app.store.default_data()
+    # Exercise the classic forest layout explicitly. The app now starts with
+    # botanical by default, so replacing the test store alone is not enough.
+    app._refresh_appearance()
     app.tab = "day"
     app.date = "2026-11-21"
     app.month_shown = "2026-11"
