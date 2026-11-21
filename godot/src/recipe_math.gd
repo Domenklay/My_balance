@@ -1,5 +1,7 @@
 extends RefCounted
 
+const RecipePhoto = preload("res://src/profile_photo.gd")
+
 # All nutrients in an ingredient are per 100 g of that raw ingredient.
 # Finished mass (water loss/gain) changes nutrients per 100 g but never total.
 const NUTRIENTS = ["kcal", "p", "f", "c"]
@@ -49,6 +51,10 @@ static func validate_recipe(recipe: Variant) -> bool:
         return false
     var name = str(recipe.get("name", "")).strip_edges()
     if name.is_empty() or name.length() > 160:
+        return false
+    # Recipe photos are optional and must be a bounded, decodable local JPG.
+    # Old recipes without photos remain fully compatible.
+    if recipe.has("photo") and not RecipePhoto.valid_photo(recipe["photo"]):
         return false
     var cooked = recipe.get("cooked_weight")
     var servings = recipe.get("servings")
