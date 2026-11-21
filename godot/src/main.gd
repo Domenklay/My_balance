@@ -30,6 +30,9 @@ const NAV_TEXTURES = {
     "stats": preload("res://assets/nav/stats.svg"),
     "profile": preload("res://assets/nav/profile.svg")
 }
+# Keep the UI version tied to the Android export by regression test.
+const APP_VERSION = "0.7.37"
+
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
 var MINT: Color = Color("#cdebd8")
@@ -1358,6 +1361,11 @@ func _show_profile() -> void:
     caption_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     var value_text = _label(progress_caption, str(roundi(float(progress["progress"]))) + "%", 14, WHITE)
     value_text.name = "ProfileGoalPercent"
+    # Keep the % attached to its number on small Android screens.
+    value_text.autowrap_mode = TextServer.AUTOWRAP_OFF
+    value_text.custom_minimum_size.x = 54
+    value_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+    value_text.size_flags_horizontal = Control.SIZE_SHRINK_END
     var bar = ProgressBar.new()
     bar.name = "ProfileGoalProgress"
     bar.min_value = 0.0
@@ -1960,6 +1968,11 @@ func _show_recipes() -> void:
         return
     var intro = _card("Мои рецепты", "hero")
     _label(intro, "Сохраняй домашние блюда и быстро добавляй порции в дневник.", 14, HERO_MUTED)
+    if _meal_entry_locked:
+        var destination: String = selected_meal
+        _button(intro, "← Назад к " + destination.to_lower(), func():
+            _navigate_to_tab("day")
+        , true)
     _button(intro, "+ Создать рецепт", func(): _begin_recipe_editor(), true)
     var recipes: Array = store.data.get("recipes", []).duplicate()
     recipes.sort_custom(func(a, b):
@@ -2208,6 +2221,15 @@ func _show_meal_add_actions(meal_name: String) -> void:
         favorite_button.clip_text = true
         favorite_button.custom_minimum_size.y = 39
         favorites_shown += 1
+    if not store.data.get("recipes", []).is_empty():
+        var to_recipes = _button(fields, "▤ Мои блюда и рецепты", func():
+            sheet["root"].queue_free()
+            tab = "recipes"
+            recipe_list_filter = "all"
+            _render(true)
+        , true)
+        to_recipes.name = "MealChooseRecipe"
+        to_recipes.custom_minimum_size.y = 39
     var scan = _button(fields, "▣ Сканировать штрихкод", func():
         sheet["root"].queue_free()
         _meal_scan_or_manual(meal_name)
@@ -3070,10 +3092,18 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
     basis.select(1 if PortionMath.base_unit(product) == "мл" else 0)
     if str(product.get("unit_certainty", "unknown")) in ["serving", "unknown"] and not manual:
         _label(fields, "Единица определена неуверенно: выбери г или мл по этикетке.", 12, ACCENT)
-    var kcal_box = _row(fields)
-    _label(kcal_box, "Калории", 13, MUTED)
-    var kcal = _text_input(kcal_box, "ккал / 100", _barcode_prefill(product, "kcal"))
+    # Label goes ABOVE the input. The old horizontal row squeezed its
+    # caption into a vertical word and inflated the field on a 420px screen.
+    var kcal_box = VBoxContainer.new()
+    kcal_box.name = "BarcodeCaloriesColumn"
+    kcal_box.mouse_filter = Control.MOUSE_FILTER_PASS
+    kcal_box.add_theme_constant_override("separation", 4)
+    fields.add_child(kcal_box)
+    _label(kcal_box, "Калории на 100 г / мл", 13, MUTED)
+    var kcal = _text_input(kcal_box, "ккал на 100", _barcode_prefill(product, "kcal"))
     kcal.name = "BarcodeNutrition_kcal"
+    kcal.custom_minimum_size.y = 48
+    kcal.size_flags_vertical = Control.SIZE_SHRINK_CENTER
     kcal.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
     kcal.max_length = 7
     var nutrient_row = _row(fields)
@@ -3087,6 +3117,8 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
         _label(item, str(entry[1]) + " /100", 12, MUTED)
         var input = _text_input(item, "0,0", _barcode_prefill(product, str(entry[0])))
         input.name = "BarcodeNutrition_" + str(entry[0])
+        input.custom_minimum_size.y = 48
+        input.size_flags_vertical = Control.SIZE_SHRINK_CENTER
         input.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
         input.max_length = 6
         nutrient_inputs[str(entry[0])] = input
@@ -3556,7 +3588,7 @@ func _food_form(parent: VBoxContainer) -> void:
         if picker.selected >= 0 and picker.selected < filtered.size():
             _quick_food_sheet(filtered[picker.selected])
     , true)
-    _button(controls, "+ Добавить", func():
+    _button(controls, "+ Добавить выбранный вес", func():
         if picker.selected < 0 or picker.selected >= filtered.size():
             _message("Выбери продукт. При необходимости отключи фильтр избранного.")
             return
@@ -3820,15 +3852,7 @@ func _rebuild_food_results(results_box: VBoxContainer, filtered: Array,
             " · Б " + str(snappedf(float(item.get("p", 0)), 0.1)) +
             " Ж " + str(snappedf(float(item.get("f", 0)), 0.1)) +
             " У " + str(snappedf(float(item.get("c", 0)), 0.1)), 11, MUTED)
-        _button(row, "Порция", func(): _quick_food_sheet(item), true)
-        _button(row, "+", func():
-            if store.add_food_entry(item, grams.value, meal.get_item_text(meal.selected), _selected_food_date()):
-                added_count.set_meta("count", int(added_count.get_meta("count", 0)) + 1)
-                added_count.text = "Добавлено за сеанс: " + str(added_count.get_meta("count"))
-                _notify_saved("Продукт добавлен")
-            else:
-                _message("Не удалось сохранить продукт.")
-        )
+        _button(row, "＋ Порция", func(): _quick_food_sheet(item))
     if shown < filtered.size():
         var next_count: int = mini(12, filtered.size() - shown)
         var more = _button(results_box, "Показать ещё " + str(next_count), func():
@@ -4000,20 +4024,15 @@ func _show_weight() -> void:
     _date_nav(card)
     var settings: Dictionary = store.data["settings"]
     _label(card, "Старт: " + str(settings["start"]) + " кг     Цель: " + str(settings["goal"]) + " кг", 15, MUTED)
-    var value = _number(card, float(settings["start"]), 20, 400, 0.1)
-    for w in store.data["weights"]:
-        if str(w.get("date", "")) == date:
-            value.value = float(w.get("value", settings["start"]))
+    var value = _number(card, store.weight_prefill(date), 20, 400, 0.1)
+    value.name = "WeightEntryValue"
+    _label(card, "Предложен последний измеренный вес на выбранную дату. Измени его перед сохранением.", 12, MUTED)
     _button(card, "Записать вес", func():
-        var previous_weights = store.data["weights"].duplicate(true)
-        store.data["weights"] = store.data["weights"].filter(func(w): return str(w.get("date", "")) != date)
-        store.data["weights"].append({"id": "w" + date, "date": date, "value": value.value})
-        if store.save():
+        if store.save_weight_entry(date, value.value):
             _render()
             _notify_saved("Вес записан")
         else:
-            store.data["weights"] = previous_weights
-            _message("Не удалось сохранить вес. Предыдущие данные восстановлены.")
+            _message("Не удалось сохранить вес. Предыдущие данные сохранены.")
     )
     var chart = _card("Как меняется вес")
     var g = GraphScript.new()
@@ -4027,6 +4046,7 @@ func _show_weight() -> void:
         var r = _soft_list_row(chart)
         var l = _label(r, str(w.get("date", "")) + " · " + str(w.get("value", 0)) + " кг", 14)
         l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        _button(r, "✎", func(): _edit_weight_entry(w), true)
         _button(r, "×", func(): _confirm_delete("Удалить запись веса?", func():
             if store.delete_saved_record("weights", w):
                 _render()
@@ -4034,6 +4054,24 @@ func _show_weight() -> void:
             else:
                 _message("Не удалось удалить запись веса.")
         ), true)
+
+func _edit_weight_entry(weight_record: Dictionary) -> void:
+    var day: String = str(weight_record.get("date", ""))
+    var sheet = _mobile_sheet("Изменить вес", "Изменяется только запись за " + day + ".", "Сохранить", 330.0)
+    var fields: VBoxContainer = sheet["fields"]
+    _label(fields, "Вес, кг", 14, MUTED)
+    var value = _number(fields, float(weight_record.get("value", 0.0)), 20, 400, 0.1)
+    value.name = "WeightEditValue"
+    var confirm: Button = sheet["confirm"]
+    confirm.pressed.connect(func():
+        if store.save_weight_entry(day, value.value):
+            sheet["root"].queue_free()
+            _render()
+            _notify_saved("Вес изменён")
+        else:
+            _sheet_error(sheet, "Не удалось изменить вес, старое значение сохранено.")
+    )
+
 
 func _set_stats_period(mode: String) -> void:
     if mode not in ["week", "month"]:
@@ -4197,7 +4235,9 @@ func _show_settings() -> void:
         _show_my_foods()
         return
     var back_to_profile = _card("Настройки приложения")
-    _label(back_to_profile, "Версия 0.7.31 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
+    var version_label = _label(back_to_profile,
+        "Версия " + APP_VERSION + " · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
+    version_label.name = "AppVersionLabel"
     _button(back_to_profile, "← К личной странице", func(): _navigate_to_tab("profile"), true)
     var card = _card("Личные настройки")
     _button(card, "Моя анкета · пересчитать норму", func(): _begin_onboarding(true), true)
@@ -4324,14 +4364,7 @@ func _show_settings() -> void:
         _message("JSON скопирован. Сохрани его в надёжном месте.")
     )
     _button(backup, "Восстановить JSON из буфера", func():
-        var text = DisplayServer.clipboard_get()
-        if store.import_json(text):
-            date = Time.get_date_string_from_system()
-            month_shown = date.substr(0, 7)
-            _render()
-            _notify_saved("Дневник восстановлен")
-        else:
-            _message("Неверная резервная копия JSON.")
+        _confirm_restore_json(DisplayServer.clipboard_get(), "буфера обмена")
     )
     _label(backup, "Записи хранятся в памяти приложения без регистрации и интернета. При удалении приложения данные могут исчезнуть.", 13, MUTED)
 
@@ -4500,18 +4533,29 @@ func _read_backup_file(path: String) -> void:
         return
     var raw = file.get_as_text()
     file.close()
+    _confirm_restore_json(raw, "файла")
+
+
+func _confirm_restore_json(raw: String, source: String) -> void:
+    if raw.length() > 5000000 or not (JSON.parse_string(raw) is Dictionary):
+        _message("Неверная резервная копия JSON.")
+        return
     var confirmation = ConfirmationDialog.new()
-    confirmation.title = "Восстановление данных"
-    confirmation.dialog_text = "Заменить текущие записи данными из файла? Перед импортом сохрани резервную копию."
+    confirmation.name = "BackupRestoreConfirm"
+    confirmation.title = "Заменить данные дневника?"
+    confirmation.dialog_text = ("Восстановление из " + source +
+        " заменит текущие записи питания, веса, рецепты и настройки. " +
+        "Перед этим сохрани резервную копию.")
+    confirmation.ok_button_text = "Восстановить"
     add_child(confirmation)
     confirmation.confirmed.connect(func():
         if store.import_json(raw):
             date = Time.get_date_string_from_system()
             month_shown = date.substr(0, 7)
             _render()
-            _notify_saved("Дневник восстановлен из JSON")
+            _notify_saved("Дневник восстановлен")
         else:
-            _message("Файл повреждён или несовместим.")
+            _message("Файл повреждён или несовместим. Старые данные сохранены.")
         confirmation.queue_free()
     )
     confirmation.canceled.connect(func(): confirmation.queue_free())

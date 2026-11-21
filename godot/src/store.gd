@@ -1204,6 +1204,40 @@ func entry_kcal(entry: Dictionary) -> float:
     var f = entry_food(entry)
     return float(f.get("kcal", 0)) * float(entry.get("grams", 0)) / 100.0
 
+# Use the latest measurement on or before the selected day. Never prefill a
+# historical date with a future measurement or revert silently to start weight.
+func weight_prefill(day: String) -> float:
+    var selected: float = float(data.get("settings", {}).get("start", 88.0))
+    var latest_day: String = ""
+    for record in data.get("weights", []):
+        if not (record is Dictionary):
+            continue
+        var record_day: String = str(record.get("date", ""))
+        var amount: float = float(record.get("value", 0.0))
+        if record_day.is_empty() or record_day > day or record_day < latest_day or \
+                not is_finite(amount) or amount < 20.0 or amount > 400.0:
+            continue
+        latest_day = record_day
+        selected = amount
+    return selected
+
+
+func save_weight_entry(day: String, value: float) -> bool:
+    var valid_day: bool = day.length() == 10 and day.substr(4, 1) == "-" and \
+        day.substr(7, 1) == "-" and day.substr(0, 4).is_valid_int() and \
+        day.substr(5, 2).is_valid_int() and day.substr(8, 2).is_valid_int()
+    if not valid_day or not is_finite(value) or value < 20.0 or value > 400.0:
+        return false
+    var previous: Array = data["weights"].duplicate(true)
+    data["weights"] = data["weights"].filter(func(record):
+        return str(record.get("date", "")) != day)
+    data["weights"].append({"id": "w" + day, "date": day, "value": value})
+    if save():
+        return true
+    data["weights"] = previous
+    return false
+
+
 func day_entries(date: String) -> Array:
     return data["entries"].filter(func(e): return e is Dictionary and str(e.get("date", "")) == date)
 
