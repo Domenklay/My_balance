@@ -35,6 +35,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p godot/screenshots
+          # Import SVG textures before running the SceneTree screenshot script.
+          # Without the editor import, Godot cannot preload SVG UI icons.
+          /tmp/godot --headless --editor --path godot --quit 2>&1 | tee /tmp/godot-import-log.txt
           timeout --signal=SIGINT --kill-after=5s 90s env LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s "-screen 0 1280x1024x24" /tmp/godot --path godot --rendering-method gl_compatibility --script res://tests/visual_snapshot.gd 2>&1 | tee /tmp/visual-log.txt
           test "$(find godot/screenshots -maxdepth 1 -name '*.png' | wc -l)" -ge 5
           ls -lh godot/screenshots/*.png
