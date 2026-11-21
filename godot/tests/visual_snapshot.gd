@@ -82,6 +82,9 @@ func _capture() -> void:
     await _snapshot(app, "02-day-smart-tools")
     app._copy_day_sheet()
     await _snapshot(app, "02-day-copy-preview")
+    var calendar_button = app.get_node("ProductSheet").find_child("DayCopyCalendarToggle", true, false) as Button
+    calendar_button.pressed.emit()
+    await _snapshot(app, "02-day-copy-calendar")
     if app.get_node_or_null("ProductSheet") != null:
         app.get_node("ProductSheet").queue_free()
     await process_frame
@@ -92,6 +95,10 @@ func _capture() -> void:
     })
     app._meal_templates_sheet()
     await _snapshot(app, "02-day-saved-templates")
+    var edit_template = app.get_node("ProductSheet").find_child("TemplateEdit_visual_template", true, false) as Button
+    edit_template.pressed.emit()
+    await process_frame
+    await _snapshot(app, "02-day-template-editor")
     if app.get_node_or_null("ProductSheet") != null:
         app.get_node("ProductSheet").queue_free()
     await process_frame

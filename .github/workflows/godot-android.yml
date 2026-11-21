@@ -155,6 +155,8 @@ jobs:
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/catalog_0723_test.gd
       - name: Test per-meal calories, macros, editable shares and legacy JSON
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/meal_targets_test.gd
+      - name: Test 0.7.41 calendar, duplicate-safe copy, persisted undo and editable meal sets
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/smart_diary_0741_test.gd
       - name: Test 0.7.40 smart diary, atomic day copy and meal templates
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/smart_diary_0740_test.gd
       - name: Test compact journal, overage, safe repeats, live percentages and ml units
