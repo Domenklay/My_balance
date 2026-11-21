@@ -57,7 +57,7 @@ func _run() -> void:
         if card == null or card.find_child("MealDetails_" + str(i), true, false) != null:
             _fail("all daily meals should default to compact mode")
             return
-        if _find_button(card, "▾ Подробнее") == null:
+        if _find_button(card, "⌄") == null:
             _fail("compact section has no expansion control")
             return
     var breakfast = app.find_child("DailyMeal_0", true, false)
@@ -68,12 +68,12 @@ func _run() -> void:
     if progress == null or absf(progress.value - progress.max_value) > 0.01:
         _fail("over-target progress should saturate at 100% without losing the excess label")
         return
-    var toggle = _find_button(breakfast, "▾ Подробнее")
+    var toggle = _find_button(breakfast, "⌄")
     toggle.pressed.emit()
     await process_frame
     breakfast = app.find_child("DailyMeal_0", true, false)
     if breakfast.find_child("MealDetails_0", true, false) == null or \
-            _find_button(breakfast, "▴ Свернуть") == null:
+            _find_button(breakfast, "⌃") == null:
         _fail("expanded breakfast lost product rows")
         return
     app._navigate_to_tab("search")
