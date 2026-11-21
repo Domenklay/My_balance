@@ -103,7 +103,7 @@ static func needs_nutrition_review(product: Dictionary) -> bool:
 static func nutrition_review_label(product: Dictionary) -> String:
     var missing: Array = product.get("missing_fields", [])
     if not missing.is_empty():
-        var text_names: Array = []
+        var text_names: PackedStringArray = []
         for field in missing:
             match str(field):
                 "kcal": text_names.append("калории")
@@ -115,6 +115,28 @@ static func nutrition_review_label(product: Dictionary) -> String:
     if not warning.is_empty():
         return "Нужна проверка по этикетке: " + warning
     return "КБЖУ заполнены, но открытая база не гарантирует точность. Сверь с этикеткой."
+
+
+# Conservative single-package size. "6 x 100 g" is a multipack and
+# MUST NOT be misinterpreted as a single 100 g package.
+static func package_amount(product: Dictionary) -> float:
+    var raw: String = str(product.get("quantity", "")).strip_edges().to_lower()
+    if raw.is_empty() or raw.length() > 80 or raw.contains("×") or \
+            raw.contains("*") or raw.contains(" x "):
+        return 0.0
+    var expression = RegEx.new()
+    expression.compile("(^|\\s)([0-9]+(?:[.,][0-9]+)?)\\s*(ml|cl|l|мл|л|g|kg|г|кг)(?:$|\\s)")
+    var match_result = expression.search(raw)
+    if match_result == null:
+        return 0.0
+    var unit = str(match_result.get_string(3))
+    var basis = "мл" if unit in ["ml", "cl", "l", "мл", "л"] else "г"
+    if basis != str(product.get("nutrition_unit", "г")):
+        return 0.0
+    var multiplier: float = 1000.0 if unit in ["l", "л", "kg", "кг"] else \
+        (10.0 if unit == "cl" else 1.0)
+    var amount: float = str(match_result.get_string(2)).replace(",", ".").to_float() * multiplier
+    return amount if amount > 0.0 and amount <= 5000.0 else 0.0
 
 
 static func product_url(code: String) -> String:
