@@ -91,6 +91,8 @@ jobs:
             echo "Godot reported a script parse/runtime error"
             exit 1
           fi
+      - name: Validate new app launcher icon
+        run: /tmp/godot --headless --path godot --script res://tests/launcher_icon_test.gd
       - name: Verify journal save and restore
         run: /tmp/godot --headless --path godot --script res://tests/storage_test.gd
       - name: Test barcode parsing and offline nutrition cache
