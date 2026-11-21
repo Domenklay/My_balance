@@ -47,7 +47,7 @@ func _run() -> void:
         push_error("FAILED: mobile navigation missing Recipes or Profile")
         quit(1)
         return
-    var expand_button: Button = _find_button(app, "+ Добавить завтрак")
+    var expand_button: Button = app.find_child("MealQuickAdd_0", true, false) as Button
     if expand_button == null:
         push_error("FAILED: breakfast card has no direct add-food action")
         quit(1)
