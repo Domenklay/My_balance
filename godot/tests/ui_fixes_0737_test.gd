@@ -85,8 +85,11 @@ func _run() -> void:
     var save = sheet.find_child("ProductSheetConfirm", true, false) as Button
     save.pressed.emit()
     await process_frame
-    if absf(app.store.weight_prefill("2026-11-21") - 84.9) > 0.001:
-        _fail("weight edit did not update selected historical date")
+    # The history sorts by date descending; its first edit button targets
+    # the December entry, not the current-day input for November.
+    if absf(app.store.weight_prefill("2026-12-15") - 84.9) > 0.001 or \
+            absf(app.store.weight_prefill("2026-11-21") - 85.1) > 0.001:
+        _fail("weight edit must update only the selected historical date")
         return
 
     app.tab = "profile"
