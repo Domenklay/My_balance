@@ -631,7 +631,9 @@ func _card(title: String, variant: String = "plain") -> VBoxContainer:
     style.content_margin_bottom = 17
     panel.add_theme_stylebox_override("panel", style)
     body.add_child(panel)
-    if PATTERNS and variant in ["hero", "tint"] and (tab != "day" or (current_theme == "botanical" and variant == "hero")):
+    # Do not place foliage behind calorie totals or macro labels on the day tab.
+    # Keep botanical motifs on the wallpaper/header; other tabs retain ornaments.
+    if PATTERNS and variant in ["hero", "tint"] and tab != "day":
         var ornament = PatternScript.new()
         ornament.mouse_filter = Control.MOUSE_FILTER_IGNORE
         ornament.configure(PATTERN_STYLE, PATTERN_COLOR, true, 0.13 if variant == "hero" else 0.07)
@@ -2880,6 +2882,7 @@ func _show_settings() -> void:
         _show_my_foods()
         return
     var back_to_profile = _card("Настройки приложения")
+    _label(back_to_profile, "Версия 0.7.19 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
     _button(back_to_profile, "← К личной странице", func(): _navigate_to_tab("profile"), true)
     var card = _card("Личные настройки")
     _button(card, "Моя анкета · пересчитать норму", func(): _begin_onboarding(true), true)

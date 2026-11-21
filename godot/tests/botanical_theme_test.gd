@@ -47,6 +47,9 @@ func _run() -> void:
     if hero.size.y > 190:
         _fail("botanical hero grew too tall")
         return
+    if hero.get_child_count() != 1:
+        _fail("ornament must not overlap calorie totals in botanical day hero")
+        return
     var art_labels = ["🥣", "🍲", "🥗", "🍓"]
     var colors = ["#FFF2DE", "#E9F5E9", "#E9EEFC", "#FFF0F2"]
     for i in range(4):
@@ -109,6 +112,9 @@ func _run() -> void:
     await process_frame
     if app.find_child("ThemeSwatch_botanical", true, false) == null:
         _fail("new theme not available under profile settings")
+        return
+    if not _has_text(app, "Версия 0.7.19"):
+        _fail("app version not shown on settings screen")
         return
     print("PASS BOTANICAL THEME: distinct cream/forest cards, corner foliage, safe compact meal actions, save and contrast")
     app.queue_free()
