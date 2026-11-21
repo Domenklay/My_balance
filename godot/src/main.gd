@@ -601,9 +601,11 @@ func _card(title: String, variant: String = "plain") -> VBoxContainer:
             style.bg_color = CARD_BG
     style.set_corner_radius_all(22)
     style.border_color = BORDER if variant == "plain" or HIGH_CONTRAST else style.bg_color
-    style.set_border_width_all(2 if HIGH_CONTRAST else 1)
+    if current_theme == "botanical":
+        style.border_color = Color("#D9BF8C") if variant == "hero" else BORDER
+    style.set_border_width_all(2 if HIGH_CONTRAST or current_theme == "botanical" else 1)
     style.shadow_color = Color(0.0, 0.0, 0.0, 0.13 if DARK_MODE else 0.08)
-    style.shadow_size = 5 if variant == "hero" else 3
+    style.shadow_size = 6 if current_theme == "botanical" else (5 if variant == "hero" else 3)
     style.shadow_offset = Vector2(0, 3)
     style.content_margin_left = 17
     style.content_margin_right = 17
@@ -611,7 +613,7 @@ func _card(title: String, variant: String = "plain") -> VBoxContainer:
     style.content_margin_bottom = 17
     panel.add_theme_stylebox_override("panel", style)
     body.add_child(panel)
-    if PATTERNS and variant in ["hero", "tint"] and tab != "day":
+    if PATTERNS and variant in ["hero", "tint"] and (tab != "day" or (current_theme == "botanical" and variant == "hero")):
         var ornament = PatternScript.new()
         ornament.mouse_filter = Control.MOUSE_FILTER_IGNORE
         ornament.configure(PATTERN_STYLE, PATTERN_COLOR, true, 0.13 if variant == "hero" else 0.07)
@@ -622,7 +624,7 @@ func _card(title: String, variant: String = "plain") -> VBoxContainer:
     content.add_theme_constant_override("separation", 11)
     panel.add_child(content)
     if not title.is_empty():
-        _label(content, title, 18, WHITE if variant == "hero" else INK)
+        _label(content, title, 18, WHITE if variant == "hero" or (variant == "activity" and current_theme == "botanical") else INK)
     return content
 
 # Per-day compact cards retain the same colors and contrast but reduce
@@ -637,8 +639,8 @@ func _compact_card(content: VBoxContainer, margin: int = 9, spacing: int = 5) ->
             style.content_margin_right = margin
             style.content_margin_top = margin
             style.content_margin_bottom = margin
-            style.shadow_size = 2
-            style.shadow_offset = Vector2(0, 1)
+            style.shadow_size = 4 if current_theme == "botanical" else 2
+            style.shadow_offset = Vector2(0, 2 if current_theme == "botanical" else 1)
     content.add_theme_constant_override("separation", spacing)
 
 
@@ -883,10 +885,12 @@ func _render(reset_position: bool = false) -> void:
     # Botanical texture belongs on the wallpaper, not behind nutrition values.
     if is_instance_valid(wallpaper_pattern):
         wallpaper_pattern.configure(PATTERN_STYLE, PATTERN_COLOR, PATTERNS,
-            0.055 if tab == "day" else (0.11 if DARK_MODE else 0.09))
+            0.085 if current_theme == "botanical" else (
+            0.055 if tab == "day" else (0.11 if DARK_MODE else 0.09)))
     if is_instance_valid(header_pattern):
         header_pattern.configure(PATTERN_STYLE, PATTERN_COLOR,
-            PATTERNS and tab != "day", 0.065)
+            PATTERNS and (tab != "day" or current_theme == "botanical"),
+            0.12 if current_theme == "botanical" else 0.065)
     body.add_theme_constant_override("separation", 7 if tab == "day" else 9)
     for child in body.get_children():
         body.remove_child(child)
@@ -1795,6 +1799,19 @@ func _show_day() -> void:
         var meal_card = _card("", str(section_info["variant"]))
         _compact_card(meal_card, 10, 4)
         meal_card.get_parent().name = "DailyMeal_" + str(section_index)
+        if current_theme == "botanical":
+            var botanical_colors = [
+                Color("#FFF2DE"), Color("#E9F5E9"),
+                Color("#E9EEFC"), Color("#FFF0F2")
+            ]
+            var botanical_edges = [
+                Color("#ECA14A"), Color("#51A46C"),
+                Color("#6F89CF"), Color("#D77893")
+            ]
+            var meal_style = meal_card.get_parent().get_theme_stylebox("panel") as StyleBoxFlat
+            meal_style.bg_color = botanical_colors[section_index]
+            meal_style.border_color = botanical_edges[section_index].lightened(0.18)
+            meal_style.set_border_width_all(1)
         if section_index == 0:
             diary_food_card = meal_card
         # One-row meal summary: tap its title or + to select a product,
@@ -1804,13 +1821,23 @@ func _show_day() -> void:
         title_row.add_theme_constant_override("separation", 4)
         var accent = ColorRect.new()
         accent.name = "MealAccent_" + str(section_index)
-        accent.color = section_info["accent"]
+        accent.color = Color(str(["#ECA14A", "#51A46C", "#6F89CF", "#D77893"][section_index])) if current_theme == "botanical" else section_info["accent"]
         accent.custom_minimum_size = Vector2(4, 28)
         accent.mouse_filter = Control.MOUSE_FILTER_IGNORE
         title_row.add_child(accent)
+        if current_theme == "botanical":
+            var food_art = Label.new()
+            food_art.text = str(["🥣", "🍲", "🥗", "🍓"][section_index])
+            food_art.name = "BotanicalMealArt_" + str(section_index)
+            food_art.add_theme_font_size_override("font_size", 23)
+            food_art.custom_minimum_size.x = 27
+            food_art.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+            food_art.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+            food_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+            title_row.add_child(food_art)
         var meal_title = Button.new()
         meal_title.name = "MealHeader_" + str(section_index)
-        meal_title.text = str(section_info["icon"]) + " " + meal_name
+        meal_title.text = meal_name if current_theme == "botanical" else str(section_info["icon"]) + " " + meal_name
         meal_title.flat = true
         meal_title.alignment = HORIZONTAL_ALIGNMENT_LEFT
         meal_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2938,7 +2965,7 @@ func _show_settings() -> void:
     _label(appearance, "Тонкий рисунок на фоне и карточках. Если отключить, останется чистый минимализм.", 12, MUTED)
     _button(appearance, "Контраст: повышенный" if HIGH_CONTRAST else "Контраст: обычный",
         func(): _toggle_high_contrast(), true)
-    _label(appearance, "Повышенный контраст делает текст, карточки, кнопки и поля ввода заметнее во всех четырёх темах.", 12, MUTED)
+    _label(appearance, "Повышенный контраст делает текст, карточки, кнопки и поля ввода заметнее во всех пяти темах.", 12, MUTED)
 
     var my_foods_link = _card("Мои продукты и штрихкоды")
     _label(my_foods_link, "Создание и редактирование продуктов, привязка штрихкодов, обновление каталога.", 13, MUTED)
