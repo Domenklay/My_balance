@@ -58,10 +58,12 @@ func _run() -> void:
             "nutriments":{"energy-kcal_100g":110}}
     ]}
     var remote: Array = Barcode.parse_search_results(response)
-    if remote.size() != 1 or str(remote[0]["barcode"]) != "4607053473544" or \
+    if remote.size() != 2 or str(remote[0]["barcode"]) != "4607053473544" or \
             absf(float(remote[0]["kcal"]) - 53.8) > 0.1 or \
-            str(remote[0]["brand"]) != "Простоквашино":
-        _fail("online results were not checked/deduplicated")
+            str(remote[0]["brand"]) != "Простоквашино" or \
+            str(remote[1]["barcode"]) != "4601674084714" or \
+            remote[1].get("missing_fields", []).size() != 3:
+        _fail("online search must deduplicate and flag incomplete products")
         return
     var app = load("res://main.tscn").instantiate()
     root.add_child(app)
