@@ -69,6 +69,9 @@ var emblem_label: Label
 var store = StoreScript.new()
 var date: String = Time.get_date_string_from_system()
 var selected_meal: String = "Завтрак"
+# A date/meal chosen from a daily card stays fixed through search and scanning.
+var _meal_entry_locked: bool = false
+var _meal_entry_date: String = ""
 var _expanded_meals: Dictionary = {}
 var tab: String = "day"
 var month_shown: String = ""
@@ -418,6 +421,9 @@ func _navigate_to_tab(target: String) -> void:
     _hide_keyboard_and_focus()
     if target == "settings" and tab == "settings" and settings_page == "foods":
         settings_page = "main"
+    if target != "search":
+        _meal_entry_locked = false
+        _meal_entry_date = ""
     tab = target
     _render()
 
@@ -1600,16 +1606,62 @@ func _show_recipes() -> void:
         var no_results = _card("Ничего не найдено")
         _label(no_results, "Попробуй другое название или очисти поиск.", 13, MUTED)
 
+func _selected_food_date() -> String:
+    return _meal_entry_date if _meal_entry_locked and not _meal_entry_date.is_empty() else date
+
+
 func _open_meal_catalog(meal_name: String) -> void:
-    # A meal section owns the destination meal, not an implicit default.
+    # A selected diary section fixes both the destination meal and day.
     selected_meal = meal_name
-    _navigate_to_tab("search")
+    _meal_entry_locked = true
+    _meal_entry_date = date
+    _hide_keyboard_and_focus()
+    tab = "search"
+    _render(true)
+
+
+func _meal_scan_or_manual(meal_name: String) -> void:
+    selected_meal = meal_name
+    _meal_entry_locked = true
+    _meal_entry_date = date
+    if barcode_scanner != null:
+        barcode_scanner.scanBarcode()
+    else:
+        _open_meal_catalog(meal_name)
+        _barcode_message("На этом устройстве сканирование недоступно. Введи EAN/UPC с упаковки.")
+
+
+func _show_meal_add_actions(meal_name: String) -> void:
+    if meal_name not in StoreScript.MEAL_NAMES:
+        return
+    selected_meal = meal_name
+    _meal_entry_locked = true
+    _meal_entry_date = date
+    var sheet = _mobile_sheet("Добавить в " + meal_name.to_lower(),
+        "Дата: " + date.substr(8, 2) + "." + date.substr(5, 2) + "." + date.substr(0, 4) +
+        ". Выбери способ поиска продукта.", "⌕ Найти продукт", 330.0)
+    var fields: VBoxContainer = sheet["fields"]
+    var scan = _button(fields, "▣ Сканировать штрихкод", func():
+        sheet["root"].queue_free()
+        _meal_scan_or_manual(meal_name)
+    )
+    scan.name = "MealScanBarcode"
+    var manual = _button(fields, "Ввести штрихкод вручную", func():
+        sheet["root"].queue_free()
+        _open_meal_catalog(meal_name)
+        _barcode_message("Введи номер с упаковки в поле EAN/UPC.")
+    , true)
+    manual.name = "MealEnterBarcode"
+    sheet["confirm"].pressed.connect(func():
+        sheet["root"].queue_free()
+        _open_meal_catalog(meal_name)
+    )
 
 
 func _show_food_search() -> void:
     var intro = _card("Каталог продуктов", "hero")
     _label(intro, "Поиск, сравнение КБЖУ и добавление нескольких продуктов подряд.", 14, HERO_MUTED)
-    _label(intro, "Дата: " + date + " · Приём пищи: " + selected_meal, 13, HERO_MUTED)
+    _label(intro, "Дата: " + _selected_food_date() + " · Приём пищи: " + selected_meal, 13, HERO_MUTED)
     _button(intro, "← Вернуться в дневник", func(): _navigate_to_tab("day"), true)
     var catalog = _card("Найти и добавить продукты")
     _food_form(catalog)
@@ -1686,10 +1738,19 @@ func _show_day() -> void:
             diary_food_card = meal_card
         var title_row = _row(meal_card)
         title_row.add_theme_constant_override("separation", 6)
-        var meal_title = _label(title_row, str(section_info["icon"]) + " " + meal_name, 16, INK)
+        var meal_title = Button.new()
+        meal_title.name = "MealHeader_" + str(section_index)
+        meal_title.text = str(section_info["icon"]) + " " + meal_name
+        meal_title.flat = true
+        meal_title.alignment = HORIZONTAL_ALIGNMENT_LEFT
         meal_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        meal_title.autowrap_mode = TextServer.AUTOWRAP_OFF
-        meal_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+        meal_title.custom_minimum_size.y = 30
+        meal_title.clip_text = true
+        meal_title.add_theme_font_size_override("font_size", 16)
+        for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+            meal_title.add_theme_color_override(state, INK)
+        meal_title.pressed.connect(func(): _show_meal_add_actions(meal_name))
+        title_row.add_child(meal_title)
         var count_label = _label(title_row, str(roundi(meal_kcal)) + " ккал · " +
             str(meals_for_day.size()) + " продуктов", 12, TEXT_ACCENT)
         count_label.custom_minimum_size.x = 146
@@ -1730,7 +1791,7 @@ func _show_day() -> void:
         expand_button.custom_minimum_size.y = 35
         expand_button.add_theme_font_size_override("font_size", 12)
         var add_button = _button(controls, "+ Добавить " + meal_name.to_lower(),
-            func(): _open_meal_catalog(meal_name), true)
+            func(): _show_meal_add_actions(meal_name), true)
         add_button.custom_minimum_size.y = 35
         add_button.add_theme_font_size_override("font_size", 12)
         if not expanded:
@@ -1824,30 +1885,6 @@ func _show_day() -> void:
     _button(shortcuts, "+ Спорт", func(): _navigate_to_tab("activity"), true)
     _button(shortcuts, "+ Вес", func(): _navigate_to_tab("weight"), true)
 
-    var add = _card("Добавить еду", "tint")
-    _button(add, "⌕ Открыть полный каталог продуктов", func(): _navigate_to_tab("search"), true)
-    food_entry_card = add
-    if food_form_expanded:
-        _button(add, "▴ Свернуть поиск продуктов", func():
-            food_form_expanded = false
-            _render()
-        , true)
-        _food_form(add)
-    else:
-        _button(add, "▣  Сканировать штрихкод", func():
-            if barcode_scanner != null:
-                barcode_scanner.scanBarcode()
-            else:
-                food_form_expanded = true
-                _render()
-                call_deferred("_jump_to_food")
-        )
-        _button(add, "Найти продукт или ввести штрихкод", func():
-            food_form_expanded = true
-            _render()
-            call_deferred("_jump_to_food")
-        , true)
-
     var notes_card = _card("Заметка о дне")
     _button(notes_card, "▴ Скрыть заметку" if day_more_expanded else "▾ Открыть заметку",
         func():
@@ -1890,6 +1927,8 @@ func _jump_to_diary() -> void:
         scroll.ensure_control_visible(diary_food_card)
 
 func _barcode_add_success() -> void:
+    _meal_entry_locked = false
+    _meal_entry_date = ""
     tab = "day"
     _render()
     _notify_saved("Порция добавлена в дневник")
@@ -1905,6 +1944,9 @@ func _on_barcode_scanned(code: String) -> void:
     _lookup_barcode(code)
 
 func _on_barcode_scan_error(reason: String) -> void:
+    if _meal_entry_locked and not is_instance_valid(barcode_message):
+        var chosen = selected_meal
+        _open_meal_catalog(chosen)
     _barcode_message("Не удалось открыть сканер: " + reason + ". Введи код вручную.")
 
 func _on_barcode_scan_cancelled() -> void:
@@ -2068,6 +2110,7 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
     var grams = _number(fields, 100, 1, 5000, 1)
     _label(fields, "Приём пищи", 13, MUTED)
     var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
+    meal.disabled = _meal_entry_locked
     var meal_index = ["Завтрак", "Обед", "Перекус", "Ужин"].find(selected_meal)
     if meal_index >= 0:
         meal.select(meal_index)
@@ -2097,7 +2140,7 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
             return
         var saved_food = store.food_by_id(saved_id)
         if add_to_diary:
-            if not store.add_food_entry(saved_food, grams.value, meal.get_item_text(meal.selected), date):
+            if not store.add_food_entry(saved_food, grams.value, meal.get_item_text(meal.selected), _selected_food_date()):
                 _sheet_error(sheet, "Товар сохранён, но порция не записана. Попробуй снова.")
                 return
             var root_control: Control = sheet["root"]
@@ -2185,6 +2228,7 @@ func _quick_food_sheet(food: Dictionary, from_barcode: bool = false) -> void:
     var result_label = _label(fields, "", 14, TEXT_ACCENT)
     _label(fields, "Приём пищи", 14, MUTED)
     var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
+    meal.disabled = _meal_entry_locked
     var initial_meal = ["Завтрак", "Обед", "Перекус", "Ужин"].find(selected_meal)
     if initial_meal >= 0:
         meal.select(initial_meal)
@@ -2247,7 +2291,7 @@ func _quick_food_sheet(food: Dictionary, from_barcode: bool = false) -> void:
             _sheet_error(sheet, "Допускается не более 5000 " + unit + " за запись.")
             return
         var portion_label = "" if measure.selected == 0 else str(options[measure.selected]["label"])
-        if store.add_food_entry(food, total, meal.get_item_text(meal.selected), date, portion_label):
+        if store.add_food_entry(food, total, meal.get_item_text(meal.selected), _selected_food_date(), portion_label):
             sheet["root"].queue_free()
             if from_barcode:
                 _barcode_add_success()
@@ -2318,6 +2362,7 @@ func _food_form(parent: VBoxContainer) -> void:
         var preset_button = _button(grams_presets, str(value), func(): grams.value = value, true)
         preset_button.set_meta("quantity_amount", value)
     var meal = _choice(parent, ["Завтрак", "Обед", "Перекус", "Ужин"])
+    meal.disabled = _meal_entry_locked
     var meal_index = ["Завтрак", "Обед", "Перекус", "Ужин"].find(selected_meal)
     if meal_index >= 0:
         meal.select(meal_index)
@@ -2348,7 +2393,7 @@ func _food_form(parent: VBoxContainer) -> void:
             _message("Выбери продукт. При необходимости отключи фильтр избранного.")
             return
         var f: Dictionary = filtered[picker.selected]
-        if store.add_food_entry(f, grams.value, meal.get_item_text(meal.selected), date):
+        if store.add_food_entry(f, grams.value, meal.get_item_text(meal.selected), _selected_food_date()):
             added_count.set_meta("count", int(added_count.get_meta("count", 0)) + 1)
             added_count.text = "Добавлено за сеанс: " + str(added_count.get_meta("count"))
             _notify_saved("Продукт добавлен в дневник")
@@ -2455,7 +2500,7 @@ func _rebuild_food_results(results_box: VBoxContainer, filtered: Array,
             " У " + str(snappedf(float(item.get("c", 0)), 0.1)), 11, MUTED)
         _button(row, "Порция", func(): _quick_food_sheet(item), true)
         _button(row, "+", func():
-            if store.add_food_entry(item, grams.value, meal.get_item_text(meal.selected), date):
+            if store.add_food_entry(item, grams.value, meal.get_item_text(meal.selected), _selected_food_date()):
                 added_count.set_meta("count", int(added_count.get_meta("count", 0)) + 1)
                 added_count.text = "Добавлено за сеанс: " + str(added_count.get_meta("count"))
                 _notify_saved("Продукт добавлен")
