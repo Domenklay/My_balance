@@ -31,7 +31,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.37"
+const APP_VERSION = "0.7.38"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -108,6 +108,9 @@ var note_status_label: Label
 var calendar_expanded: bool = false
 var food_form_expanded: bool = false
 var settings_page: String = "main"
+# Only one category is expanded at a time to keep the long settings screen
+# usable on smaller phones; this is presentation state, not diary data.
+var settings_section_open: String = ""
 var recipe_editor_open: bool = false
 var profile_edit_open: bool = false
 var rewards_expanded: bool = false
@@ -1983,6 +1986,9 @@ func _show_recipes() -> void:
         return str(a.get("name", "")).nocasecmp_to(str(b.get("name", ""))) < 0
     )
     var recently_logged: Dictionary = {}
+    var recipe_search_field: LineEdit = null
+    var recipe_search_count: Label = null
+    var recipe_search_cards: Array = []
     for logged_recipe in store.recent_recipe_portions(100):
         recently_logged[str(logged_recipe["recipe_id"])] = true
     if not recipes.is_empty():
@@ -1998,18 +2004,12 @@ func _show_recipes() -> void:
             tab_button.custom_minimum_size.y = 38
             tab_button.add_theme_font_size_override("font_size", 12)
             tab_button.clip_text = true
-        var query_field = _text_input(filter_card, "Название блюда", recipe_list_query)
-        query_field.clear_button_enabled = true
-        _button(filter_card, "Найти", func():
-            recipe_list_query = query_field.text.strip_edges()
-            _hide_keyboard_and_focus()
-            _render()
-        , true)
-        if not recipe_list_query.is_empty():
-            _button(filter_card, "Показать все рецепты", func():
-                recipe_list_query = ""
-                _render()
-            , true)
+        recipe_search_field = _text_input(filter_card,
+            "Поиск блюда или ингредиента", recipe_list_query)
+        recipe_search_field.name = "RecipeLiveSearch"
+        recipe_search_field.clear_button_enabled = true
+        recipe_search_count = _label(filter_card, "", 12, MUTED)
+        recipe_search_count.name = "RecipeSearchCount"
     if recipes.is_empty():
         var empty = _card("Пока нет рецептов")
         _label(empty, "Добавь ингредиенты с их сырым весом, взвесь готовое блюдо — и приложение рассчитает КБЖУ на 100 г.", 14, MUTED)
@@ -2020,8 +2020,6 @@ func _show_recipes() -> void:
             continue
         if recipe_list_filter == "recent" and not recently_logged.has(str(recipe.get("id", ""))):
             continue
-        if not recipe_list_query.is_empty() and not str(recipe.get("name", "")).to_lower().contains(recipe_list_query.to_lower()):
-            continue
         matched += 1
         var details = RecipeMath.calculate(recipe["ingredients"], float(recipe["cooked_weight"]))
         if details.is_empty():
@@ -2029,6 +2027,10 @@ func _show_recipes() -> void:
         var recipe_id: String = str(recipe.get("id", ""))
         var card = _card("")
         card.get_parent().name = "RecipeCard_" + recipe_id
+        var search_terms: String = str(recipe.get("name", "")).to_lower()
+        for ingredient in recipe.get("ingredients", []):
+            search_terms += " " + str(ingredient.get("name", "")).to_lower()
+        recipe_search_cards.append({"panel": card.get_parent(), "terms": search_terms})
         _compact_card(card, 11, 7)
         var overview = _row(card)
         overview.add_theme_constant_override("separation", 10)
@@ -2111,11 +2113,33 @@ func _show_recipes() -> void:
                         _message("Не удалось удалить рецепт.")
                 )
             , true)
-    if matched == 0 and not recipes.is_empty():
+    if not recipes.is_empty():
         var no_results = _card("Ничего не найдено")
-        _label(no_results, ("В этом разделе пока нет блюд. Выбери «Все»."
-            if recipe_list_filter != "all" else
-            "Попробуй другое название или очисти поиск."), 13, MUTED)
+        no_results.get_parent().name = "RecipeNoMatches"
+        var no_results_text = _label(no_results, "", 13, MUTED)
+        var refresh_recipes = func(text_value: String):
+            # Do not rebuild the entire screen as the user types. That would
+            # drop keyboard focus and reset the Android cursor position.
+            recipe_list_query = text_value
+            var needle: String = text_value.strip_edges().to_lower()
+            var visible_count: int = 0
+            for result in recipe_search_cards:
+                var found: bool = needle.is_empty() or str(result["terms"]).contains(needle)
+                var panel: Control = result["panel"]
+                panel.visible = found
+                if found:
+                    visible_count += 1
+            no_results.get_parent().visible = visible_count == 0
+            no_results_text.text = (
+                "В этом разделе пока нет блюд. Выбери «Все»." if matched == 0
+                else "Попробуй другое блюдо или ингредиент либо очисти поиск."
+            )
+            if recipe_search_count != null:
+                recipe_search_count.text = ("Показано: " + str(visible_count) +
+                    " из " + str(matched) + " · поиск без кнопки")
+        if recipe_search_field != null:
+            recipe_search_field.text_changed.connect(refresh_recipes)
+            refresh_recipes.call(recipe_search_field.text)
 
 func _selected_food_date() -> String:
     return _meal_entry_date if _meal_entry_locked and not _meal_entry_date.is_empty() else date
@@ -4128,6 +4152,13 @@ func _show_stats() -> void:
             for style_name in ["normal", "hover", "pressed"]:
                 button.add_theme_stylebox_override(style_name, selected_style)
             button.add_theme_color_override("font_color", WHITE)
+    var jump_current = _button(period_buttons, "Сейчас", func():
+        stats_anchor = Time.get_date_string_from_system()
+        _render(true)
+    , true)
+    jump_current.name = "StatsCurrentPeriod"
+    jump_current.custom_minimum_size.y = 38
+    jump_current.add_theme_font_size_override("font_size", 12)
     var navigator = _row(card)
     navigator.name = "StatsDateNavigation"
     navigator.add_theme_constant_override("separation", 6)
@@ -4151,7 +4182,9 @@ func _show_stats() -> void:
     _metric_tile(metrics, average, "Среднее по заполненным дням")
     _metric_tile(metrics, str(int(report["recorded"])) + " / " +
         str(int(report["total_days"])), "Дней с питанием")
-    _label(card, "Среднее только по дням с записанным питанием.", 12, MUTED)
+    var stats_explanation = _label(card,
+        "Среднее по дням с питанием, пустые дни не считаются.", 12, MUTED)
+    stats_explanation.name = "StatsMethodNote"
     # One visualization at a time: larger readable graphs, shorter page.
     var tabrow = _row(card)
     tabrow.name = "StatsSectionSelector"
@@ -4194,6 +4227,14 @@ func _show_stats() -> void:
             _compact_card(weight, 12, 8)
             _label(weight, "Измерений за выбранный период: " +
                 str(report["weights"].size()), 12, MUTED)
+            var samples: Array = report["weights"]
+            if samples.size() >= 2:
+                var change_value: float = float(samples[samples.size() - 1]["value"]) - float(samples[0]["value"])
+                var change_line = _label(weight,
+                    "Изменение между первым и последним измерением: " +
+                    ("+" if change_value > 0 else "") +
+                    str(snappedf(change_value, 0.1)) + " кг", 13, TEXT_ACCENT)
+                change_line.name = "StatsWeightDelta"
             var weight_graph = GraphScript.new()
             weight_graph.name = "StatsWeightGraph"
             weight_graph.custom_minimum_size.y = 235
@@ -4213,6 +4254,13 @@ func _show_stats() -> void:
             kcal_chart.setup(report["columns"], "calories",
                 float(store.data["settings"]["kcal"]), TEXT_ACCENT, ACCENT, MUTED, CHART_GRID)
             _label(calories, "Пунктир — установленная суточная норма.", 12, MUTED)
+            if int(report["recorded"]) > 0:
+                var difference: float = float(report["avg_kcal"]) - float(store.data["settings"]["kcal"])
+                var target_comparison = _label(calories,
+                    "Среднее к установленной цели: " +
+                    ("+" if difference > 0.0 else "") +
+                    str(roundi(difference)) + " ккал/день", 13, TEXT_ACCENT)
+                target_comparison.name = "StatsTargetDifference"
             if int(report["recorded"]) == 0:
                 _label(calories, "Добавь продукты в дневник для расчёта БЖУ.", 13, MUTED)
             else:
@@ -4225,6 +4273,30 @@ func _show_stats() -> void:
                 _compact_macro(macro_row, "Углеводы", float(report["avg_c"]), CARBS_BG, INK)
 
 
+func _settings_section(title: String, section: String, summary: String) -> VBoxContainer:
+    var card = _card("")
+    card.get_parent().name = "SettingsSection_" + section
+    _compact_card(card, 12, 6)
+    var expanded: bool = settings_section_open == section
+    var toggle = _button(card, ("▴ " if expanded else "▾ ") + title, func():
+        settings_section_open = "" if settings_section_open == section else section
+        _render()
+    , true)
+    toggle.name = "SettingsSectionToggle_" + section
+    toggle.custom_minimum_size.y = 44
+    toggle.alignment = HORIZONTAL_ALIGNMENT_LEFT
+    if not expanded:
+        var caption = _label(card, summary, 12, MUTED)
+        caption.name = "SettingsSectionSummary_" + section
+    var contents = VBoxContainer.new()
+    contents.name = "SettingsSectionContent_" + section
+    contents.mouse_filter = Control.MOUSE_FILTER_PASS
+    contents.add_theme_constant_override("separation", 8)
+    card.add_child(contents)
+    contents.visible = expanded
+    return contents
+
+
 func _show_settings() -> void:
     if settings_page == "foods":
         var nav = _card("Мои продукты")
@@ -4235,11 +4307,14 @@ func _show_settings() -> void:
         _show_my_foods()
         return
     var back_to_profile = _card("Настройки приложения")
+    _compact_card(back_to_profile, 11, 6)
     var version_label = _label(back_to_profile,
         "Версия " + APP_VERSION + " · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
     version_label.name = "AppVersionLabel"
     _button(back_to_profile, "← К личной странице", func(): _navigate_to_tab("profile"), true)
-    var card = _card("Личные настройки")
+    var card = _settings_section("Мои цели и параметры", "personal",
+        str(roundi(float(store.data["settings"]["kcal"]))) + " ккал/день · Цель: " +
+        str(snappedf(float(store.data["settings"]["goal"]), 0.1)) + " кг")
     _button(card, "Моя анкета · пересчитать норму", func(): _begin_onboarding(true), true)
     _label(card, "Калории в сутки")
     var kcal = _text_input(card, "Например, 1800", str(roundi(float(store.data["settings"]["kcal"]))))
@@ -4269,7 +4344,9 @@ func _show_settings() -> void:
             store.data["settings"] = previous_settings
             _message("Не удалось сохранить настройки. Прежние значения оставлены.")
     )
-    var portions_card = _card("Распределение калорий по приёмам пищи")
+    var portions_card = _settings_section("Калории по приёмам пищи", "shares",
+        "Завтрак / Обед / Ужин / Перекус · " +
+        " / ".join(store.meal_shares().map(func(amount): return str(amount))) + "%")
     _label(portions_card, "Настрой свои ориентиры. Сумма четырёх процентов должна быть 100%.", 13, MUTED)
     var original_shares: Array = store.meal_shares()
     var portion_fields: Array = []
@@ -4324,7 +4401,9 @@ func _show_settings() -> void:
             portion_fields[i].value = float(StoreScript.DEFAULT_MEAL_SHARES[i])
     , true)
 
-    var appearance = _card("Оформление")
+    var appearance = _settings_section("Темы и оформление", "appearance",
+        AppearanceScript.name_for(current_theme) + " · " +
+        ("узоры включены" if PATTERNS else "без узоров"))
     _label(appearance, "Выбери тему — она сразу применится ко всем экранам.", 13, MUTED)
     _label(appearance, "Активная: " + AppearanceScript.name_for(current_theme), 14, TEXT_ACCENT)
     for id in AppearanceScript.ORDER:
@@ -4349,12 +4428,14 @@ func _show_settings() -> void:
     _label(appearance, "Повышенный контраст делает текст, карточки, кнопки и поля ввода заметнее во всех пяти темах.", 12, MUTED)
 
     var my_foods_link = _card("Мои продукты и штрихкоды")
+    _compact_card(my_foods_link, 11, 6)
     _label(my_foods_link, "Создание и редактирование продуктов, привязка штрихкодов, обновление каталога.", 13, MUTED)
     _button(my_foods_link, "Открыть мои продукты", func():
         settings_page = "foods"
         _render()
     , true)
-    var backup = _card("Резервная копия и перенос")
+    var backup = _settings_section("Резервная копия и перенос", "backup",
+        "Сохранить или восстановить JSON")
     _label(backup, "Сохрани файл JSON вне приложения, чтобы восстановить данные после удаления или переустановки.", 13, MUTED)
     _button(backup, "Сохранить JSON в файл", func(): _pick_backup_file(true))
     _button(backup, "Импортировать JSON из файла", func(): _pick_backup_file(false), true)

@@ -155,6 +155,8 @@ jobs:
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/meal_targets_test.gd
       - name: Test compact journal, overage, safe repeats, live percentages and ml units
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/compact_diary_test.gd
+      - name: Test v0.7.38 compact settings, live recipe search and period statistics
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/ui_compact_0738_test.gd
       - name: Test v0.7.37 navigation, barcode layout, weight, profile and backup safety
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/ui_fixes_0737_test.gd
       - name: Test v0.7.35 last serving, half/piece/cup math and portion editor
