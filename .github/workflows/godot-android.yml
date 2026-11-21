@@ -103,6 +103,8 @@ jobs:
         run: /tmp/godot --headless --path godot --script res://tests/recipe_profile_test.gd
       - name: Test first-launch questionnaire, calorie estimate, legacy update and manual override
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/onboarding_test.gd
+      - name: Test direct manual calorie goal editing, persistence and meal allocation
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/calorie_goal_edit_test.gd
       - name: Test compact home and profile, collapsible notes and rewards
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/compact_layout_test.gd
       - name: Verify square header and one-row day meals with preserved interactions
