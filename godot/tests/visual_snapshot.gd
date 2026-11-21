@@ -150,7 +150,7 @@ func _capture() -> void:
     app.profile_edit_open = false
     app._render()
     # Capture each installed appearance variant for side-by-side review.
-    for variant in ["forest", "mint", "sand", "dark"]:
+    for variant in ["forest", "mint", "sand", "dark", "botanical"]:
         app.store.data["settings"]["theme"] = variant
         app.store.data["settings"]["patterns"] = true
         app._refresh_appearance()
