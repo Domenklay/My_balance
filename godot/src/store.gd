@@ -733,6 +733,10 @@ func save_barcode_food(details: Dictionary) -> String:
         for field in ["kcal", "p", "f", "c"]:
             saved[field] = nutrients[field]
         saved["source"] = str(details.get("source", "Пользователь"))
+        saved["brand"] = str(details.get("brand", saved.get("brand", ""))).strip_edges().substr(0, 80)
+        saved["quantity"] = str(details.get("quantity", saved.get("quantity", ""))).strip_edges().substr(0, 80)
+        saved["image_url"] = BarcodeScript.safe_image_url(
+            str(details.get("image_url", saved.get("image_url", ""))))
         if str(saved.get("nutrition_unit", "г")) != str(details.get("nutrition_unit", "г")):
             # Existing custom sizes refer to a defined measurement basis.
             for portion in data["food_portions"]:
@@ -755,6 +759,9 @@ func save_barcode_food(details: Dictionary) -> String:
         "f": nutrients["f"],
         "c": nutrients["c"],
         "source": str(details.get("source", "Пользователь")),
+        "brand": str(details.get("brand", "")).strip_edges().substr(0, 80),
+        "quantity": str(details.get("quantity", "")).strip_edges().substr(0, 80),
+        "image_url": BarcodeScript.safe_image_url(str(details.get("image_url", ""))),
         "nutrition_unit": str(details.get("nutrition_unit", "г"))
     }
     data["foods"].append(item)
