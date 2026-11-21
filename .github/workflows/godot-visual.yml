@@ -35,12 +35,20 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p godot/screenshots
-          LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s "-screen 0 1280x1024x24" /tmp/godot --path godot --rendering-method gl_compatibility --script res://tests/visual_snapshot.gd 2>&1 | tee /tmp/visual-log.txt
+          timeout --signal=SIGINT --kill-after=5s 90s env LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s "-screen 0 1280x1024x24" /tmp/godot --path godot --rendering-method gl_compatibility --script res://tests/visual_snapshot.gd 2>&1 | tee /tmp/visual-log.txt
           test "$(find godot/screenshots -maxdepth 1 -name '*.png' | wc -l)" -ge 5
           ls -lh godot/screenshots/*.png
       - name: Upload screenshot gallery
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mybalance-visual-screenshots
           path: godot/screenshots/*.png
-          if-no-files-found: error
+          if-no-files-found: warn
+      - name: Upload visual diagnostic log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mybalance-visual-log
+          path: /tmp/visual-log.txt
+          if-no-files-found: warn
