@@ -276,8 +276,8 @@ func _ready() -> void:
     head_style.bg_color = HEADER_BG
     head_style.content_margin_left = 21
     head_style.content_margin_right = 19
-    head_style.content_margin_top = 14
-    head_style.content_margin_bottom = 16
+    head_style.content_margin_top = 8
+    head_style.content_margin_bottom = 8
     header_panel.add_theme_stylebox_override("panel", head_style)
     shell.add_child(header_panel)
     header_pattern = PatternScript.new()
@@ -291,10 +291,10 @@ func _ready() -> void:
     brand.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     brand.add_theme_constant_override("separation", 3)
     heading.add_child(brand)
-    header_title = _label(brand, "Мой баланс", 25, WHITE)
+    header_title = _label(brand, "Мой баланс", 21, WHITE)
     header_subtitle = _label(brand, "Забота о себе каждый день", 12, HEADER_MUTED)
     emblem_panel = PanelContainer.new()
-    emblem_panel.custom_minimum_size = Vector2(46, 46)
+    emblem_panel.custom_minimum_size = Vector2(38, 38)
     var logo_style = StyleBoxFlat.new()
     logo_style.bg_color = LOGO_BG
     logo_style.set_corner_radius_all(15)
@@ -304,7 +304,7 @@ func _ready() -> void:
     logo_style.content_margin_bottom = 5
     emblem_panel.add_theme_stylebox_override("panel", logo_style)
     heading.add_child(emblem_panel)
-    emblem_label = _label(emblem_panel, "✦", 26, SOFT_GOLD)
+    emblem_label = _label(emblem_panel, "✦", 21, SOFT_GOLD)
     emblem_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     emblem_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     scroll = ScrollContainer.new()
@@ -318,15 +318,15 @@ func _ready() -> void:
     shell.add_child(scroll)
     body = VBoxContainer.new()
     body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    body.add_theme_constant_override("separation", 13)
+    body.add_theme_constant_override("separation", 9)
     var margins = MarginContainer.new()
     margins.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     margins.mouse_filter = Control.MOUSE_FILTER_PASS
     body.mouse_filter = Control.MOUSE_FILTER_PASS
     margins.add_theme_constant_override("margin_left", 14)
     margins.add_theme_constant_override("margin_right", 14)
-    margins.add_theme_constant_override("margin_top", 14)
-    margins.add_theme_constant_override("margin_bottom", 22)
+    margins.add_theme_constant_override("margin_top", 9)
+    margins.add_theme_constant_override("margin_bottom", 15)
     scroll.add_child(margins)
     margins.add_child(body)
     note_save_timer = Timer.new()
@@ -617,6 +617,43 @@ func _card(title: String, variant: String = "plain") -> VBoxContainer:
         _label(content, title, 18, WHITE if variant == "hero" else INK)
     return content
 
+# Per-day compact cards retain the same colors and contrast but reduce
+# vertical padding. This is intentionally scoped to the journal only.
+func _compact_card(content: VBoxContainer, margin: int = 9, spacing: int = 5) -> void:
+    var panel = content.get_parent() as PanelContainer
+    if panel != null:
+        var style = panel.get_theme_stylebox("panel") as StyleBoxFlat
+        if style != null:
+            style.set_corner_radius_all(16)
+            style.content_margin_left = margin
+            style.content_margin_right = margin
+            style.content_margin_top = margin
+            style.content_margin_bottom = margin
+            style.shadow_size = 2
+            style.shadow_offset = Vector2(0, 1)
+    content.add_theme_constant_override("separation", spacing)
+
+
+func _compact_macro(parent: Node, name: String, value: float,
+        background: Color, foreground: Color) -> void:
+    var panel = PanelContainer.new()
+    panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    var style = StyleBoxFlat.new()
+    style.bg_color = background
+    style.set_corner_radius_all(9)
+    style.content_margin_left = 5
+    style.content_margin_right = 5
+    style.content_margin_top = 5
+    style.content_margin_bottom = 5
+    panel.add_theme_stylebox_override("panel", style)
+    parent.add_child(panel)
+    var label = _label(panel, name + " " + str(roundi(value)) + " г", 12, foreground)
+    label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    label.autowrap_mode = TextServer.AUTOWRAP_OFF
+    label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+
+
 func _macro_chip(parent: Node, caption: String, value: float, tint: Color) -> void:
     var panel = PanelContainer.new()
     panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -833,6 +870,9 @@ func _render(reset_position: bool = false) -> void:
     _render_serial += 1
     var current_serial = _render_serial
     _update_tabs()
+    if is_instance_valid(header_subtitle):
+        header_subtitle.visible = tab != "day"
+    body.add_theme_constant_override("separation", 7 if tab == "day" else 9)
     for child in body.get_children():
         body.remove_child(child)
         child.queue_free()
@@ -857,7 +897,7 @@ func _date_nav(parent: Node) -> void:
     day_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     day_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     day_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-    day_label.custom_minimum_size.y = 45
+    day_label.custom_minimum_size.y = 36
     _button(r, "▶", func(): date = store.change_date(date, 1); month_shown = date.substr(0, 7); _render(), true)
     _button(r, "▦", func():
         calendar_expanded = not calendar_expanded
@@ -1577,40 +1617,48 @@ func _show_food_search() -> void:
 
 func _show_day() -> void:
     var overview = _card("", "overview")
+    _compact_card(overview, 8, 4)
     _date_nav(overview)
+    for control in overview.get_children():
+        if control is HBoxContainer:
+            for item in control.get_children():
+                if item is Button:
+                    item.custom_minimum_size.y = 36
+                    item.add_theme_font_size_override("font_size", 13)
     if calendar_expanded:
         _calendar(overview)
 
-    var total = store.day_calories(date)
-    var target = float(store.data["settings"]["kcal"])
-    var hero = _card("Энергия дня", "hero")
+    var total: float = store.day_calories(date)
+    var target: float = float(store.data["settings"]["kcal"])
+    var hero = _card("", "hero")
+    _compact_card(hero, 11, 6)
     var hero_content = _row(hero)
     var numbers = VBoxContainer.new()
     numbers.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     numbers.add_theme_constant_override("separation", 2)
     hero_content.add_child(numbers)
-    _label(numbers, str(roundi(total)), 34, WHITE)
-    _label(numbers, "из " + str(roundi(target)) + " ккал", 15, HERO_MUTED)
+    _label(numbers, "Энергия дня", 16, WHITE)
+    _label(numbers, str(roundi(total)) + " из " + str(roundi(target)) + " ккал", 21, WHITE)
+    var remaining: float = target - total
+    _label(numbers,
+        "Осталось " + str(roundi(remaining)) + " ккал" if remaining >= 0.0 else
+        "Превышение +" + str(roundi(-remaining)) + " ккал",
+        12, HERO_MUTED if remaining >= 0.0 else SOFT_GOLD)
     var ring = RingScript.new()
     ring.name = "DailyCalorieRing"
-    ring.custom_minimum_size = Vector2(78, 78)
+    ring.custom_minimum_size = Vector2(58, 58)
     ring.set_palette(HERO_TRACK, HERO_FILL, WHITE)
     ring.set_value(total, target)
     hero_content.add_child(ring)
-    var remaining = target - total
-    if remaining >= 0.0:
-        _label(hero, "До дневного ориентира — " + str(roundi(remaining)) + " ккал", 13, HERO_MUTED)
-    else:
-        _label(hero, "Сверх ориентира — " + str(roundi(-remaining)) + " ккал", 13, SOFT_GOLD)
     var macros = _row(hero)
-    _macro_chip(macros, "БЕЛКИ", store.day_macro(date, "p"), MACRO_PROTEIN)
-    _macro_chip(macros, "ЖИРЫ", store.day_macro(date, "f"), MACRO_FAT)
-    _macro_chip(macros, "УГЛЕВОДЫ", store.day_macro(date, "c"), MACRO_CARBS)
+    macros.add_theme_constant_override("separation", 5)
+    _compact_macro(macros, "Б", store.day_macro(date, "p"), PROTEIN_BG, MACRO_PROTEIN)
+    _compact_macro(macros, "Ж", store.day_macro(date, "f"), FAT_BG, MACRO_FAT)
+    _compact_macro(macros, "У", store.day_macro(date, "c"), CARBS_BG, MACRO_CARBS)
 
     # Compact sections are always present. Only the selected meal unfolds.
     # Expansion state is in-memory, keyed by date: diary records are untouched.
-    var foods = _card("Приёмы пищи")
-    diary_food_card = foods
+    # No extra standalone title card: every meal already has its own header.
     var existing = store.day_entries(date)
     var sections = [
         {"meal":"Завтрак", "icon":"☀", "variant":"overview", "accent":ACCENT},
@@ -1631,10 +1679,18 @@ func _show_day() -> void:
         var meal_target: float = float(target) * float(share) / 100.0
         var section_key = date + "|" + meal_name
         var expanded: bool = bool(_expanded_meals.get(section_key, false))
-        var meal_card = _card(str(section_info["icon"]) + "  " + meal_name, str(section_info["variant"]))
+        var meal_card = _card("", str(section_info["variant"]))
+        _compact_card(meal_card, 10, 4)
         meal_card.get_parent().name = "DailyMeal_" + str(section_index)
-        _label(meal_card, str(roundi(meal_kcal)) + " ккал · " +
-            str(meals_for_day.size()) + " продуктов", 14, TEXT_ACCENT)
+        if section_index == 0:
+            diary_food_card = meal_card
+        var title_row = _row(meal_card)
+        title_row.add_theme_constant_override("separation", 6)
+        var meal_title = _label(title_row, str(section_info["icon"]) + " " + meal_name, 16, INK)
+        meal_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        var count_label = _label(title_row, str(roundi(meal_kcal)) + " ккал · " +
+            str(meals_for_day.size()) + " продуктов", 12, TEXT_ACCENT)
+        count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
         if share > 0:
             _label(meal_card, "Ориентир: " + str(roundi(meal_target)) + " ккал (" +
                 str(share) + "% в сутки)", 12, MUTED)
@@ -1643,10 +1699,12 @@ func _show_day() -> void:
                     str(roundi(meal_kcal - meal_target)) + " ккал", 12, ACCENT)
             var meal_bar = ProgressBar.new()
             meal_bar.name = "MealProgress_" + str(section_index)
+            meal_bar.visible = meal_kcal > 0.0
             meal_bar.min_value = 0.0
             meal_bar.max_value = maxf(1.0, meal_target)
             meal_bar.value = minf(meal_kcal, meal_bar.max_value)
             _style_progress(meal_bar)
+            meal_bar.custom_minimum_size.y = 5
             var meal_fill = StyleBoxFlat.new()
             meal_fill.bg_color = Color("#E0705D") if meal_kcal > meal_target else section_info["accent"]
             meal_fill.set_corner_radius_all(8)
@@ -1657,22 +1715,26 @@ func _show_day() -> void:
             if meal_kcal > 0:
                 _label(meal_card, "Учтено " + str(roundi(meal_kcal)) +
                     " ккал без установленной доли", 12, TEXT_ACCENT)
-        # One compact macro line instead of three vertically stacked tiles.
-        var macro_line = (
-            "БЕЛКИ " + str(snappedf(float(meal_stats["p"]), 0.1)) + " г  ·  " +
-            "ЖИРЫ " + str(snappedf(float(meal_stats["f"]), 0.1)) + " г  ·  " +
-            "УГЛЕВОДЫ " + str(snappedf(float(meal_stats["c"]), 0.1)) + " г"
-        )
-        _label(meal_card, macro_line, 12, MUTED)
         var controls = _row(meal_card)
-        _button(controls, "▴ Свернуть" if expanded else "▾ Подробнее", func():
+        controls.add_theme_constant_override("separation", 6)
+        var expand_button = _button(controls, "▴ Свернуть" if expanded else "▾ Подробнее", func():
             _expanded_meals[section_key] = not expanded
             _render()
         , true)
-        _button(controls, "+ Добавить " + meal_name.to_lower(),
+        expand_button.custom_minimum_size.y = 35
+        expand_button.add_theme_font_size_override("font_size", 12)
+        var add_button = _button(controls, "+ Добавить " + meal_name.to_lower(),
             func(): _open_meal_catalog(meal_name), true)
+        add_button.custom_minimum_size.y = 35
+        add_button.add_theme_font_size_override("font_size", 12)
         if not expanded:
             continue
+        var macro_line = (
+            "БЕЛКИ " + str(snappedf(float(meal_stats["p"]), 0.1)) + " г · " +
+            "ЖИРЫ " + str(snappedf(float(meal_stats["f"]), 0.1)) + " г · " +
+            "УГЛЕВОДЫ " + str(snappedf(float(meal_stats["c"]), 0.1)) + " г"
+        )
+        _label(meal_card, macro_line, 12, MUTED)
         var details = VBoxContainer.new()
         details.name = "MealDetails_" + str(section_index)
         details.add_theme_constant_override("separation", 8)
