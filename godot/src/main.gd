@@ -3430,31 +3430,38 @@ func _meal_templates_sheet() -> void:
             var add_button = _button(panel, "+", func():
                 _confirm_action("Добавить набор «" + str(template["name"]) + "»?",
                     "Добавить " + str(items.size()) + " записей в " + date +
-                    "? Если они уже есть, появятся дубликаты.", func():
-                        var number: int = store.apply_meal_template(template_id, date)
-                        if number > 0:
-                            sheet["root"].queue_free()
-                            _render()
-                            _notify_saved("Набор добавлен: " + str(number) + " продуктов")
-                        else:
-                            _sheet_error(sheet, "Набор не добавлен. Проверь память.")
-                    )
+                    "? Если они уже есть, появятся дубликаты.",
+                    func(): _apply_selected_template(template_id, date, sheet))
             )
             add_button.name = "TemplateQuickAdd_" + template_id
             add_button.custom_minimum_size = Vector2(43, 41)
             var remove = _button(panel, "×", func():
-                _confirm_delete("Удалить набор «" + str(template["name"]) + "»?", func():
-                    if store.delete_meal_template(template_id):
-                        sheet["root"].queue_free()
-                        _render()
-                        _notify_saved("Набор удалён")
-                    else:
-                        _sheet_error(sheet, "Не удалось удалить набор.")
-                )
+                _confirm_delete("Удалить набор «" + str(template["name"]) + "»?",
+                    func(): _delete_selected_template(template_id, sheet))
             , true)
             remove.custom_minimum_size = Vector2(43, 41)
     var close: Button = sheet["confirm"]
     close.pressed.connect(func(): sheet["root"].queue_free())
+
+
+func _apply_selected_template(template_id: String, target_date: String,
+        sheet: Dictionary) -> void:
+    var number: int = store.apply_meal_template(template_id, target_date)
+    if number > 0:
+        sheet["root"].queue_free()
+        _render()
+        _notify_saved("Набор добавлен: " + str(number) + " продуктов")
+    else:
+        _sheet_error(sheet, "Набор не добавлен. Проверь память.")
+
+
+func _delete_selected_template(template_id: String, sheet: Dictionary) -> void:
+    if store.delete_meal_template(template_id):
+        sheet["root"].queue_free()
+        _render()
+        _notify_saved("Набор удалён")
+    else:
+        _sheet_error(sheet, "Не удалось удалить набор.")
 
 
 func _name_meal_template_sheet(meal_name: String) -> void:
