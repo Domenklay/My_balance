@@ -2,7 +2,7 @@ extends RefCounted
 
 # Open Food Facts barcode response adapter. Values are per 100 g / 100 ml.
 const OFF_BASE = "https://world.openfoodfacts.org/api/v2/product/"
-const OFF_FIELDS = "code,product_name,product_name_ru,brands,nutriments,quantity,product_quantity_unit,serving_size,nutrition_data_per"
+const OFF_FIELDS = "code,product_name,product_name_ru,brands,nutriments,quantity,product_quantity_unit,serving_size,nutrition_data_per,image_front_small_url,image_front_url"
 
 const SEARCH_BASE = "https://world.openfoodfacts.org/cgi/search.pl"
 
@@ -30,7 +30,8 @@ static func parse_search_results(payload: Variant, limit: int = 12) -> Array:
         if parsed.has("error"):
             continue
         parsed["id"] = "barcode_" + code
-        parsed["brand"] = str(product.get("brands", "")).strip_edges().substr(0, 80)
+        # Metadata and nutrient completeness are both preserved by parse_product.
+        # Never label open-database contents as independently verified.
         # Keep the nutrient basis detected during product parsing.
         # Never overwrite it with a hard-coded gram basis.
         seen[code] = true
@@ -72,6 +73,49 @@ static func nutrition_warning(product: Dictionary) -> String:
     if absf(kcal - approximation) > maxf(90.0, kcal * 0.5):
         return "Калории и БЖУ заметно различаются. Проверь этикетку (возможны полиолы)."
     return ""
+
+# Display remote product photos only from the OFF image CDN. Never let
+# arbitrary response URLs make network requests from the app.
+static func safe_image_url(raw: String) -> String:
+    var url = raw.strip_edges()
+    if url.length() > 512 or not url.begins_with(
+            "https://images.openfoodfacts.org/images/products/"):
+        return ""
+    var pattern = RegEx.new()
+    pattern.compile("^https://images[.]openfoodfacts[.]org/images/products/[A-Za-z0-9_./-]+[.](jpg|jpeg|png)$")
+    return url if pattern.search(url) != null else ""
+
+
+static func image_url_for(product: Dictionary) -> String:
+    for key in ["image_front_small_url", "image_front_url"]:
+        var safe = safe_image_url(str(product.get(key, "")))
+        if not safe.is_empty():
+            return safe
+    return ""
+
+
+static func needs_nutrition_review(product: Dictionary) -> bool:
+    return not product.get("missing_fields", []).is_empty() or \
+        not nutrition_warning(product).is_empty() or \
+        str(product.get("unit_certainty", "unknown")) in ["serving", "unknown"]
+
+
+static func nutrition_review_label(product: Dictionary) -> String:
+    var missing: Array = product.get("missing_fields", [])
+    if not missing.is_empty():
+        var text_names: Array = []
+        for field in missing:
+            match str(field):
+                "kcal": text_names.append("калории")
+                "p": text_names.append("белки")
+                "f": text_names.append("жиры")
+                "c": text_names.append("углеводы")
+        return "КБЖУ неполные: " + ", ".join(text_names) + ". Введи значения с упаковки."
+    var warning = nutrition_warning(product)
+    if not warning.is_empty():
+        return "Нужна проверка по этикетке: " + warning
+    return "КБЖУ заполнены, но открытая база не гарантирует точность. Сверь с этикеткой."
+
 
 static func product_url(code: String) -> String:
     if normalize_code(code).is_empty():
@@ -119,41 +163,52 @@ static func parse_product(payload: Variant, barcode: String) -> Dictionary:
         return {"error": "Карточка товара повреждена."}
     var nutrition = product.get("nutriments", {})
     if not (nutrition is Dictionary):
-        return {"error": "Для этого товара нет данных о пищевой ценности."}
+        nutrition = {}
     var name = str(product.get("product_name_ru", "")).strip_edges()
     if name.is_empty():
         name = str(product.get("product_name", "")).strip_edges()
     if name.is_empty():
         return {"error": "У товара нет названия. Добавь его вручную в настройках."}
-    var kcal_value = nutrition.get("energy-kcal_100g", null)
-    if not _valid_number(kcal_value):
+    var missing: Array = []
+    var energy = nutrition.get("energy-kcal_100g", null)
+    if not _valid_number(energy):
         var kj_value = nutrition.get("energy-kj_100g", null)
         if _valid_number(kj_value):
-            kcal_value = float(kj_value) / 4.184
+            energy = float(kj_value) / 4.184
         else:
-            return {"error": "В базе нет калорий на 100 г. Проверь упаковку и добавь товар вручную."}
-    for key in ["proteins_100g", "fat_100g", "carbohydrates_100g"]:
-        if not _valid_number(nutrition.get(key, null)):
-            return {"error": "У товара неполные данные БЖУ. Проверь упаковку и добавь вручную."}
-    var kcal = float(kcal_value)
-    var protein = float(nutrition["proteins_100g"])
-    var fat = float(nutrition["fat_100g"])
-    var carbs = float(nutrition["carbohydrates_100g"])
-    if kcal < 0.0 or kcal > 1000.0 or protein > 100.0 or fat > 100.0 or carbs > 100.0:
+            energy = -1.0
+            missing.append("kcal")
+    var macros: Dictionary = {}
+    for field in [["p", "proteins_100g"], ["f", "fat_100g"],
+            ["c", "carbohydrates_100g"]]:
+        var abbreviation: String = str(field[0])
+        var nutrient = nutrition.get(str(field[1]), null)
+        if not _valid_number(nutrient):
+            macros[abbreviation] = -1.0
+            missing.append(abbreviation)
+        else:
+            macros[abbreviation] = float(nutrient)
+    var kcal: float = float(energy)
+    if kcal > 1000.0 or float(macros["p"]) > 100.0 or \
+            float(macros["f"]) > 100.0 or float(macros["c"]) > 100.0:
         return {"error": "В базе указаны сомнительные значения. Проверь упаковку."}
-    if kcal == 0.0 and (protein > 1.0 or fat > 1.0 or carbs > 1.0):
-        return {"error": "Противоречивые КБЖУ: ноль калорий при ненулевых питательных веществах."}
-    var brand = str(product.get("brands", "")).strip_edges()
+    var brand = str(product.get("brands", "")).strip_edges().substr(0, 80)
     if not brand.is_empty() and not name.to_lower().contains(brand.to_lower()):
         name += " (" + brand.substr(0, 60) + ")"
-    var basis = detect_basis(product)
-    return {
+    var basis: Dictionary = detect_basis(product)
+    var record = {
         "barcode": barcode, "name": name.substr(0, 160),
-        "kcal": snappedf(kcal, 0.1), "p": snappedf(protein, 0.1),
-        "f": snappedf(fat, 0.1), "c": snappedf(carbs, 0.1),
-        "source": "Open Food Facts", "quantity": str(product.get("quantity", "")),
+        "brand": brand, "quantity": str(product.get("quantity", "")).strip_edges().substr(0, 80),
+        "kcal": snappedf(kcal, 0.1) if kcal >= 0 else -1.0,
+        "p": snappedf(float(macros["p"]), 0.1) if float(macros["p"]) >= 0 else -1.0,
+        "f": snappedf(float(macros["f"]), 0.1) if float(macros["f"]) >= 0 else -1.0,
+        "c": snappedf(float(macros["c"]), 0.1) if float(macros["c"]) >= 0 else -1.0,
+        "missing_fields": missing, "nutrition_complete": missing.is_empty(),
+        "source": "Open Food Facts", "image_url": image_url_for(product),
         "nutrition_unit": str(basis["unit"]), "unit_certainty": str(basis["certainty"])
     }
+    return record
+
 
 static func _valid_number(value: Variant) -> bool:
     if not (value is int or value is float):
