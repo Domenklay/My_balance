@@ -42,6 +42,13 @@ func _run() -> void:
     if hero == null or hero.get_child_count() != 1:
         _fail("day hero should have no pattern overlay behind nutrition data")
         return
+    if hero.size.y > 190:
+        _fail("day energy panel is too tall: " + str(hero.size.y) + ", likely text wrapping in calorie editor layout")
+        return
+    var kcal_edit = app.find_child("EditDailyCalorieGoal", true, false) as Button
+    if kcal_edit == null or kcal_edit.size.y > 48:
+        _fail("compact manual-calorie edit button is missing or oversized")
+        return
     if not _has_text(hero, "Белки") or not _has_text(hero, "Жиры") or \
             not _has_text(hero, "Углеводы"):
         _fail("three meaningful macro captions must remain visible")
