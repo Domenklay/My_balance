@@ -192,8 +192,14 @@ func _run() -> void:
     save_button.pressed.emit()
     await process_frame
     sheet = app.get_node_or_null("ProductSheet")
+    if sheet == null:
+        _fail("new sheet must keep its original node name after custom measure save")
+        return
     selected = sheet.find_child("QuickPortionMeasure", true, false) as OptionButton
     quantity = sheet.find_child("QuickPortionQuantity", true, false) as SpinBox
+    if selected == null or quantity == null:
+        _fail("replacement sheet is missing the portion selector")
+        return
     if app.store.portion_options(egg).size() != 3 or selected.selected != 2 or \
             absf(quantity.value - 1.0) > 0.001:
         _fail("newly saved measure should immediately be selected at count 1")
