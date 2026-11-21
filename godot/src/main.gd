@@ -4242,8 +4242,8 @@ func _show_stats() -> void:
                 TEXT_ACCENT, ACCENT, MUTED, CHART_GRID)
             _label(movement, "Зелёный — ходьба · оранжевый — тренировки · Сеансов: " +
                 str(int(report["workouts"])), 12, contrast_text)
-            if int(report["walking"]) + int(report["exercise"]) +
-                    int(previous_report["walking"]) + int(previous_report["exercise"]) > 0:
+            if (int(report["walking"]) + int(report["exercise"]) +
+                    int(previous_report["walking"]) + int(previous_report["exercise"]) > 0):
                 var walk_change: int = int(report["walking"]) - int(previous_report["walking"])
                 var exercise_change: int = int(report["exercise"]) - int(previous_report["exercise"])
                 var activity_compare = _label(movement,
