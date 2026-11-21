@@ -1745,6 +1745,7 @@ func _show_day() -> void:
     _label(calorie_heading, "Энергия дня", 16, WHITE)
     var edit_goal = _button(calorie_heading, "✎ Норма", func(): _show_calorie_goal_editor(), true)
     edit_goal.name = "EditDailyCalorieGoal"
+    edit_goal.size_flags_horizontal = Control.SIZE_SHRINK_END
     edit_goal.custom_minimum_size.y = 34
     edit_goal.add_theme_font_size_override("font_size", 12)
     _label(numbers, str(roundi(total)) + " из " + str(roundi(target)) + " ккал", 21, WHITE)
