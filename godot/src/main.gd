@@ -3401,9 +3401,11 @@ func _confirm_day_copy(explanation: String, replacing: bool, action: Callable) -
 
 func _meal_templates_sheet() -> void:
     var templates: Array = store.data.get("meal_templates", [])
+    var template_sheet_height: float = minf(610.0,
+        265.0 + float(mini(templates.size(), 5)) * 76.0)
     var sheet = _mobile_sheet("Мои наборы питания",
         "Повторяй сохранённые завтраки, обеды и ужины целиком. Изменения рецептов не затрагивают шаблоны.",
-        "Закрыть", 560.0)
+        "Закрыть", template_sheet_height)
     var fields: VBoxContainer = sheet["fields"]
     if templates.is_empty():
         _label(fields, "Наборов пока нет. Открой приём пищи, добавь продукты и нажми «☆ Сохранить набор».",
