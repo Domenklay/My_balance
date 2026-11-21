@@ -6,9 +6,10 @@ const NAMES = {
     "forest": "Лесная светлая",
     "mint": "Мятная нежность",
     "sand": "Тёплый беж",
-    "dark": "Тёмная лесная"
+    "dark": "Тёмная лесная",
+    "botanical": "Ботанический контраст"
 }
-const ORDER = ["forest", "mint", "sand", "dark"]
+const ORDER = ["forest", "mint", "sand", "dark", "botanical"]
 
 static func is_valid_theme(id: String) -> bool:
     return NAMES.has(id)
@@ -20,6 +21,15 @@ static func name_for(id: String) -> String:
 # Every theme keeps its signature colors and ornament, but improves separation
 # of background, cards, fields, buttons, subtle text and graph annotations.
 const HIGH_OVERRIDES = {
+    "botanical": {
+        "green":"#075A42", "deep":"#053A2B", "ink":"#102E25",
+        "muted":"#345444", "border":"#779E87", "secondary":"#DCEEE1",
+        "background":"#EDF3E9", "surface":"#FFFEFA", "tint":"#E0F2E4",
+        "row":"#E7F3EB", "input":"#FFFFFF", "header":"#04382C",
+        "head_muted":"#EDFFE9", "hero":"#043A2E", "hero_muted":"#E9FFEB",
+        "chip":"#195845", "track":"#6C9C8B", "fill":"#E7F6A8",
+        "text_accent":"#075C43", "grid":"#8EB49A", "area":"#BFDEC7"
+    },
     "forest": {
         "green":"#12513d", "deep":"#0a382b", "ink":"#162f25",
         "muted":"#3d5548", "border":"#8caa98", "secondary":"#d5e8d9",
@@ -61,6 +71,19 @@ const HIGH_OVERRIDES = {
 # A richer, themed color system: neutral surfaces, contrasting section cards,
 # and distinctly colored nutrition tiles. Kept separate from contrast settings.
 const COLOR_VARIANTS = {
+    "botanical": {
+        "background":"#F0F4ED", "surface":"#FFFEFA", "row":"#F4F5EA",
+        "header":"#063E31", "hero":"#073F33", "hero_muted":"#E3F4E9",
+        "overview":"#FFF9EC", "activity":"#DDEDE4", "tile":"#EAF3E9",
+        "tint":"#E7F5EA", "secondary":"#E5F1E6", "border":"#A7C4B0",
+        "chip":"#185740", "track":"#4E8874", "fill":"#E9F2A6",
+        "nav_active":"#0A5743", "activity_text":"#155C47",
+        "protein_bg":"#D8F2DD", "fat_bg":"#FFE5B5",
+        "carbs_bg":"#E1DFFB", "protein_text":"#175E39",
+        "fat_text":"#805322", "carbs_text":"#493F88",
+        "accent":"#E29B42", "pattern":"botanical",
+        "pattern_color":"#6B9E64", "nav_bg":"#F9F6EC"
+    },
     "forest": {
         "background":"#edf1ee", "surface":"#ffffff", "row":"#f2f3f7",
         "header":"#173b35", "hero":"#263e62", "hero_muted":"#e0eaff",
@@ -115,6 +138,8 @@ const COLOR_VARIANTS = {
 }
 
 const COLOR_HIGH_ADJUSTMENTS = {
+    "botanical": {"border":"#769C81", "background":"#E9F0E5",
+        "tint":"#D6EEDF", "activity":"#CFEBDA", "nav_active":"#064834"},
     "forest": {"border":"#8e9eae", "background":"#e4ebeb", "activity":"#dce5f9", "nav_active":"#304f7d"},
     "mint": {"border":"#889baa", "background":"#e3eeee", "activity":"#e5def5", "nav_active":"#51478e"},
     "sand": {"border":"#ab969f", "background":"#eee2dc", "activity":"#e9def5", "nav_active":"#72405e"},
@@ -138,6 +163,22 @@ static func palette(id: String, high_contrast: bool = false) -> Dictionary:
 
 static func _base_palette(id: String) -> Dictionary:
     match id:
+        "botanical":
+            return {
+                "green":"#0B644B", "deep":"#064633", "ink":"#173D2F",
+                "muted":"#4F6D59", "pale":"#EEF6E9", "accent":"#E29B42",
+                "gold":"#F8E7B0", "input":"#FFFEFA", "border":"#A7C4B0",
+                "secondary":"#E5F1E6", "background":"#F0F4ED",
+                "surface":"#FFFEFA", "tint":"#E7F5EA", "row":"#F4F5EA",
+                "header":"#063E31", "head_muted":"#D2EDDA", "icon":"#195F4C",
+                "hero":"#073F33", "hero_muted":"#E3F4E9", "chip":"#185740",
+                "track":"#4E8874", "fill":"#E9F2A6",
+                "text_accent":"#0A624B", "protein":"#D8F2DD",
+                "fat":"#FFE5B5", "carbs":"#E1DFFB", "grid":"#C9DDCB",
+                "area":"#D5E8D8", "pattern":"botanical",
+                "pattern_color":"#6B9E64", "logo_text":"#FFF0BF",
+                "nav_bg":"#F9F6EC"
+            }
         "mint":
             return {
                 "green":"#21766c", "deep":"#20574f", "ink":"#264b45",
