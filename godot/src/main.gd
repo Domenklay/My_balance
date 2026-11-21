@@ -7,6 +7,7 @@ const RecipeMath = preload("res://src/recipe_math.gd")
 const PortionMath = preload("res://src/portion_math.gd")
 const RewardsScript = preload("res://src/rewards.gd")
 const ProfilePhotoScript = preload("res://src/profile_photo.gd")
+const ProfileProgressScript = preload("res://src/profile_progress.gd")
 const OnboardingMath = preload("res://src/onboarding_math.gd")
 const BarcodeScript = preload("res://src/barcode_lookup.gd")
 const FoodSearchScript = preload("res://src/food_search.gd")
@@ -1272,6 +1273,8 @@ func _show_calorie_goal_editor() -> void:
 func _show_profile() -> void:
     var profile: Dictionary = store.data.get("profile", {})
     var hero = _card("", "hero")
+    hero.get_parent().name = "ProfileHero"
+    _compact_card(hero, 14, 9)
     var intro = _row(hero)
     var badge = PanelContainer.new()
     badge.custom_minimum_size = Vector2(74, 74)
@@ -1315,24 +1318,61 @@ func _show_profile() -> void:
     _label(identity, str(profile.get("motto", "")), 13, HERO_MUTED)
 
     var settings: Dictionary = store.data["settings"]
-    var latest = float(settings.get("start", 88.0))
-    var latest_date = ""
-    for w in store.data["weights"]:
-        var d = str(w.get("date", ""))
-        if d >= latest_date:
-            latest_date = d
-            latest = float(w.get("value", latest))
+    var progress: Dictionary = ProfileProgressScript.summarize(settings, store.data["weights"])
+    var weight_metrics = _row(hero)
+    weight_metrics.name = "ProfileWeightMetrics"
+    weight_metrics.add_theme_constant_override("separation", 10)
+    var current_col = VBoxContainer.new()
+    current_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    current_col.add_theme_constant_override("separation", 2)
+    weight_metrics.add_child(current_col)
+    _label(current_col, "Сейчас", 12, HERO_MUTED)
+    var current_value = _label(current_col, str(snappedf(float(progress["latest"]), 0.1)) + " кг", 20, WHITE)
+    current_value.name = "ProfileCurrentWeight"
+    var goal_col = VBoxContainer.new()
+    goal_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    goal_col.add_theme_constant_override("separation", 2)
+    weight_metrics.add_child(goal_col)
+    _label(goal_col, "Цель", 12, HERO_MUTED)
+    var goal_value = _label(goal_col, str(snappedf(float(progress["goal"]), 0.1)) + " кг", 20, WHITE)
+    goal_value.name = "ProfileTargetWeight"
+    var progress_caption = _row(hero)
+    var caption_text = _label(progress_caption, "Прогресс к цели", 12, HERO_MUTED)
+    caption_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    var value_text = _label(progress_caption, str(roundi(float(progress["progress"]))) + "%", 14, WHITE)
+    value_text.name = "ProfileGoalPercent"
+    var bar = ProgressBar.new()
+    bar.name = "ProfileGoalProgress"
+    bar.min_value = 0.0
+    bar.max_value = 100.0
+    bar.value = float(progress["progress"])
+    bar.show_percentage = false
+    bar.custom_minimum_size.y = 12
+    _style_progress(bar)
+    hero.add_child(bar)
+    var goal_status = "Цель достигнута" if bool(progress["reached"]) else (
+        "До цели: " + str(snappedf(float(progress["remaining"]), 0.1)) + " кг"
+    )
+    var source = " · Последняя запись: " + str(progress["date"]) if bool(progress["has_records"]) else " · Пока используем стартовый вес"
+    _label(hero, goal_status + " · Старт: " +
+        str(snappedf(float(progress["start"]), 0.1)) + " кг" + source, 11, HERO_MUTED)
+    var quick_weight = _button(hero, "＋ Записать вес", func(): _navigate_to_tab("weight"), true)
+    quick_weight.name = "ProfileAddWeight"
+    quick_weight.custom_minimum_size.y = 39
+    quick_weight.add_theme_font_size_override("font_size", 13)
     var overview = _card("Мои ориентиры")
-    _label(overview, "Сейчас: " + str(snappedf(latest, 0.1)) + " кг  ·  Цель: " +
-        str(snappedf(float(settings["goal"]), 0.1)) + " кг", 14, INK)
+    _compact_card(overview, 12, 7)
+    var change: float = float(progress["change"])
     _label(overview, str(roundi(float(settings["kcal"]))) +
-        " ккал в сутки · Изменение веса: " +
-        ("+" if latest > float(settings["start"]) else "") +
-        str(snappedf(latest - float(settings["start"]), 0.1)) + " кг", 13, MUTED)
-    _button(overview, "✎ Изменить норму калорий", func(): _show_calorie_goal_editor(), true)
+        " ккал в сутки · Изменение с начала: " +
+        ("+" if change > 0.0 else "") + str(snappedf(change, 0.1)) + " кг", 13, INK)
+    var kcal_button = _button(overview, "✎ Изменить норму калорий",
+        func(): _show_calorie_goal_editor(), true)
+    kcal_button.custom_minimum_size.y = 39
 
     var summary: Dictionary = store.reward_summary()
     var awards = _card("Звёзды и награды", "tint")
+    _compact_card(awards, 12, 7)
     _label(awards, "★ " + str(summary["points"]) + " звёзд  ·  Уровень " +
         str(summary["level"]) + "  ·  Серия " + str(summary["streak"]) + " дн.", 14, TEXT_ACCENT)
     var level_bar = ProgressBar.new()
@@ -1386,6 +1426,7 @@ func _show_profile() -> void:
                 select_button.disabled = not available
 
     var edit = _card("Личная страница")
+    _compact_card(edit, 12, 6)
     _button(edit, "📷 Выбрать фото для аватара", func(): _pick_avatar_photo(), true)
     if not str(profile.get("photo", "")).is_empty():
         _button(edit, "Удалить фото (вернуть значок)", func():
@@ -1397,7 +1438,8 @@ func _show_profile() -> void:
                     _message("Не удалось удалить фото.")
             )
         , true)
-    _label(edit, "Фото останется только на устройстве и войдёт в JSON-резервную копию.", 12, MUTED)
+    if profile_edit_open:
+        _label(edit, "Фото остаётся на устройстве и входит в резервную JSON-копию.", 12, MUTED)
     if not profile_edit_open:
         _button(edit, "✎ Изменить имя и значок", func():
             profile_edit_open = true
@@ -3407,7 +3449,7 @@ func _show_settings() -> void:
         _show_my_foods()
         return
     var back_to_profile = _card("Настройки приложения")
-    _label(back_to_profile, "Версия 0.7.26 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
+    _label(back_to_profile, "Версия 0.7.27 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
     _button(back_to_profile, "← К личной странице", func(): _navigate_to_tab("profile"), true)
     var card = _card("Личные настройки")
     _button(card, "Моя анкета · пересчитать норму", func(): _begin_onboarding(true), true)
