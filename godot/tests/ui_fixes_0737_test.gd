@@ -107,7 +107,7 @@ func _run() -> void:
     await process_frame
     var version = app.find_child("AppVersionLabel", true, false) as Label
     var cfg = ConfigFile.new()
-    if version == null or not version.text.contains("0.7.37") or \
+    if version == null or not version.text.contains(app.APP_VERSION) or \
             cfg.load("res://export_presets.cfg") != OK or \
             str(cfg.get_value("preset.0.options", "version/name", "")) != app.APP_VERSION:
         _fail("UI version diverged from Android package version")
