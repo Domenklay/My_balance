@@ -56,17 +56,17 @@ func _run() -> void:
         if card == null:
             _fail("missing empty meal card: " + meal_names[i])
             return
-        if not _find_label(card, "0 ккал · 0 продуктов"):
+        if not _find_label(card, "0 / "):
             _fail("zero daily total missing from " + meal_names[i])
             return
-        if _find_button(card, "+ Добавить " + meal_names[i].to_lower()) == null:
+        if app.find_child("MealQuickAdd_" + str(i), true, false) == null:
             _fail("targeted add button missing from " + meal_names[i])
             return
     if app.store.day_entries(app.date).size() != 0:
         _fail("new day must have no entries")
         return
 
-    var lunch = _find_button(app, "+ Добавить обед")
+    var lunch = app.find_child("MealQuickAdd_1", true, false) as Button
     lunch.pressed.emit()
     await process_frame
     if app.tab != "day" or app.selected_meal != "Обед":
@@ -107,11 +107,11 @@ func _run() -> void:
     app._navigate_to_tab("day")
     await process_frame
     var lunch_card = app.find_child("DailyMeal_1", true, false)
-    if lunch_card == null or _find_label(lunch_card, "0 ккал · 0 продуктов"):
+    if lunch_card == null or _find_label(lunch_card, "0 / "):
         _fail("recorded lunch still displayed as empty")
         return
     var breakfast_card = app.find_child("DailyMeal_0", true, false)
-    if breakfast_card == null or not _find_label(breakfast_card, "0 ккал · 0 продуктов"):
+    if breakfast_card == null or not _find_label(breakfast_card, "0 / "):
         _fail("lunch contaminated the breakfast section")
         return
 
