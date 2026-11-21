@@ -12,6 +12,7 @@ func _row_count(parent: Node) -> int:
     for child in parent.get_children():
         if str(child.name).begins_with("FoodSearchRow_"):
             count += 1
+        count += _row_count(child)
     return count
 
 func _find_button(node: Node, label: String) -> Button:
