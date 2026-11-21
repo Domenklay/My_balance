@@ -1088,8 +1088,11 @@ func _show_onboarding() -> void:
         var estimate_label = _label(choices, "", 13, MUTED)
         estimate_label.name = "OnboardingEstimate"
         _label(choices, "Мой ориентир, ккал в день", 14, TEXT_ACCENT)
-        var calories = _number(choices, 1800.0, 1000, 5000, 10)
+        var calories = _text_input(choices, "Например, 1800", str(roundi(float(store.data["settings"]["kcal"]))))
         calories.name = "OnboardingCalories"
+        calories.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+        calories.max_length = 4
+        _label(choices, "Можешь заменить рассчитанную цифру своей нормой и сохранить её.", 12, MUTED)
         var compute_preview = func(_index: int):
             var details = onboarding_draft.duplicate(true)
             details["activity"] = activity.selected
@@ -1100,7 +1103,7 @@ func _show_onboarding() -> void:
                 estimate_label.text = "Не удалось рассчитать: проверь анкету."
                 return
             if bool(calculation["automatic"]):
-                calories.value = float(calculation["kcal"])
+                calories.text = str(roundi(float(calculation["kcal"])))
                 estimate_label.text = "Оценка поддержания: " + str(roundi(float(calculation["maintenance"]))) + " ккал.\n" + str(calculation["message"])
             else:
                 estimate_label.text = str(calculation["message"])
@@ -1123,7 +1126,11 @@ func _show_onboarding() -> void:
             if not OnboardingMath.valid_details(details):
                 _message("Проверь указанные параметры.")
                 return
-            if store.complete_onboarding(details, calories.value):
+            var manual_kcal: int = StoreScript.parse_calorie_target(calories.text)
+            if manual_kcal < 0:
+                _message("Введи суточную норму от 1000 до 5000 ккал.")
+                return
+            if store.complete_onboarding(details, float(manual_kcal)):
                 onboarding_draft.clear()
                 onboarding_step = 0
                 var return_tab = "settings" if onboarding_edit else "day"
