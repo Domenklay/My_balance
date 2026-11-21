@@ -103,7 +103,7 @@ func _run() -> void:
         return
 
     var today = app.date
-    if _button_named(date_bar, "◀") == null:
+    if _button_named(app.body.get_node("DayDateNavigation"), "◀") == null:
         _fail("date arrow missing")
         return
     # Find the live date bar after the note rerender.
