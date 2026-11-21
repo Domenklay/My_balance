@@ -3505,12 +3505,13 @@ func _confirm_day_copy(explanation: String, replacing: bool, action: Callable) -
 
 func _meal_templates_sheet() -> void:
     var templates: Array = store.data.get("meal_templates", [])
-    var template_sheet_height: float = minf(610.0,
-        265.0 + float(mini(templates.size(), 5)) * 76.0)
+    var template_sheet_height: float = minf(650.0,
+        240.0 + float(mini(templates.size(), 5)) * 87.0)
     var sheet = _mobile_sheet("Мои наборы питания",
         "Повторяй сохранённые завтраки, обеды и ужины целиком. Изменения рецептов не затрагивают шаблоны.",
         "Закрыть", template_sheet_height)
     var fields: VBoxContainer = sheet["fields"]
+    sheet["cancel"].visible = false
     if templates.is_empty():
         _label(fields, "Наборов пока нет. Открой приём пищи, добавь продукты и нажми «☆ Сохранить набор».",
             13, MUTED)
@@ -3534,20 +3535,154 @@ func _meal_templates_sheet() -> void:
             _label(info, meal_name + " · " + str(items.size()) + " продуктов · " +
                 str(roundi(kcal_total)) + " ккал", 11, MUTED)
             var add_button = _button(panel, "+", func():
-                _confirm_action("Добавить набор «" + str(template["name"]) + "»?",
-                    "Добавить " + str(items.size()) + " записей в " + date +
-                    "? Если они уже есть, появятся дубликаты.",
-                    func(): _apply_selected_template(template_id, date, sheet))
+                _prompt_apply_template(template_id, str(template["name"]),
+                    items.size(), date, sheet)
             )
             add_button.name = "TemplateQuickAdd_" + template_id
-            add_button.custom_minimum_size = Vector2(43, 41)
+            add_button.custom_minimum_size = Vector2(37, 39)
+            var edit = _button(panel, "✎", func():
+                sheet["root"].queue_free()
+                _edit_meal_template_sheet(template_id)
+            , true)
+            edit.name = "TemplateEdit_" + template_id
+            edit.custom_minimum_size = Vector2(37, 39)
             var remove = _button(panel, "×", func():
                 _confirm_delete("Удалить набор «" + str(template["name"]) + "»?",
                     func(): _delete_selected_template(template_id, sheet))
             , true)
-            remove.custom_minimum_size = Vector2(43, 41)
+            remove.custom_minimum_size = Vector2(37, 39)
     var close: Button = sheet["confirm"]
     close.pressed.connect(func(): sheet["root"].queue_free())
+
+
+func _prompt_apply_template(template_id: String, title: String, count: int,
+        target_date: String, sheet: Dictionary) -> void:
+    _confirm_action("Добавить набор «" + title + "»?",
+        "Добавить " + str(count) + " продуктов в " + target_date +
+        "? При повторном добавлении могут возникнуть дубликаты.",
+        func(): _apply_selected_template(template_id, target_date, sheet),
+        "Добавить набор")
+
+
+func _render_template_editor_items(holder: VBoxContainer, draft: Dictionary) -> void:
+    for node in holder.get_children():
+        holder.remove_child(node)
+        node.queue_free()
+    var items: Array = draft["items"]
+    for i in range(items.size()):
+        var index: int = i
+        var item: Dictionary = items[i]
+        var panel = _soft_list_row(holder)
+        var content = VBoxContainer.new()
+        content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        content.add_theme_constant_override("separation", 4)
+        panel.add_child(content)
+        var head = _row(content)
+        var title = _label(head, str(item.get("nutrition", {}).get("name", "Продукт")),
+            13, INK)
+        title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        var remove = _button(head, "×", func():
+            items.remove_at(index)
+            _render_template_editor_items(holder, draft)
+        , true)
+        remove.name = "TemplateEditRemove_" + str(index)
+        remove.custom_minimum_size = Vector2(34, 36)
+        var amount_row = _row(content)
+        _label(amount_row, "Количество, " + str(item.get("unit", "г")), 12, MUTED)
+        var amount = _number(amount_row, float(item.get("grams", 100.0)),
+            1.0, 5000.0, 0.1)
+        amount.name = "TemplateEditAmount_" + str(index)
+        amount.custom_minimum_size = Vector2(96, 42)
+        amount.value_changed.connect(func(value: float):
+            if not is_equal_approx(float(item.get("grams", 0.0)), value):
+                item["grams"] = value
+                item.erase("portion_count")
+                item.erase("portion_id")
+                item.erase("portion_label")
+        )
+
+
+func _template_add_recent_food(holder: VBoxContainer, draft: Dictionary,
+        food: Dictionary, amount: float) -> void:
+    var items: Array = draft["items"]
+    if items.size() >= 30:
+        _message("В одном наборе не более 30 продуктов.")
+        return
+    var unit: String = PortionMath.base_unit(food)
+    items.append({
+        "food": str(food.get("id", "")),
+        "meal": "Завтрак", "grams": amount, "unit": unit,
+        "nutrition": {
+            "name": str(food.get("name", "Продукт")), "nutrition_unit": unit,
+            "kcal": float(food.get("kcal", 0)),
+            "p": float(food.get("p", 0)), "f": float(food.get("f", 0)),
+            "c": float(food.get("c", 0))
+        }
+    })
+    _render_template_editor_items(holder, draft)
+
+
+func _edit_meal_template_sheet(template_id: String) -> void:
+    var original: Dictionary = {}
+    for template in store.data.get("meal_templates", []):
+        if str(template.get("id", "")) == template_id:
+            original = template
+            break
+    if original.is_empty():
+        _message("Сохранённый набор не найден.")
+        return
+    var draft: Dictionary = {"items": original["items"].duplicate(true)}
+    var sheet = _mobile_sheet("Изменить набор питания",
+        "Меняй название, порции и состав. Исторические КБЖУ останутся прежними.",
+        "Сохранить", 720.0)
+    var fields: VBoxContainer = sheet["fields"]
+    _label(fields, "Название набора", 13, MUTED)
+    var title = _text_input(fields, "Название", str(original["name"]))
+    title.name = "TemplateEditName"
+    title.max_length = 70
+    _label(fields, "Приём пищи", 13, MUTED)
+    var meal = _choice(fields, StoreScript.MEAL_NAMES)
+    meal.name = "TemplateEditMeal"
+    var existing_meal: String = str(original["items"][0].get("meal", "Завтрак"))
+    meal.select(maxi(0, StoreScript.MEAL_NAMES.find(existing_meal)))
+    _label(fields, "Состав", 13, MUTED)
+    var item_list = VBoxContainer.new()
+    item_list.name = "TemplateEditItems"
+    item_list.add_theme_constant_override("separation", 6)
+    fields.add_child(item_list)
+    _render_template_editor_items(item_list, draft)
+    var foods: Array = store.recent_foods(12)
+    if foods.is_empty():
+        foods = store.all_foods().slice(0, 16)
+    if not foods.is_empty():
+        _label(fields, "Добавить продукт в набор", 13, MUTED)
+        var picker = _choice(fields, foods.map(func(food):
+            return str(food.get("name", "Продукт"))))
+        picker.name = "TemplateAddProduct"
+        var add_row = _row(fields)
+        var grams = _number(add_row, 100.0, 1.0, 5000.0, 0.1)
+        grams.name = "TemplateNewAmount"
+        var add = _button(add_row, "+ В набор", func():
+            if picker.selected >= 0 and picker.selected < foods.size():
+                _template_add_recent_food(item_list, draft,
+                    foods[picker.selected], grams.value)
+        , true)
+        add.name = "TemplateAddItem"
+        add.custom_minimum_size.y = 40
+    var confirm: Button = sheet["confirm"]
+    confirm.pressed.connect(func():
+        var final_items: Array = draft["items"].duplicate(true)
+        for item in final_items:
+            item["meal"] = str(meal.get_item_text(meal.selected))
+        if store.update_meal_template(template_id, title.text, final_items):
+            sheet["root"].queue_free()
+            _hide_keyboard_and_focus()
+            _render()
+            _notify_saved("Набор изменён")
+        else:
+            _sheet_error(sheet, "Проверь название и оставь хотя бы один продукт.")
+    )
 
 
 func _apply_selected_template(template_id: String, target_date: String,
