@@ -2628,10 +2628,28 @@ func _food_form(parent: VBoxContainer) -> void:
     var search_heading = _label(parent, "Поиск продуктов по названию", 16, TEXT_ACCENT)
     var filtered: Array = []
     var search = _text_input(parent, "Поиск продукта по названию")
+    search.name = "FoodNameSearch"
+    online_search_field = search
     if not selected_barcode_food.is_empty():
         search.text = selected_barcode_food
         selected_barcode_food = ""
     search.clear_button_enabled = true
+    var online_actions = _row(parent)
+    online_actions.name = "OnlineFoodSearchActions"
+    var online_button = _button(online_actions, "Найти в интернете", func():
+        _lookup_online_products(search.text)
+    , true)
+    online_button.name = "OnlineFoodSearchButton"
+    online_button.custom_minimum_size.y = 40
+    online_button.add_theme_font_size_override("font_size", 13)
+    online_search_label = _label(parent,
+        "Open Food Facts · поиск продуктов и брендов · нужен интернет.", 12, MUTED)
+    online_search_label.name = "OnlineFoodSearchStatus"
+    online_results_box = VBoxContainer.new()
+    online_results_box.name = "OnlineFoodSearchResults"
+    online_results_box.visible = false
+    online_results_box.add_theme_constant_override("separation", 6)
+    parent.add_child(online_results_box)
     var favorite_only = CheckButton.new()
     favorite_only.text = "Только избранные"
     favorite_only.add_theme_color_override("font_color", GREEN)
@@ -2691,6 +2709,12 @@ func _food_form(parent: VBoxContainer) -> void:
             _message("Ошибка сохранения. Запись не добавлена; проверь свободное место.")
     )
     search.text_changed.connect(func(_value: String):
+        if is_instance_valid(online_results_box):
+            online_results_box.visible = false
+            for old in online_results_box.get_children():
+                old.queue_free()
+        if is_instance_valid(online_search_label):
+            online_search_label.text = "Поиск по всем брендам: нажми «Найти в интернете»."
         _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star, category, results_box, meal, added_count)
     )
     favorite_only.toggled.connect(func(_value: bool):
@@ -2765,9 +2789,12 @@ func _food_form(parent: VBoxContainer) -> void:
     # controls and the original barcode scanner remain accessible lower down.
     parent.move_child(search_heading, 1)
     parent.move_child(search, 2)
-    parent.move_child(quick_tabs, 3)
-    parent.move_child(quick_lists, 4)
-    parent.move_child(results_box, 5)
+    parent.move_child(online_actions, 3)
+    parent.move_child(online_search_label, 4)
+    parent.move_child(online_results_box, 5)
+    parent.move_child(quick_tabs, 6)
+    parent.move_child(quick_lists, 7)
+    parent.move_child(results_box, 8)
     parent.move_child(barcode_panel, parent.get_child_count() - 1)
     parent.move_child(barcode_divider, parent.get_child_count() - 2)
     _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star, category, results_box, meal, added_count)
