@@ -177,6 +177,23 @@ func meal_summary(day: String, meal: String) -> Dictionary:
             result[nutrient] = float(result[nutrient]) + float(food.get(nutrient, 0.0)) * ratio
     return result
 
+static func parse_calorie_target(text: String) -> int:
+    var input = text.strip_edges()
+    if not input.is_valid_int():
+        return -1
+    var result = input.to_int()
+    return result if result >= 1000 and result <= 5000 else -1
+
+func set_daily_calorie_goal(calories: int) -> bool:
+    if calories < 1000 or calories > 5000:
+        return false
+    var previous: Dictionary = data["settings"].duplicate(true)
+    data["settings"]["kcal"] = calories
+    if save():
+        return true
+    data["settings"] = previous
+    return false
+
 func needs_onboarding() -> bool:
     return not bool(data.get("settings", {}).get("onboarding_complete", false))
 
