@@ -120,6 +120,7 @@ var onboarding_draft: Dictionary = {}
 var recipe_draft: Dictionary = {}
 var recipe_search_text: String = ""
 var recipe_list_query: String = ""
+var recipe_list_filter: String = "all"
 var recipe_manual_open: bool = false
 var recipe_actions_expanded: Dictionary = {}
 var _rendered_view: String = ""
@@ -1674,22 +1675,49 @@ func _recipe_preview(label: Label, cooked: SpinBox, portions: SpinBox) -> void:
     if result.is_empty():
         label.text = "Добавь ингредиенты и укажи вес готового блюда."
         return
-    var portion_weight = cooked.value / maxf(1.0, portions.value)
-    label.text = ("Вес сырых ингредиентов: " + str(roundi(result["raw_weight"])) + " г" +
+    var portion_weight: float = cooked.value / maxf(1.0, portions.value)
+    var source_text: String = ("Исходные продукты: " +
+        str(snappedf(float(result["raw_weight"]), 0.1)) + " г")
+    if float(result.get("raw_volume", 0.0)) > 0.0:
+        source_text += (" + " + str(snappedf(float(result["raw_volume"]), 0.1)) + " мл")
+    label.text = (source_text +
+        "\nПосле готовки: " + str(snappedf(cooked.value, 0.1)) + " г" +
         "\nВсё блюдо: " + str(roundi(result["total_kcal"])) + " ккал" +
+        " · Б " + str(snappedf(float(result["total_p"]), 0.1)) +
+        " Ж " + str(snappedf(float(result["total_f"]), 0.1)) +
+        " У " + str(snappedf(float(result["total_c"]), 0.1)) +
         "\nНа 100 г готового: " + str(roundi(result["kcal"])) + " ккал" +
         " · Б " + str(snappedf(result["p"], 0.1)) +
-        " · Ж " + str(snappedf(result["f"], 0.1)) +
-        " · У " + str(snappedf(result["c"], 0.1)) +
-        "\nПорция ~" + str(roundi(portion_weight)) + " г: " +
+        " Ж " + str(snappedf(result["f"], 0.1)) +
+        " У " + str(snappedf(result["c"], 0.1)) +
+        "\n1 порция ~" + str(roundi(portion_weight)) + " г: " +
         str(roundi(result["total_kcal"] / maxf(1.0, portions.value))) + " ккал")
+
+func _recipe_append_ingredient(food: Dictionary, amount: float,
+        name: LineEdit, cooked: SpinBox, portions: SpinBox) -> void:
+    if recipe_draft.get("ingredients", []).size() >= 40:
+        _message("В одном рецепте допускается до 40 ингредиентов.")
+        return
+    if not is_finite(amount) or amount <= 0.0 or amount > 10000.0:
+        _message("Укажи допустимое количество ингредиента.")
+        return
+    _recipe_sync_form(name, cooked, portions)
+    recipe_draft["ingredients"].append({
+        "id": str(food.get("id", "")), "name": str(food.get("name", "")),
+        "grams": amount, "unit": PortionMath.base_unit(food),
+        "kcal": float(food.get("kcal", 0)),
+        "p": float(food.get("p", 0)), "f": float(food.get("f", 0)),
+        "c": float(food.get("c", 0))
+    })
+    _render()
+
 
 func _show_recipe_editor() -> void:
     var toolbar = _card("Редактор домашнего блюда")
-    _label(toolbar, "КБЖУ ингредиентов берутся на 100 г до приготовления. Вода без калорий не меняет общую калорийность.", 13, MUTED)
+    _label(toolbar, "Для каждого ингредиента КБЖУ берётся на 100 г или 100 мл. Укажи съедобный вес готового блюда: выпаривание воды меняет калорийность 100 г, но не общие КБЖУ.", 13, MUTED)
     var name = _text_input(toolbar, "Название блюда", str(recipe_draft.get("name", "")))
     name.max_length = 160
-    _label(toolbar, "Вес готового блюда, г (без посуды)", 13, MUTED)
+    _label(toolbar, "Вес после приготовления, г (съедобная часть, без посуды)", 13, MUTED)
     var cooked = _number(toolbar, float(recipe_draft.get("cooked_weight", 500)), 1, 50000, 1)
     _label(toolbar, "На сколько порций разделить", 13, MUTED)
     var portions = _number(toolbar, float(recipe_draft.get("servings", 4)), 1, 100, 1)
@@ -1722,9 +1750,11 @@ func _show_recipe_editor() -> void:
         var index: int = i
         var ingredient: Dictionary = parts[index]
         var line = _soft_list_row(info)
-        var label = _label(line, str(ingredient.get("name", "Ингредиент")), 13, INK)
+        var label = _label(line, str(ingredient.get("name", "Ингредиент")) +
+            " (" + str(ingredient.get("unit", "г")) + ")", 13, INK)
         label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         var grams = _number(line, float(ingredient.get("grams", 100)), 1, 10000, 1)
+        grams.tooltip_text = "Количество ингредиента, " + str(ingredient.get("unit", "г"))
         grams.custom_minimum_size.x = 83
         grams.size_flags_horizontal = Control.SIZE_SHRINK_END
         grams.value_changed.connect(func(v: float):
@@ -1747,26 +1777,58 @@ func _show_recipe_editor() -> void:
         _refresh_recipe_food_search(search, picker, filtered)
     )
     _refresh_recipe_food_search(search, picker, filtered)
-    _label(add, "Вес сырого ингредиента, г", 13, MUTED)
+    var ingredient_unit_hint = _label(add, "Количество ингредиента, г", 13, MUTED)
     var weight = _number(add, 100, 1, 10000, 1)
+    picker.item_selected.connect(func(index: int):
+        if index >= 0 and index < filtered.size():
+            ingredient_unit_hint.text = ("Количество ингредиента, " +
+                PortionMath.base_unit(filtered[index]))
+    )
+    search.text_changed.connect(func(_text: String):
+        if not filtered.is_empty():
+            ingredient_unit_hint.text = ("Количество ингредиента, " +
+                PortionMath.base_unit(filtered[0]))
+    )
+    if not filtered.is_empty():
+        ingredient_unit_hint.text = "Количество ингредиента, " + PortionMath.base_unit(filtered[0])
     _button(add, "+ Добавить ингредиент", func():
         if picker.selected < 0 or picker.selected >= filtered.size():
             _message("Сначала выбери ингредиент.")
             return
-        if recipe_draft["ingredients"].size() >= 40:
-            _message("В одном рецепте допускается до 40 ингредиентов.")
-            return
-        _recipe_sync_form(name, cooked, portions)
-        var food: Dictionary = filtered[picker.selected]
-        var item = {
-            "id": str(food.get("id", "")), "name": str(food.get("name", "")),
-            "grams": weight.value, "kcal": float(food.get("kcal", 0)),
-            "p": float(food.get("p", 0)), "f": float(food.get("f", 0)),
-            "c": float(food.get("c", 0))
-        }
-        recipe_draft["ingredients"].append(item)
-        _render()
+        _recipe_append_ingredient(filtered[picker.selected], weight.value, name, cooked, portions)
     )
+    var shortcuts: Array = []
+    var used_ids: Dictionary = {}
+    for fav_id in store.data.get("favorites", []):
+        var fav_food: Dictionary = store.food_by_id(str(fav_id))
+        if not fav_food.is_empty() and not used_ids.has(str(fav_id)):
+            shortcuts.append(fav_food)
+            used_ids[str(fav_id)] = true
+        if shortcuts.size() >= 3:
+            break
+    for recent_food in store.recent_foods(6):
+        var recent_id: String = str(recent_food.get("id", ""))
+        if not used_ids.has(recent_id) and not recent_id.begins_with("recipe:"):
+            shortcuts.append(recent_food)
+            used_ids[recent_id] = true
+        if shortcuts.size() >= 5:
+            break
+    if not shortcuts.is_empty():
+        _label(add, "Недавние и избранные ингредиенты", 12, TEXT_ACCENT)
+        var chips = VBoxContainer.new()
+        chips.name = "RecipeIngredientShortcuts"
+        chips.add_theme_constant_override("separation", 3)
+        add.add_child(chips)
+        for food_record in shortcuts:
+            var shortcut_food: Dictionary = food_record
+            var shortcut_name: String = str(shortcut_food.get("name", "Продукт"))
+            var chip = _button(chips, "+ " + shortcut_name + " · " +
+                PortionMath.base_unit(shortcut_food), func():
+                    _recipe_append_ingredient(shortcut_food, weight.value, name, cooked, portions)
+            , true)
+            chip.clip_text = true
+            chip.custom_minimum_size.y = 35
+            chip.add_theme_font_size_override("font_size", 12)
     var manual = _card("Нет ингредиента в каталоге?")
     _button(manual, "▴ Свернуть ручной ввод" if recipe_manual_open else "+ Ввести ингредиент вручную", func():
         _recipe_sync_form(name, cooked, portions)
@@ -1794,7 +1856,7 @@ func _show_recipe_editor() -> void:
             _recipe_sync_form(name, cooked, portions)
             recipe_draft["ingredients"].append({
                 "id": "", "name": manual_name.text.strip_edges(),
-                "grams": manual_grams.value, "kcal": manual_kcal.value,
+                "grams": manual_grams.value, "unit": "г", "kcal": manual_kcal.value,
                 "p": manual_p.value, "f": manual_f.value, "c": manual_c.value
             })
             recipe_manual_open = false
@@ -1805,7 +1867,7 @@ func _show_recipe_editor() -> void:
     cooked.value_changed.connect(func(_value: float): _recipe_preview(preview, cooked, portions))
     portions.value_changed.connect(func(_value: float): _recipe_preview(preview, cooked, portions))
     _recipe_preview(preview, cooked, portions)
-    _label(preview_card, "На 100 г учитывается фактический вес готового блюда. Если часть соуса осталась в кастрюле, учти только съедобную массу и ингредиенты в ней.", 12, MUTED)
+    _label(preview_card, "Для КБЖУ используй съедобные ингредиенты, включая использованное масло и съеденный соус. Неучтённые потери питательных веществ при готовке автоматически не вычитаются.", 12, MUTED)
     var buttons = _row(preview_card)
     _button(buttons, "Отмена", func():
         recipe_editor_open = false
@@ -1831,23 +1893,58 @@ func _recipe_portion_sheet(recipe: Dictionary) -> void:
     if values.is_empty():
         _message("Не удалось рассчитать пищевую ценность рецепта.")
         return
+    var last: Dictionary = store.last_recipe_portion(str(recipe.get("id", "")))
+    var normal_weight: float = float(recipe["cooked_weight"]) / maxf(1.0, float(recipe["servings"]))
+    var initial_weight: float = float(last.get("grams", normal_weight))
     var sheet = _mobile_sheet(str(recipe.get("name", "Рецепт")),
-        "Выбери вес съеденной порции и приём пищи. БЖУ сохраняются в дневнике.", "Добавить порцию", 425.0)
+        "Выбери съеденный вес готового блюда. Расчёт КБЖУ ведётся по фактическому весу после готовки.",
+        "Добавить порцию", 425.0)
     var fields: VBoxContainer = sheet["fields"]
-    _label(fields, "Вес порции, г", 13, MUTED)
-    var weight = _number(fields, minf(5000.0, float(recipe["cooked_weight"]) / maxf(1.0, float(recipe["servings"]))), 1, 5000, 1)
+    _label(fields, "Порция готового блюда, г", 13, MUTED)
+    var weight = _number(fields, minf(5000.0, initial_weight), 1, 5000, 1)
+    weight.name = "RecipeServingWeight"
+    var preset_row = _row(fields)
+    preset_row.name = "RecipeServingPresets"
+    for choice in [["½ порции", 0.5], ["1 порция", 1.0], ["2 порции", 2.0]]:
+        var factor: float = float(choice[1])
+        var preset = _button(preset_row, str(choice[0]), func():
+            weight.value = minf(5000.0, normal_weight * factor)
+        , true)
+        preset.add_theme_font_size_override("font_size", 12)
+    if not last.is_empty():
+        var repeat_button = _button(fields, "↻ Последняя: " +
+            str(snappedf(float(last["grams"]), 0.1)) + " г", func():
+                weight.value = float(last["grams"])
+        , true)
+        repeat_button.name = "RecipeLastPortion"
     _label(fields, "Приём пищи", 13, MUTED)
     var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
+    meal.name = "RecipeServingMeal"
+    var target_meal: String = selected_meal
+    if not _meal_entry_locked and not last.is_empty():
+        target_meal = str(last.get("meal", selected_meal))
+    var chosen_index: int = ["Завтрак", "Обед", "Перекус", "Ужин"].find(target_meal)
+    if chosen_index >= 0:
+        meal.select(chosen_index)
+    meal.disabled = _meal_entry_locked
     var portion_text = _label(fields, "", 14, TEXT_ACCENT)
+    portion_text.name = "RecipeServingPreview"
     var refresh = func(v: float):
-        var portions = RecipeMath.portion(str(recipe["name"]), values, v)
-        portion_text.text = str(roundi(float(portions.get("kcal", 0)))) + " ккал  ·  Б " + str(snappedf(float(portions.get("p", 0)), 0.1)) + "  Ж " + str(snappedf(float(portions.get("f", 0)), 0.1)) + "  У " + str(snappedf(float(portions.get("c", 0)), 0.1))
+        var actual = RecipeMath.portion(str(recipe["name"]), values, v)
+        portion_text.text = (str(snappedf(v, 0.1)) + " г · " +
+            str(roundi(float(actual.get("kcal", 0)))) + " ккал" +
+            "\nБ " + str(snappedf(float(actual.get("p", 0)), 0.1)) +
+            " · Ж " + str(snappedf(float(actual.get("f", 0)), 0.1)) +
+            " · У " + str(snappedf(float(actual.get("c", 0)), 0.1)))
     weight.value_changed.connect(refresh)
     refresh.call(weight.value)
     var confirm: Button = sheet["confirm"]
     confirm.pressed.connect(func():
-        if store.add_recipe_portion(str(recipe["id"]), weight.value, meal.get_item_text(meal.selected), date):
+        if store.add_recipe_portion(str(recipe["id"]), weight.value,
+                meal.get_item_text(meal.selected), _selected_food_date()):
             sheet["root"].queue_free()
+            _meal_entry_locked = false
+            _meal_entry_date = ""
             tab = "day"
             _render()
             _notify_saved("Порция блюда добавлена")
@@ -1856,6 +1953,7 @@ func _recipe_portion_sheet(recipe: Dictionary) -> void:
             _sheet_error(sheet, "Не удалось добавить порцию. Проверь доступную память.")
     )
 
+
 func _show_recipes() -> void:
     if recipe_editor_open:
         _show_recipe_editor()
@@ -1863,9 +1961,30 @@ func _show_recipes() -> void:
     var intro = _card("Мои рецепты", "hero")
     _label(intro, "Сохраняй домашние блюда и быстро добавляй порции в дневник.", 14, HERO_MUTED)
     _button(intro, "+ Создать рецепт", func(): _begin_recipe_editor(), true)
-    var recipes: Array = store.data.get("recipes", [])
+    var recipes: Array = store.data.get("recipes", []).duplicate()
+    recipes.sort_custom(func(a, b):
+        var a_favorite: bool = bool(a.get("favorite", false))
+        var b_favorite: bool = bool(b.get("favorite", false))
+        if a_favorite != b_favorite:
+            return a_favorite
+        return str(a.get("name", "")).nocasecmp_to(str(b.get("name", ""))) < 0
+    )
+    var recently_logged: Dictionary = {}
+    for logged_recipe in store.recent_recipe_portions(100):
+        recently_logged[str(logged_recipe["recipe_id"])] = true
     if not recipes.is_empty():
         var filter_card = _card("Поиск по рецептам")
+        var filter_row = _row(filter_card)
+        filter_row.name = "RecipeQuickFilters"
+        for entry in [["Все", "all"], ["★ Избранные", "favorite"], ["Недавние", "recent"]]:
+            var filter_key: String = str(entry[1])
+            var tab_button = _button(filter_row, str(entry[0]), func():
+                recipe_list_filter = filter_key
+                _render()
+            , recipe_list_filter != filter_key)
+            tab_button.custom_minimum_size.y = 38
+            tab_button.add_theme_font_size_override("font_size", 12)
+            tab_button.clip_text = true
         var query_field = _text_input(filter_card, "Название блюда", recipe_list_query)
         query_field.clear_button_enabled = true
         _button(filter_card, "Найти", func():
@@ -1884,6 +2003,10 @@ func _show_recipes() -> void:
     var matched = 0
     for saved in recipes:
         var recipe: Dictionary = saved
+        if recipe_list_filter == "favorite" and not bool(recipe.get("favorite", false)):
+            continue
+        if recipe_list_filter == "recent" and not recently_logged.has(str(recipe.get("id", ""))):
+            continue
         if not recipe_list_query.is_empty() and not str(recipe.get("name", "")).to_lower().contains(recipe_list_query.to_lower()):
             continue
         matched += 1
@@ -1904,6 +2027,19 @@ func _show_recipes() -> void:
         var title = _label(summary, str(recipe.get("name", "Блюдо")), 16, INK)
         title.name = "RecipeCardTitle"
         title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        var star_button = _button(overview,
+            "★" if bool(recipe.get("favorite", false)) else "☆", func():
+                if store.toggle_recipe_favorite(recipe_id):
+                    _render()
+                else:
+                    _message("Не удалось сохранить избранное.")
+        , true)
+        star_button.name = "RecipeFavorite_" + recipe_id
+        star_button.tooltip_text = ("Удалить из избранного" if bool(recipe.get("favorite", false))
+            else "Добавить в избранное")
+        star_button.custom_minimum_size = Vector2(41, 42)
+        star_button.size_flags_horizontal = Control.SIZE_SHRINK_END
+        star_button.add_theme_font_size_override("font_size", 22)
         var serving_count: float = maxf(1.0, float(recipe.get("servings", 1.0)))
         var serving_grams: float = float(recipe["cooked_weight"]) / serving_count
         var portion_summary = _label(summary,
@@ -1922,6 +2058,23 @@ func _show_recipes() -> void:
             func(): _recipe_portion_sheet(recipe))
         add_portion.custom_minimum_size.y = 42
         add_portion.add_theme_font_size_override("font_size", 12)
+        var previous_portion: Dictionary = store.last_recipe_portion(recipe_id)
+        if not previous_portion.is_empty():
+            var last_weight: float = float(previous_portion["grams"])
+            var last_meal: String = str(previous_portion["meal"])
+            var quick_repeat = _button(card,
+                "↻ Повторить " + str(snappedf(last_weight, 0.1)) +
+                " г · " + last_meal, func():
+                    if store.repeat_recipe_portion(recipe_id, _selected_food_date()):
+                        tab = "day"
+                        _render()
+                        _notify_saved("Порция рецепта повторена")
+                    else:
+                        _message("Не удалось повторить порцию.")
+            , true)
+            quick_repeat.name = "RecipeRepeat_" + recipe_id
+            quick_repeat.custom_minimum_size.y = 37
+            quick_repeat.add_theme_font_size_override("font_size", 12)
         var options = _button(actions, "⋯", func():
             recipe_actions_expanded[recipe_id] = not bool(recipe_actions_expanded.get(recipe_id, false))
             _render()
@@ -1947,7 +2100,9 @@ func _show_recipes() -> void:
             , true)
     if matched == 0 and not recipes.is_empty():
         var no_results = _card("Ничего не найдено")
-        _label(no_results, "Попробуй другое название или очисти поиск.", 13, MUTED)
+        _label(no_results, ("В этом разделе пока нет блюд. Выбери «Все»."
+            if recipe_list_filter != "all" else
+            "Попробуй другое название или очисти поиск."), 13, MUTED)
 
 func _selected_food_date() -> String:
     return _meal_entry_date if _meal_entry_locked and not _meal_entry_date.is_empty() else date

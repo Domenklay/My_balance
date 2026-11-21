@@ -113,6 +113,8 @@ jobs:
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/botanical_default_test.gd
       - name: Test recipe calculations, history and personal profile
         run: /tmp/godot --headless --path godot --script res://tests/recipe_profile_test.gd
+      - name: Test 0.7.36 recipe favorites, quick repeats, cooked weight and ingredient units
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/recipes_0736_test.gd
       - name: Test illustrated recipe cards, photographs, per-serving values and safe editing
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/recipe_cards_0726_test.gd
       - name: Test first-launch questionnaire, calorie estimate, legacy update and manual override

@@ -17,6 +17,9 @@ static func valid_ingredient(value: Variant) -> bool:
         return false
     if not is_finite(float(grams)) or float(grams) <= 0 or float(grams) > 10000:
         return false
+    # Legacy ingredients without a unit are in grams.
+    if str(value.get("unit", "г")) not in ["г", "мл"]:
+        return false
     for n in NUTRIENTS:
         var v = value.get(n)
         if not (v is float or v is int):
@@ -30,16 +33,21 @@ static func calculate(ingredients: Array, cooked_weight: float) -> Dictionary:
         return {}
     if not is_finite(cooked_weight) or cooked_weight <= 0.0 or cooked_weight > 50000.0:
         return {}
-    var result = {"raw_weight": 0.0, "cooked_weight": cooked_weight}
+    var result = {"raw_weight": 0.0, "raw_volume": 0.0, "cooked_weight": cooked_weight}
     for n in NUTRIENTS:
         result["total_" + n] = 0.0
     for ingredient in ingredients:
         if not valid_ingredient(ingredient):
             return {}
-        var g = float(ingredient["grams"])
-        result["raw_weight"] += g
+        # "grams" is the stored legacy field name; for ingredients marked
+        # "мл" it is a volume, never a mass. Do not assume density 1 g/ml.
+        var amount: float = float(ingredient["grams"])
+        if str(ingredient.get("unit", "г")) == "мл":
+            result["raw_volume"] += amount
+        else:
+            result["raw_weight"] += amount
         for n in NUTRIENTS:
-            result["total_" + n] += float(ingredient[n]) * g / 100.0
+            result["total_" + n] += float(ingredient[n]) * amount / 100.0
     for n in NUTRIENTS:
         result[n] = result["total_" + n] * 100.0 / cooked_weight
     return result
@@ -51,6 +59,8 @@ static func validate_recipe(recipe: Variant) -> bool:
         return false
     var name = str(recipe.get("name", "")).strip_edges()
     if name.is_empty() or name.length() > 160:
+        return false
+    if recipe.has("favorite") and not (recipe["favorite"] is bool):
         return false
     # Recipe photos are optional and must be a bounded, decodable local JPG.
     # Old recipes without photos remain fully compatible.

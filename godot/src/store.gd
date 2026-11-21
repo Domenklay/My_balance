@@ -349,6 +349,67 @@ func save_recipe(recipe_data: Dictionary) -> String:
     recipes.erase(recipe)
     return ""
 
+# Marking a recipe as favorite changes only its recipe metadata; the
+# historical diary snapshot is never recalculated.
+func toggle_recipe_favorite(recipe_id: String) -> bool:
+    var recipe: Dictionary = recipe_by_id(recipe_id)
+    if recipe.is_empty():
+        return false
+    var had_flag: bool = recipe.has("favorite")
+    var old: bool = bool(recipe.get("favorite", false))
+    recipe["favorite"] = not old
+    if save():
+        return true
+    if had_flag:
+        recipe["favorite"] = old
+    else:
+        recipe.erase("favorite")
+    return false
+
+
+func recent_recipe_portions(limit: int = 10) -> Array:
+    var out: Array = []
+    if limit <= 0:
+        return out
+    var seen: Dictionary = {}
+    for i in range(data["entries"].size() - 1, -1, -1):
+        var entry: Dictionary = data["entries"][i]
+        var id: String = str(entry.get("recipe_id", ""))
+        if id.is_empty():
+            var food_id: String = str(entry.get("food", ""))
+            if food_id.begins_with("recipe:"):
+                id = food_id.substr(7)
+        if id.is_empty() or seen.has(id):
+            continue
+        var grams: float = float(entry.get("grams", 0))
+        var meal: String = str(entry.get("meal", ""))
+        if not is_finite(grams) or grams <= 0.0 or grams > 5000.0 or meal not in MEAL_NAMES:
+            continue
+        if recipe_by_id(id).is_empty():
+            continue
+        seen[id] = true
+        out.append({"recipe_id": id, "grams": grams, "meal": meal,
+            "date": str(entry.get("date", ""))})
+        if out.size() >= limit:
+            break
+    return out
+
+
+func last_recipe_portion(recipe_id: String) -> Dictionary:
+    for recent in recent_recipe_portions(500):
+        if str(recent.get("recipe_id", "")) == recipe_id:
+            return recent
+    return {}
+
+
+func repeat_recipe_portion(recipe_id: String, day: String) -> bool:
+    var last: Dictionary = last_recipe_portion(recipe_id)
+    if last.is_empty():
+        return false
+    return add_recipe_portion(recipe_id, float(last["grams"]),
+        str(last["meal"]), day)
+
+
 func delete_recipe(recipe_id: String) -> bool:
     var recipes: Array = data["recipes"]
     for i in range(recipes.size()):
@@ -379,7 +440,7 @@ func add_recipe_portion(recipe_id: String, grams: float, meal: String, day: Stri
         "id": "recipe_" + str(Time.get_ticks_usec()) + "_" + str(data["entries"].size()),
         "date": day, "food": "recipe:" + recipe_id, "recipe_id": recipe_id,
         "nutrition": nutrition,
-        "grams": grams, "meal": meal
+        "grams": grams, "unit": "г", "meal": meal
     }
     data["entries"].append(entry)
     if save():
