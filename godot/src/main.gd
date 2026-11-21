@@ -1803,6 +1803,86 @@ func _show_meal_add_actions(meal_name: String) -> void:
     )
 
 
+func _lookup_online_products(raw_terms: String) -> void:
+    if not is_instance_valid(online_search_label) or not is_instance_valid(online_results_box):
+        return
+    var query = raw_terms.strip_edges()
+    var url = BarcodeScript.search_url(query)
+    if url.is_empty():
+        online_search_label.text = "Введи минимум 2 символа названия или бренда."
+        return
+    if search_http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+        online_search_label.text = "Поиск уже выполняется. Повтори после ответа."
+        return
+    online_request_query = query
+    online_results_box.visible = false
+    for child in online_results_box.get_children():
+        child.queue_free()
+    online_search_label.text = "Ищем «" + query + "» в Open Food Facts…"
+    var headers = PackedStringArray([
+        "User-Agent: MyBalance/0.7.22 (+https://github.com/Domenklay/My_balance)",
+        "Accept: application/json"
+    ])
+    if search_http.request(url, headers, HTTPClient.METHOD_GET) != OK:
+        online_request_query = ""
+        online_search_label.text = "Не удалось начать поиск. Проверь интернет."
+
+
+func _on_online_search_completed(result: int, status: int,
+        _headers: PackedStringArray, body: PackedByteArray) -> void:
+    var query = online_request_query
+    online_request_query = ""
+    if tab != "search" or not is_instance_valid(online_search_field) or \
+            not is_instance_valid(online_results_box) or \
+            not is_instance_valid(online_search_label):
+        return
+    if FoodSearchScript.normalize(query) != FoodSearchScript.normalize(online_search_field.text):
+        return
+    if result != HTTPRequest.RESULT_SUCCESS or status != 200:
+        online_search_label.text = "Сервис недоступен. Локальный каталог работает без интернета."
+        return
+    if body.size() > 1500000:
+        online_search_label.text = "Ответ слишком большой. Уточни название."
+        return
+    var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+    if not (parsed is Dictionary and parsed.get("products") is Array):
+        online_search_label.text = "Сервис вернул некорректный список."
+        return
+    _show_online_search_results(BarcodeScript.parse_search_results(parsed, 12))
+
+
+func _show_online_search_results(records: Array) -> void:
+    if not is_instance_valid(online_results_box) or not is_instance_valid(online_search_label):
+        return
+    for old in online_results_box.get_children():
+        old.queue_free()
+    if records.is_empty():
+        online_results_box.visible = false
+        online_search_label.text = "Продукты с полными КБЖУ не найдены. Попробуй другое название."
+        return
+    online_results_box.visible = true
+    online_search_label.text = "Найдено " + str(records.size()) +
+        " продуктов · проверь данные по упаковке перед сохранением."
+    for record in records:
+        var product: Dictionary = record
+        var row = _soft_list_row(online_results_box)
+        var info = VBoxContainer.new()
+        info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        row.add_child(info)
+        var name_label = _label(info, str(product.get("name", "Продукт")), 12, INK)
+        name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        _label(info, str(roundi(float(product.get("kcal", 0)))) +
+            " ккал / 100 г · Б " + str(product.get("p", 0)) +
+            " Ж " + str(product.get("f", 0)) +
+            " У " + str(product.get("c", 0)), 11, MUTED)
+        var choose = _button(row, "Выбрать", func():
+            _confirm_barcode_product(product)
+        , true)
+        choose.custom_minimum_size.y = 40
+        choose.size_flags_horizontal = Control.SIZE_SHRINK_END
+        choose.add_theme_font_size_override("font_size", 12)
+
+
 func _show_food_search() -> void:
     var intro = _card("Каталог продуктов", "hero")
     _label(intro, "Локальные продукты и онлайн-база Open Food Facts.", 14, HERO_MUTED)
