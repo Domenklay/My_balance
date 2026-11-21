@@ -2,7 +2,7 @@ extends RefCounted
 
 # Read-only period aggregates. Empty days never contribute to mean calories.
 # Nutrition is taken from stored entry snapshots, preserving historical edits.
-static func dates_for(store: RefCounted, anchor: String, mode: String) -> Array:
+static func dates_for(store, anchor: String, mode: String) -> Array:
     if mode == "week":
         return store.week_dates(anchor)
     var month: String = anchor.substr(0, 7)
@@ -16,7 +16,7 @@ static func dates_for(store: RefCounted, anchor: String, mode: String) -> Array:
         days.append(date)
     return days
 
-static func summarize(store: RefCounted, anchor: String, mode: String) -> Dictionary:
+static func summarize(store, anchor: String, mode: String) -> Dictionary:
     var dates: Array = dates_for(store, anchor, mode)
     var indexed: Dictionary = {}
     for date in dates:
