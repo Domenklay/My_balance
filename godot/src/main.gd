@@ -2871,36 +2871,83 @@ func _show_barcode_portion(food: Dictionary) -> void:
     _quick_food_sheet(food, true)
 
 func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void:
-    var description = "Внеси КБЖУ с этикетки на 100 г / мл." if manual else "Open Food Facts: сравни КБЖУ с этикеткой."
+    var description = "Внеси значения с этикетки. Неизвестные поля оставлены пустыми." if manual else \
+        "Проверь карточку Open Food Facts по упаковке перед добавлением."
     var sheet = _mobile_sheet(
-        "Новый товар" if manual else "Найденный товар",
-        description, "Сохранить и добавить", 690.0)
+        "Добавить свой товар" if manual else "Найден товар по штрихкоду",
+        description, "Сохранить и добавить", 730.0)
     var fields: VBoxContainer = sheet["fields"]
-    _label(fields, "Название", 13, MUTED)
+    _barcode_product_overview(fields, product, sheet["root"])
+    _label(fields, "Название товара", 13, MUTED)
     var name = _text_input(fields, "Название продукта", str(product.get("name", "")))
-    _label(fields, "Основа КБЖУ с этикетки", 13, MUTED)
+    name.name = "BarcodeProductName"
+    name.max_length = 160
+    var review_text = BarcodeScript.nutrition_review_label(product)
+    if manual:
+        review_text = "Внеси калории, белки, жиры и углеводы с упаковки."
+    var review_label = _label(fields, review_text, 12,
+        ACCENT if manual or BarcodeScript.needs_nutrition_review(product) else MUTED)
+    review_label.name = "BarcodeNutritionReviewStatus"
+    review_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _label(fields, "Основа значений с этикетки", 13, MUTED)
     var basis = _choice(fields, ["На 100 г", "На 100 мл"])
     basis.name = "BarcodeNutritionBasis"
     basis.select(1 if PortionMath.base_unit(product) == "мл" else 0)
-    var detected_basis = str(product.get("unit_certainty", "unknown"))
-    if str(product.get("source", "")) == "Open Food Facts":
-        var basis_note = "Единица определена по упаковке. Сверь её и КБЖУ с этикеткой."
-        if detected_basis in ["serving", "unknown"]:
-            basis_note = "Основа КБЖУ не подтверждена. Выбери 100 г или 100 мл по этикетке."
-        _label(fields, basis_note, 12, ACCENT)
-    _label(fields, "Калории на 100 г или 100 мл (в зависимости от выбранной основы)", 13, MUTED)
-    var kcal = _number(fields, float(product.get("kcal", 0)), 0, 1000, 0.1)
-    _label(fields, "Белки • Жиры • Углеводы на 100 г", 13, MUTED)
-    var nutrition_row = _row(fields)
-    var protein = _number(nutrition_row, float(product.get("p", 0)), 0, 100, 0.1)
-    var fat = _number(nutrition_row, float(product.get("f", 0)), 0, 100, 0.1)
-    var carbs = _number(nutrition_row, float(product.get("c", 0)), 0, 100, 0.1)
-    var serving_basis_label = _label(fields, "Количество порции, " +
-        ("мл" if basis.selected == 1 else "г"), 13, MUTED)
+    if str(product.get("unit_certainty", "unknown")) in ["serving", "unknown"] and not manual:
+        _label(fields, "Единица определена неуверенно: выбери г или мл по этикетке.", 12, ACCENT)
+    var kcal_box = _row(fields)
+    _label(kcal_box, "Калории", 13, MUTED)
+    var kcal = _text_input(kcal_box, "ккал / 100", _barcode_prefill(product, "kcal"))
+    kcal.name = "BarcodeNutrition_kcal"
+    kcal.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+    kcal.max_length = 7
+    var nutrient_row = _row(fields)
+    nutrient_row.add_theme_constant_override("separation", 7)
+    var nutrient_inputs: Dictionary = {"kcal": kcal}
+    for entry in [["p", "Белки"], ["f", "Жиры"], ["c", "Углеводы"]]:
+        var item = VBoxContainer.new()
+        item.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        item.add_theme_constant_override("separation", 3)
+        nutrient_row.add_child(item)
+        _label(item, str(entry[1]) + " /100", 12, MUTED)
+        var input = _text_input(item, "0,0", _barcode_prefill(product, str(entry[0])))
+        input.name = "BarcodeNutrition_" + str(entry[0])
+        input.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+        input.max_length = 6
+        nutrient_inputs[str(entry[0])] = input
+    var serving_title = _label(fields,
+        "Количество порции, " + ("мл" if basis.selected == 1 else "г"), 13, MUTED)
     basis.item_selected.connect(func(index: int):
-        serving_basis_label.text = "Количество порции, " + ("мл" if index == 1 else "г")
+        serving_title.text = "Количество порции, " + ("мл" if index == 1 else "г")
     )
     var grams = _number(fields, 100, 1, 5000, 1)
+    grams.name = "BarcodePortionAmount"
+    var package_size: float = BarcodeScript.package_amount(product)
+    if package_size > 0.0:
+        var package_button = _button(fields, "Вся упаковка · " +
+            str(snappedf(package_size, 0.1)) + " " +
+            str(product.get("nutrition_unit", "г")), func():
+                if ("мл" if basis.selected == 1 else "г") != str(product.get("nutrition_unit", "г")):
+                    _sheet_error(sheet, "Основа этикетки не совпадает с единицей упаковки.")
+                    return
+                grams.value = package_size
+        , true)
+        package_button.name = "BarcodePackagePortion"
+        package_button.custom_minimum_size.y = 38
+    var calculated = _label(fields, "", 13, TEXT_ACCENT)
+    calculated.name = "BarcodePortionPreview"
+    var refresh_preview = func():
+        var value: float = _barcode_nutrition_value(kcal.text, 1000.0)
+        if value < 0.0:
+            calculated.text = "Заполни КБЖУ, чтобы рассчитать порцию."
+            return
+        calculated.text = str(roundi(value * grams.value / 100.0)) + \
+            " ккал за выбранное количество"
+    for key in ["kcal", "p", "f", "c"]:
+        var target: LineEdit = nutrient_inputs[key]
+        target.text_changed.connect(func(_v: String): refresh_preview.call())
+    grams.value_changed.connect(func(_v: float): refresh_preview.call())
+    refresh_preview.call()
     _label(fields, "Приём пищи", 13, MUTED)
     var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
     meal.disabled = _meal_entry_locked
@@ -2908,47 +2955,69 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
     if meal_index >= 0:
         meal.select(meal_index)
     meal.item_selected.connect(func(index: int): selected_meal = meal.get_item_text(index))
-    var note = BarcodeScript.nutrition_warning(product)
-    if not note.is_empty() and not manual:
-        _label(fields, "Внимание: " + note, 12, ACCENT)
-    _label(fields, "Сохранённый товар будет доступен без интернета.", 12, MUTED)
-
+    var needs_confirmation: bool = not manual and \
+        BarcodeScript.needs_nutrition_review(product)
+    var confirmed: CheckBox = null
+    if needs_confirmation:
+        confirmed = CheckBox.new()
+        confirmed.name = "BarcodeLabelConfirmed"
+        confirmed.text = "Я проверила КБЖУ и единицу по этикетке"
+        confirmed.add_theme_font_size_override("font_size", 13)
+        confirmed.add_theme_color_override("font_color", INK)
+        fields.add_child(confirmed)
+    _label(fields, "Фото и данные базы справочные. Товар останется доступным офлайн.", 12, MUTED)
     var commit_record = func(add_to_diary: bool):
         var record: Dictionary = product.duplicate(true)
         record["name"] = name.text.strip_edges()
-        record["kcal"] = kcal.value
-        record["p"] = protein.value
-        record["f"] = fat.value
-        record["c"] = carbs.value
         record["nutrition_unit"] = "мл" if basis.selected == 1 else "г"
         if record["name"].is_empty():
-            _sheet_error(sheet, "Укажи название товара.")
+            _sheet_error(sheet, "Введи название товара.")
             return
-        if manual and kcal.value == 0.0 and protein.value == 0.0 and fat.value == 0.0 and carbs.value == 0.0:
-            _sheet_error(sheet, "Внеси пищевую ценность с упаковки.")
+        for key in ["kcal", "p", "f", "c"]:
+            var input: LineEdit = nutrient_inputs[key]
+            var maximum: float = 1000.0 if key == "kcal" else 100.0
+            var number: float = _barcode_nutrition_value(input.text, maximum)
+            if number < 0.0:
+                _sheet_error(sheet, "Заполни «" + {
+                    "kcal":"Калории", "p":"Белки", "f":"Жиры", "c":"Углеводы"
+                }[key] + "» по этикетке, допустимый диапазон 0–" +
+                    str(roundi(maximum)) + ".")
+                return
+            record[key] = number
+        if float(record["kcal"]) == 0.0 and \
+                (float(record["p"]) > 1.0 or float(record["f"]) > 1.0 or float(record["c"]) > 1.0):
+            _sheet_error(sheet, "Нулевые калории противоречат БЖУ. Проверь этикетку.")
             return
+        if needs_confirmation and not confirmed.button_pressed:
+            _sheet_error(sheet, "Подтверди проверку данных по этикетке.")
+            return
+        # Missing remote fields were explicitly filled and reviewed locally.
+        record.erase("missing_fields")
+        record["nutrition_complete"] = true
+        record["image_url"] = BarcodeScript.safe_image_url(
+            str(record.get("image_url", "")))
         var saved_id = store.save_barcode_food(record)
         if saved_id.is_empty():
-            _sheet_error(sheet, "Не удалось сохранить товар. Проверь штрихкод или память устройства.")
+            _sheet_error(sheet, "Не удалось сохранить товар. Проверь штрихкод или память.")
             return
-        var saved_food = store.food_by_id(saved_id)
         if add_to_diary:
-            if not store.add_food_entry(saved_food, grams.value, meal.get_item_text(meal.selected), _selected_food_date()):
-                _sheet_error(sheet, "Товар сохранён, но порция не записана. Попробуй снова.")
+            var saved_food = store.food_by_id(saved_id)
+            if not store.add_food_entry(saved_food, grams.value,
+                    meal.get_item_text(meal.selected), _selected_food_date()):
+                _sheet_error(sheet, "Товар сохранён, но порция не записана. Повтори добавление.")
                 return
-            var root_control: Control = sheet["root"]
-            root_control.queue_free()
+            sheet["root"].queue_free()
             _barcode_add_success()
         else:
-            var root_control: Control = sheet["root"]
-            root_control.queue_free()
+            sheet["root"].queue_free()
             _render()
             _notify_saved("Продукт сохранён в каталоге")
-
-    var save_only = _button(fields, "Сохранить без записи в дневник", func(): commit_record.call(false), true)
+    var save_only = _button(fields, "Сохранить без записи в дневник",
+        func(): commit_record.call(false), true)
     save_only.custom_minimum_size.y = 43
     var confirm: Button = sheet["confirm"]
     confirm.pressed.connect(func(): commit_record.call(true))
+
 
 func _on_catalog_http_completed(result: int, status: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
     if result != HTTPRequest.RESULT_SUCCESS or status != 200:
