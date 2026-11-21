@@ -1723,9 +1723,9 @@ func _show_day() -> void:
     var existing = store.day_entries(date)
     var sections = [
         {"meal":"Завтрак", "icon":"☀", "variant":"overview", "accent":ACCENT},
-        {"meal":"Обед", "icon":"◈", "variant":"tint", "accent":TEXT_ACCENT},
+        {"meal":"Обед", "icon":"🍽", "variant":"tint", "accent":TEXT_ACCENT},
         {"meal":"Ужин", "icon":"☾", "variant":"activity", "accent":ACTIVITY_TEXT},
-        {"meal":"Перекус", "icon":"◇", "variant":"plain", "accent":NAV_ACTIVE}
+        {"meal":"Перекус", "icon":"🍎", "variant":"plain", "accent":NAV_ACTIVE}
     ]
     var shares: Array = store.meal_shares()
     var yesterday: String = store.change_date(date, -1)
