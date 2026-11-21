@@ -74,10 +74,10 @@ const COLOR_VARIANTS = {
     "botanical": {
         "background":"#F0F4ED", "surface":"#FFFEFA", "row":"#F4F5EA",
         "header":"#063E31", "hero":"#073F33", "hero_muted":"#E3F4E9",
-        "overview":"#FFF9EC", "activity":"#DDEDE4", "tile":"#EAF3E9",
+        "overview":"#FFF9EC", "activity":"#104F3D", "tile":"#EAF3E9",
         "tint":"#E7F5EA", "secondary":"#E5F1E6", "border":"#A7C4B0",
         "chip":"#185740", "track":"#4E8874", "fill":"#E9F2A6",
-        "nav_active":"#0A5743", "activity_text":"#155C47",
+        "nav_active":"#0A5743", "activity_text":"#F0F8EA",
         "protein_bg":"#D8F2DD", "fat_bg":"#FFE5B5",
         "carbs_bg":"#E1DFFB", "protein_text":"#175E39",
         "fat_text":"#805322", "carbs_text":"#493F88",
@@ -139,7 +139,7 @@ const COLOR_VARIANTS = {
 
 const COLOR_HIGH_ADJUSTMENTS = {
     "botanical": {"border":"#769C81", "background":"#E9F0E5",
-        "tint":"#D6EEDF", "activity":"#CFEBDA", "nav_active":"#064834"},
+        "tint":"#D6EEDF", "activity":"#0A4435", "nav_active":"#064834"},
     "forest": {"border":"#8e9eae", "background":"#e4ebeb", "activity":"#dce5f9", "nav_active":"#304f7d"},
     "mint": {"border":"#889baa", "background":"#e3eeee", "activity":"#e5def5", "nav_active":"#51478e"},
     "sand": {"border":"#ab969f", "background":"#eee2dc", "activity":"#e9def5", "nav_active":"#72405e"},
