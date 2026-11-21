@@ -2653,6 +2653,18 @@ func _food_form(parent: VBoxContainer) -> void:
     online_button.name = "OnlineFoodSearchButton"
     online_button.custom_minimum_size.y = 40
     online_button.add_theme_font_size_override("font_size", 13)
+    var barcode_toggle = _button(online_actions, "▣ Штрихкод", func():
+        barcode_panel.visible = not barcode_panel.visible
+        barcode_divider.visible = barcode_panel.visible
+        if barcode_panel.visible:
+            _ensure_field_visible(barcode_input)
+    , true)
+    barcode_toggle.name = "FoodBarcodeToggle"
+    barcode_toggle.custom_minimum_size.y = 40
+    barcode_toggle.add_theme_font_size_override("font_size", 12)
+    barcode_toggle.clip_text = true
+    barcode_panel.visible = false
+    barcode_divider.visible = false
     online_search_label = _label(parent,
         "Open Food Facts · поиск продуктов и брендов · нужен интернет.", 12, MUTED)
     online_search_label.name = "OnlineFoodSearchStatus"
@@ -2667,7 +2679,7 @@ func _food_form(parent: VBoxContainer) -> void:
     favorite_only.add_theme_font_size_override("font_size", 13)
     parent.add_child(favorite_only)
     var picker = _choice(parent, [])
-    _label(parent, "Категория", 13, MUTED)
+    var category_label = _label(parent, "Категория", 13, MUTED)
     var category = _choice(parent, ["Все", "Базовые", "Брендовые", "Мои продукты", "Избранное", "Недавние"])
     var units_hint = _label(parent, "Количество: выбери продукт (г или мл)", 14, MUTED)
     units_hint.name = "FoodQuantityUnitHint"
@@ -2796,8 +2808,23 @@ func _food_form(parent: VBoxContainer) -> void:
     search.text_changed.connect(func(_value: String):
         quick_lists.visible = search.text.strip_edges().is_empty()
     )
-    # In the catalog itself, discoverability goes first; advanced quantity
-    # controls and the original barcode scanner remain accessible lower down.
+    # Results and portion selection are shown first. Legacy batch-add
+    # controls remain accessible but are collapsed to avoid a long page.
+    var advanced_controls: Array = [
+        favorite_only, picker, category_label, category, units_hint, values,
+        grams_presets, meal, preview, added_count, controls
+    ]
+    for control in advanced_controls:
+        control.visible = false
+    var advanced_button = _button(parent, "▾ Дополнительные настройки", func():
+        var expanded = not picker.visible
+        for control in advanced_controls:
+            control.visible = expanded
+    , true)
+    advanced_button.name = "FoodAdvancedToggle"
+    advanced_button.add_theme_font_size_override("font_size", 12)
+    advanced_button.custom_minimum_size.y = 40
+    # In the catalog itself, discoverability goes first.
     parent.move_child(search_heading, 1)
     parent.move_child(search, 2)
     parent.move_child(online_actions, 3)
@@ -2806,6 +2833,7 @@ func _food_form(parent: VBoxContainer) -> void:
     parent.move_child(quick_tabs, 6)
     parent.move_child(quick_lists, 7)
     parent.move_child(results_box, 8)
+    parent.move_child(advanced_button, 9)
     parent.move_child(barcode_panel, parent.get_child_count() - 1)
     parent.move_child(barcode_divider, parent.get_child_count() - 2)
     _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star, category, results_box, meal, added_count)
