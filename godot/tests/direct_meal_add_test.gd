@@ -50,7 +50,7 @@ func _run() -> void:
         app._render()
         await process_frame
         var header = _button(app, titles[i])
-        var add = _button(app, "+ Добавить " + names[i].to_lower())
+        var add = app.find_child("MealQuickAdd_" + str(i), true, false) as Button
         if header == null or add == null:
             _fail("meal header or add button missing: " + names[i])
             return
