@@ -240,7 +240,25 @@ func _toggle_high_contrast() -> void:
     _render()
     _notify_saved("Повышенная контрастность включена" if not previous else "Обычная контрастность")
 
+# v0.7.18: show the selected third design on the first launch after
+# upgrading a standard-theme diary. Do not overwrite the journal, calorie
+# goals, theme choices other than "forest", or the user's pattern preference.
+# A durable marker prevents switching back after a manual theme change.
+func _activate_botanical_default_once() -> void:
+    var settings: Dictionary = store.data.get("settings", {})
+    if bool(settings.get("botanical_default_applied", false)):
+        return
+    var previous: Dictionary = settings.duplicate(true)
+    settings["botanical_default_applied"] = true
+    if str(settings.get("theme", "forest")) == "forest":
+        settings["theme"] = "botanical"
+    store.data["settings"] = settings
+    if not store.save():
+        store.data["settings"] = previous
+
+
 func _ready() -> void:
+    _activate_botanical_default_once()
     _apply_palette()
     month_shown = date.substr(0, 7)
     barcode_http = HTTPRequest.new()
