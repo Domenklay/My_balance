@@ -11,8 +11,8 @@ static func search_url(terms: String) -> String:
     var query = terms.strip_edges()
     if query.length() < 2 or query.length() > 70:
         return ""
-    return SEARCH_BASE + "?search_terms=" + query.uri_encode() +
-        "&search_simple=1&action=process&json=1&page=1&page_size=24" +
+    return SEARCH_BASE + "?search_terms=" + query.uri_encode() + \
+        "&search_simple=1&action=process&json=1&page=1&page_size=24" + \
         "&fields=" + OFF_FIELDS
 
 static func parse_search_results(payload: Variant, limit: int = 12) -> Array:

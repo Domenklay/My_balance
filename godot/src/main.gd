@@ -1861,7 +1861,7 @@ func _show_online_search_results(records: Array) -> void:
         online_search_label.text = "Продукты с полными КБЖУ не найдены. Попробуй другое название."
         return
     online_results_box.visible = true
-    online_search_label.text = "Найдено " + str(records.size()) +
+    online_search_label.text = "Найдено " + str(records.size()) + \
         " продуктов · проверь данные по упаковке перед сохранением."
     for record in records:
         var product: Dictionary = record
