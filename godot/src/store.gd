@@ -14,6 +14,7 @@ const OnboardingMath = preload("res://src/onboarding_math.gd")
 
 const MEAL_NAMES = ["Завтрак", "Обед", "Ужин", "Перекус"]
 const DEFAULT_MEAL_SHARES = [25, 35, 30, 10]
+const DEFAULT_HOME_WIDGETS = {"week": false, "weight": false}
 
 const DEFAULT_PRODUCTS = [
     ["Овсяные хлопья (сухие)",370,13,7,62],
@@ -129,7 +130,7 @@ func _is_barcode(code: String) -> bool:
 func default_data() -> Dictionary:
     return {
         "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true, "high_contrast": false,
-            "meal_shares": DEFAULT_MEAL_SHARES.duplicate(), "onboarding_complete": false,
+            "meal_shares": DEFAULT_MEAL_SHARES.duplicate(), "home_widgets": DEFAULT_HOME_WIDGETS.duplicate(), "onboarding_complete": false,
             "personal": {}},
         "foods": [], "entries": [], "activities": [], "weights": [], "notes": {}, "favorites": [],
         "recipes": [], "meal_templates": [], "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
@@ -161,6 +162,29 @@ func set_meal_shares(shares: Array) -> bool:
     if save():
         return true
     data["settings"] = old
+    return false
+
+static func valid_home_widgets(value: Variant) -> bool:
+    if not (value is Dictionary):
+        return false
+    if value.size() != 2 or not value.has("week") or not value.has("weight"):
+        return false
+    return value["week"] is bool and value["weight"] is bool
+
+func home_widgets() -> Dictionary:
+    var widgets = data.get("settings", {}).get("home_widgets", DEFAULT_HOME_WIDGETS)
+    return widgets.duplicate(true) if valid_home_widgets(widgets) else DEFAULT_HOME_WIDGETS.duplicate(true)
+
+func set_home_widget(key: String, enabled: bool) -> bool:
+    if key not in ["week", "weight"]:
+        return false
+    var previous: Dictionary = data["settings"].duplicate(true)
+    var next: Dictionary = home_widgets()
+    next[key] = enabled
+    data["settings"]["home_widgets"] = next
+    if save():
+        return true
+    data["settings"] = previous
     return false
 
 func meal_summary(day: String, meal: String) -> Dictionary:
@@ -485,6 +509,12 @@ func import_json(raw: String, persist: bool = true) -> bool:
     for raw_share in settings["meal_shares"]:
         normalized_shares.append(roundi(float(raw_share)))
     settings["meal_shares"] = normalized_shares
+    # Optional home widgets arrived in 0.7.29. Keep historical diaries
+    # compact by default, and reject malformed widget states on import.
+    if not settings.has("home_widgets"):
+        settings["home_widgets"] = DEFAULT_HOME_WIDGETS.duplicate(true)
+    if not valid_home_widgets(settings["home_widgets"]):
+        return false
     # Older diary backups predate appearance controls; import them unchanged
     # and fill in safe defaults. Unknown themes are never applied.
     if not settings.has("theme"):
