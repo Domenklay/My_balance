@@ -108,9 +108,20 @@ func _run() -> void:
         if not _find_label(card, "Ориентир:"):
             _fail("meal-specific kcal target not displayed")
             return
-        if not _find_label(card, "БЕЛКИ") or not _find_label(card, "ЖИРЫ") or not _find_label(card, "УГЛЕВОДЫ"):
-            _fail("per-meal macro indicators missing")
+        if _find_label(card, "БЕЛКИ") or _find_label(card, "ЖИРЫ") or _find_label(card, "УГЛЕВОДЫ"):
+            _fail("expanded-only macro details clutter the compact meal card")
             return
+    var first_card = app.find_child("DailyMeal_0", true, false)
+    var open_button = _find_button(first_card, "▾ Подробнее")
+    if open_button == null:
+        _fail("compact meal details toggle missing")
+        return
+    open_button.pressed.emit()
+    await process_frame
+    first_card = app.find_child("DailyMeal_0", true, false)
+    if not _find_label(first_card, "БЕЛКИ") or not _find_label(first_card, "ЖИРЫ") or not _find_label(first_card, "УГЛЕВОДЫ"):
+        _fail("opening a meal must show its complete protein/fat/carb details")
+        return
     app.tab = "settings"
     app.settings_page = "main"
     app._render()
