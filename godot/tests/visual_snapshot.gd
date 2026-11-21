@@ -133,6 +133,27 @@ func _capture() -> void:
     app.stats_anchor = app.date
     app._render()
     await _snapshot(app, "04-stats-month")
+    # Three-month release regression: render the full set of period controls,
+    # month-by-month nutrition and a continuous weight trend on a phone screen.
+    app.store.data["entries"].append({
+        "id":"example-september", "date":"2026-09-10",
+        "food":sample_foods[0]["id"], "nutrition":sample_foods[0].duplicate(true),
+        "grams":260.0, "meal":"Обед"
+    })
+    app.store.data["entries"].append({
+        "id":"example-october", "date":"2026-10-10",
+        "food":sample_foods[0]["id"], "nutrition":sample_foods[0].duplicate(true),
+        "grams":180.0, "meal":"Обед"
+    })
+    app.store.data["weights"].append({"date":"2026-09-10", "value":90.1})
+    app.store.data["weights"].append({"date":"2026-10-10", "value":89.0})
+    app.stats_period = "quarter"
+    app.stats_detail_tab = "nutrition"
+    app._render()
+    await _snapshot(app, "04-stats-three-months-nutrition")
+    app.stats_detail_tab = "weight"
+    app._render()
+    await _snapshot(app, "04-stats-three-months-weight")
     app.stats_period = "week"
     app.stats_detail_tab = "activity"
     app.tab = "stats"
