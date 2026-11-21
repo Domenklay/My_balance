@@ -2823,22 +2823,29 @@ func _show_settings() -> void:
     var card = _card("Личные настройки")
     _button(card, "Моя анкета · пересчитать норму", func(): _begin_onboarding(true), true)
     _label(card, "Калории в сутки")
-    var kcal = _number(card, float(store.data["settings"]["kcal"]), 1000, 5000)
+    var kcal = _text_input(card, "Например, 1800", str(roundi(float(store.data["settings"]["kcal"]))))
     kcal.name = "DailyCalorieTarget"
+    kcal.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+    kcal.max_length = 4
     _label(card, "Вес на старте")
     var start = _number(card, float(store.data["settings"]["start"]), 20, 400, 0.1)
     _label(card, "Моя цель")
     var goal = _number(card, float(store.data["settings"]["goal"]), 20, 400, 0.1)
     _button(card, "Сохранить настройки", func():
+        var new_kcal = StoreScript.parse_calorie_target(kcal.text)
+        if new_kcal < 0:
+            _message("Укажи норму от 1000 до 5000 ккал, например 1800.")
+            return
         var previous_settings = store.data["settings"].duplicate(true)
         var next_settings = previous_settings.duplicate(true)
-        next_settings["kcal"] = kcal.value
+        next_settings["kcal"] = new_kcal
         next_settings["start"] = start.value
         next_settings["goal"] = goal.value
         store.data["settings"] = next_settings
         if store.save():
+            _hide_keyboard_and_focus()
             _render()
-            _notify_saved("Настройки сохранены")
+            _notify_saved("Настройки сохранены · " + str(new_kcal) + " ккал")
         else:
             store.data["settings"] = previous_settings
             _message("Не удалось сохранить настройки. Прежние значения оставлены.")
@@ -2861,20 +2868,24 @@ func _show_settings() -> void:
     var refresh_shares = func(_new_value: float):
         var total_percent: int = 0
         var values: Array = []
+        var parsed_kcal = StoreScript.parse_calorie_target(kcal.text)
         for field in portion_fields:
             var pct: int = roundi(field.value)
             total_percent += pct
-            values.append(roundi(kcal.value * float(pct) / 100.0))
+            values.append(roundi(float(maxi(parsed_kcal, 0)) * float(pct) / 100.0))
         shares_preview.text = "Распределено: " + str(total_percent) + "% из 100%"
         if total_percent != 100:
             shares_preview.text += " · нужно ровно 100%"
-        calorie_preview.text = "При " + str(roundi(kcal.value)) + " ккал в день:\n" + (
-            "Завтрак " + str(values[0]) + " · Обед " + str(values[1]) + " ккал\n" +
-            "Ужин " + str(values[2]) + " · Перекус " + str(values[3]) + " ккал"
-        )
+        if parsed_kcal < 0:
+            calorie_preview.text = "Для расчёта введи норму от 1000 до 5000 ккал."
+        else:
+            calorie_preview.text = "При " + str(parsed_kcal) + " ккал в день:\n" + (
+                "Завтрак " + str(values[0]) + " · Обед " + str(values[1]) + " ккал\n" +
+                "Ужин " + str(values[2]) + " · Перекус " + str(values[3]) + " ккал"
+            )
     for field in portion_fields:
         field.value_changed.connect(refresh_shares)
-    kcal.value_changed.connect(refresh_shares)
+    kcal.text_changed.connect(func(_value: String): refresh_shares.call(0.0))
     refresh_shares.call(0.0)
     _button(portions_card, "Сохранить распределение", func():
         var next: Array = []
