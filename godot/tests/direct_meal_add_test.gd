@@ -29,7 +29,7 @@ func _run() -> void:
     root.add_child(app)
     await process_frame
     app.store.data = app.store.default_data()
-    # This test targets the classic emoji-headed layout, not botanical art.
+    # The same four icon-and-title meal actions must work in every theme.
     app._refresh_appearance()
     app.tab = "day"
     app.date = "2026-11-20"
@@ -42,7 +42,7 @@ func _run() -> void:
         _fail("duplicate standalone add-food controls still shown")
         return
     var names = ["Завтрак", "Обед", "Ужин", "Перекус"]
-    var titles = ["🌞 Завтрак", "🍲 Обед", "🌙 Ужин", "🍎 Перекус"]
+    var titles = ["Завтрак", "Обед", "Ужин", "Перекус"]
     var code = str(app.store.bundled_foods[0].get("barcode", ""))
     if code.is_empty():
         _fail("offline barcode catalog missing test food")
