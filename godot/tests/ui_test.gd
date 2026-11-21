@@ -181,7 +181,7 @@ func _run() -> void:
     # Catalog now opens from a specific meal instead of a duplicate day panel.
     app._navigate_to_tab("day")
     await process_frame
-    var catalog_button = _find_button(app, "◈ Обед")
+    var catalog_button = _find_button(app, "🍽 Обед")
     if catalog_button == null:
         push_error("FAILED: tapping lunch heading must be available")
         quit(1)
