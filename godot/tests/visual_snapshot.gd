@@ -99,6 +99,18 @@ func _capture() -> void:
         if child.name == "ProductSheet":
             child.queue_free()
     await process_frame
+    app._confirm_barcode_product({
+        "barcode": "3017624010701", "name": "Питьевой йогурт",
+        "brand": "Пример марки", "quantity": "330 мл",
+        "nutrition_unit": "мл", "unit_certainty": "quantity",
+        "kcal": 93.0, "p": -1.0, "f": 2.5, "c": 11.0,
+        "missing_fields": ["p"], "source": "Open Food Facts"
+    })
+    await _snapshot(app, "06-partial-product-review")
+    for child in app.get_children():
+        if child.name == "ProductSheet":
+            child.queue_free()
+    await process_frame
     var example_custom = {
         "id": "visual_custom", "name": "Йогурт домашний", "barcode": "3017624010701",
         "kcal": 82.0, "p": 6.0, "f": 2.4, "c": 9.0
