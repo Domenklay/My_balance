@@ -114,7 +114,7 @@ func _run() -> void:
     if app.find_child("ThemeSwatch_botanical", true, false) == null:
         _fail("new theme not available under profile settings")
         return
-    if not _has_text(app, "Версия 0.7.26"):
+    if not _has_text(app, "Версия 0.7.27"):
         _fail("app version not shown on settings screen")
         return
     print("PASS BOTANICAL THEME: distinct cream/forest cards, corner foliage, safe compact meal actions, save and contrast")
