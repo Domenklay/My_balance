@@ -1722,7 +1722,7 @@ func _show_day() -> void:
     # No extra standalone title card: every meal already has its own header.
     var existing = store.day_entries(date)
     var sections = [
-        {"meal":"Завтрак", "icon":"☀", "variant":"overview", "accent":ACCENT},
+        {"meal":"Завтрак", "icon":"🌞", "variant":"overview", "accent":ACCENT},
         {"meal":"Обед", "icon":"🍲", "variant":"tint", "accent":TEXT_ACCENT},
         {"meal":"Ужин", "icon":"🌙", "variant":"activity", "accent":ACTIVITY_TEXT},
         {"meal":"Перекус", "icon":"🍎", "variant":"plain", "accent":NAV_ACTIVE}
