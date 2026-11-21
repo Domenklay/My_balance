@@ -564,6 +564,44 @@ func recent_foods(limit: int = 8) -> Array:
             break
     return result
 
+
+# Last distinct products with the actual portion last logged. Derived from the
+# journal itself, so upgrades require no new storage fields or migration.
+func recent_food_entries(limit: int = 6) -> Array:
+    var result: Array = []
+    if limit <= 0:
+        return result
+    var index: Dictionary = {}
+    for food in all_foods():
+        index[str(food.get("id", ""))] = food
+    var seen: Dictionary = {}
+    for i in range(data["entries"].size() - 1, -1, -1):
+        var entry: Dictionary = data["entries"][i]
+        var food_id = str(entry.get("food", ""))
+        if food_id.is_empty() or seen.has(food_id):
+            continue
+        var amount = float(entry.get("grams", 0))
+        if not is_finite(amount) or amount <= 0 or amount > 5000:
+            continue
+        var food: Dictionary = index.get(food_id, {})
+        if food.is_empty() and entry.get("nutrition") is Dictionary:
+            food = entry["nutrition"].duplicate(true)
+            food["id"] = food_id
+            food["nutrition_unit"] = str(entry.get("unit", "г"))
+        if food.is_empty() or str(food.get("name", "")).strip_edges().is_empty():
+            continue
+        seen[food_id] = true
+        result.append({
+            "food": food, "grams": amount,
+            "unit": str(entry.get("unit", PortionMath.base_unit(food))),
+            "portion_label": str(entry.get("portion_label", "")),
+            "date": str(entry.get("date", "")),
+            "meal": str(entry.get("meal", ""))
+        })
+        if result.size() >= limit:
+            break
+    return result
+
 func frequent_foods(limit: int = 8) -> Array:
     var counts: Dictionary = {}
     var last_used: Dictionary = {}

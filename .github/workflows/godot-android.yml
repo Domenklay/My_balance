@@ -123,6 +123,8 @@ jobs:
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/daily_meals_test.gd
       - name: Test direct meal search, barcode scanner and manual EAN flows
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/direct_meal_add_test.gd
+      - name: Test recent products, quick repeats, favorites and search discovery
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/recent_product_search_test.gd
       - name: Test per-meal calories, macros, editable shares and legacy JSON
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/meal_targets_test.gd
       - name: Test compact journal, overage, safe repeats, live percentages and ml units

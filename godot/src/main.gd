@@ -1712,16 +1712,69 @@ func _meal_scan_or_manual(meal_name: String) -> void:
         _barcode_message("На этом устройстве сканирование недоступно. Введи EAN/UPC с упаковки.")
 
 
+func _repeat_recent_in_meal(food: Dictionary, recent: Dictionary, sheet: Dictionary) -> void:
+    # Repeating is explicit. The destination is the meal/day selected before
+    # opening the sheet, never the last meal stored in the old diary entry.
+    var grams = float(recent.get("grams", 0))
+    var portion_label = str(recent.get("portion_label", ""))
+    if store.add_food_entry(food, grams, selected_meal, _selected_food_date(), portion_label):
+        sheet["root"].queue_free()
+        _barcode_add_success()
+    else:
+        _sheet_error(sheet, "Не удалось повторить порцию. Проверь память устройства.")
+
+
 func _show_meal_add_actions(meal_name: String) -> void:
     if meal_name not in StoreScript.MEAL_NAMES:
         return
     selected_meal = meal_name
     _meal_entry_locked = true
     _meal_entry_date = date
+    var recent: Array = store.recent_food_entries(3)
     var sheet = _mobile_sheet("Добавить в " + meal_name.to_lower(),
         "Дата: " + date.substr(8, 2) + "." + date.substr(5, 2) + "." + date.substr(0, 4) +
-        ". Выбери способ поиска продукта.", "⌕ Найти продукт", 330.0)
+        ". Поиск, недавние продукты и штрихкод.", "⌕ Найти продукт",
+        540.0 if not recent.is_empty() else 370.0)
     var fields: VBoxContainer = sheet["fields"]
+    if not recent.is_empty():
+        _label(fields, "Недавние продукты", 15, TEXT_ACCENT)
+        for record in recent:
+            var item: Dictionary = record["food"]
+            var row = _soft_list_row(fields)
+            var name = _button(row, str(item.get("name", "Продукт")), func():
+                sheet["root"].queue_free()
+                _quick_food_sheet(item)
+            , true)
+            name.clip_text = true
+            name.custom_minimum_size = Vector2(75, 39)
+            name.add_theme_font_size_override("font_size", 12)
+            var grams = float(record["grams"])
+            var unit = str(record["unit"])
+            var repeat = _button(row, "↻ " + str(roundi(grams)) + " " + unit,
+                func(): _repeat_recent_in_meal(item, record, sheet), true)
+            repeat.name = "RepeatRecentMealPortion"
+            repeat.custom_minimum_size = Vector2(90, 39)
+            repeat.size_flags_horizontal = Control.SIZE_SHRINK_END
+            repeat.add_theme_font_size_override("font_size", 12)
+    else:
+        _label(fields, "Недавние продукты появятся после первой записи питания.", 12, MUTED)
+    var favorites_shown: int = 0
+    for favorite_id in store.data.get("favorites", []):
+        if favorites_shown >= 2:
+            break
+        var favorite: Dictionary = store.food_by_id(str(favorite_id))
+        if favorite.is_empty():
+            continue
+        if favorites_shown == 0:
+            _label(fields, "★ Избранное", 15, TEXT_ACCENT)
+        var favorite_button = _button(fields, "★ " + str(favorite.get("name", "Продукт")),
+            func():
+                sheet["root"].queue_free()
+                _quick_food_sheet(favorite)
+            , true)
+        favorite_button.clip_text = true
+        favorite_button.custom_minimum_size.y = 39
+        favorites_shown += 1
     var scan = _button(fields, "▣ Сканировать штрихкод", func():
         sheet["root"].queue_free()
         _meal_scan_or_manual(meal_name)
@@ -2479,15 +2532,9 @@ func _food_form(parent: VBoxContainer) -> void:
     barcode_find.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
     barcode_find.custom_minimum_size.x = 74
     barcode_message = _label(barcode_panel, "Встроено " + str(store.bundled_foods.size()) + " товаров с кодами. Другие ищем через интернет.", 12, MUTED)
-    parent.add_child(HSeparator.new())
-    var frequent: Array = store.frequent_foods(6)
-    if not frequent.is_empty():
-        _label(parent, "Часто используемые", 16, TEXT_ACCENT)
-        for frequent_food in frequent:
-            var item: Dictionary = frequent_food
-            _button(parent, "＋ " + str(item.get("name", "Продукт")),
-                func(): _quick_food_sheet(item), true)
-    _label(parent, "Или найди в сохранённых продуктах", 16, TEXT_ACCENT)
+    var barcode_divider = HSeparator.new()
+    parent.add_child(barcode_divider)
+    var search_heading = _label(parent, "Поиск продуктов по названию", 16, TEXT_ACCENT)
     var filtered: Array = []
     var search = _text_input(parent, "Поиск продукта по названию")
     if not selected_barcode_food.is_empty():
@@ -2501,7 +2548,7 @@ func _food_form(parent: VBoxContainer) -> void:
     parent.add_child(favorite_only)
     var picker = _choice(parent, [])
     _label(parent, "Категория", 13, MUTED)
-    var category = _choice(parent, ["Все", "Базовые", "Брендовые", "Мои продукты", "Избранное"])
+    var category = _choice(parent, ["Все", "Базовые", "Брендовые", "Мои продукты", "Избранное", "Недавние"])
     var units_hint = _label(parent, "Количество: выбери продукт (г или мл)", 14, MUTED)
     units_hint.name = "FoodQuantityUnitHint"
     var values = _row(parent)
@@ -2567,6 +2614,71 @@ func _food_form(parent: VBoxContainer) -> void:
     grams.value_changed.connect(func(_value: float):
         _update_food_preview(picker, filtered, grams, preview, star)
     )
+    # Make search immediately visible. The previous layout buried it under
+    # barcode controls and a long catalog form.
+    var quick_tabs = _row(parent)
+    quick_tabs.name = "FoodQuickFilters"
+    quick_tabs.add_theme_constant_override("separation", 4)
+    for option in [
+        ["Недавние", 5], ["★ Избранное", 4], ["Все", 0]
+    ]:
+        var target_index: int = int(option[1])
+        var filter_button = _button(quick_tabs, str(option[0]), func():
+            category.select(target_index)
+            _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star,
+                category, results_box, meal, added_count)
+        , true)
+        filter_button.add_theme_font_size_override("font_size", 12)
+        filter_button.custom_minimum_size.y = 38
+        filter_button.clip_text = true
+
+    var quick_lists = VBoxContainer.new()
+    quick_lists.name = "FoodRecentFavorites"
+    quick_lists.add_theme_constant_override("separation", 5)
+    parent.add_child(quick_lists)
+    var recents: Array = store.recent_food_entries(4)
+    if not recents.is_empty():
+        _label(quick_lists, "Недавние продукты", 15, TEXT_ACCENT)
+        for record in recents:
+            var food: Dictionary = record["food"]
+            var last_amount = str(roundi(float(record["grams"]))) + " " + str(record["unit"])
+            var shortcut = _soft_list_row(quick_lists)
+            var caption = _label(shortcut, str(food.get("name", "Продукт")) + " · " + last_amount, 12, INK)
+            caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            caption.autowrap_mode = TextServer.AUTOWRAP_OFF
+            caption.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+            var edit = _button(shortcut, "Порция", func(): _quick_food_sheet(food), true)
+            edit.custom_minimum_size.y = 37
+            edit.add_theme_font_size_override("font_size", 12)
+    else:
+        _label(quick_lists, "Недавние продукты появятся после добавления еды.", 12, MUTED)
+    var favorite_count = 0
+    for favorite_id in store.data.get("favorites", []):
+        if favorite_count >= 3:
+            break
+        var fav: Dictionary = store.food_by_id(str(favorite_id))
+        if fav.is_empty():
+            continue
+        if favorite_count == 0:
+            _label(quick_lists, "★ Избранные продукты", 15, TEXT_ACCENT)
+        var fav_button = _button(quick_lists, "★ " + str(fav.get("name", "Продукт")), func():
+            _quick_food_sheet(fav)
+        , true)
+        fav_button.clip_text = true
+        fav_button.custom_minimum_size.y = 38
+        favorite_count += 1
+    search.text_changed.connect(func(_value: String):
+        quick_lists.visible = search.text.strip_edges().is_empty()
+    )
+    # In the catalog itself, discoverability goes first; advanced quantity
+    # controls and the original barcode scanner remain accessible lower down.
+    parent.move_child(search_heading, 1)
+    parent.move_child(search, 2)
+    parent.move_child(quick_tabs, 3)
+    parent.move_child(quick_lists, 4)
+    parent.move_child(results_box, 5)
+    parent.move_child(barcode_panel, parent.get_child_count() - 1)
+    parent.move_child(barcode_divider, parent.get_child_count() - 2)
     _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star, category, results_box, meal, added_count)
 
 func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only: CheckButton,
@@ -2586,6 +2698,12 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
         return str(a.get("name", "")).nocasecmp_to(str(b.get("name", ""))) < 0
     )
     var query = search.text.strip_edges().to_lower()
+    if results_box != null:
+        results_box.visible = not query.is_empty() or (category != null and category.selected != 0)
+    var recent_ids: Dictionary = {}
+    if category != null and category.selected == 5:
+        for recent_food in store.recent_foods(20):
+            recent_ids[str(recent_food.get("id", ""))] = true
     var owned_ids: Dictionary = {}
     if category != null and category.selected == 3:
         for own_food in store.data["foods"]:
@@ -2611,6 +2729,9 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
                         continue
                 4:
                     if not store.is_favorite(item_id):
+                        continue
+                5:
+                    if not recent_ids.has(item_id):
                         continue
         filtered.append(item)
     picker.clear()
@@ -2909,7 +3030,7 @@ func _show_settings() -> void:
         _show_my_foods()
         return
     var back_to_profile = _card("Настройки приложения")
-    _label(back_to_profile, "Версия 0.7.20 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
+    _label(back_to_profile, "Версия 0.7.21 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
     _button(back_to_profile, "← К личной странице", func(): _navigate_to_tab("profile"), true)
     var card = _card("Личные настройки")
     _button(card, "Моя анкета · пересчитать норму", func(): _begin_onboarding(true), true)
