@@ -3564,6 +3564,13 @@ func _shift_stats_period(amount: int) -> void:
     _render(true)
 
 
+func _set_stats_detail(section: String) -> void:
+    if section not in ["nutrition", "activity", "weight"]:
+        return
+    stats_detail_tab = section
+    _render(true)
+
+
 func _show_stats() -> void:
     if stats_anchor.is_empty():
         stats_anchor = date
@@ -3612,64 +3619,78 @@ func _show_stats() -> void:
     _metric_tile(metrics, average, "Среднее по заполненным дням")
     _metric_tile(metrics, str(int(report["recorded"])) + " / " +
         str(int(report["total_days"])), "Дней с питанием")
-    var activity_metrics = _row(card)
-    activity_metrics.add_theme_constant_override("separation", 5)
-    _metric_tile(activity_metrics, str(int(report["walking"])) + " мин", "Прогулки")
-    _metric_tile(activity_metrics, str(int(report["exercise"])) + " мин", "Тренировки")
-    _label(card, "Пустые дни не считаются нулём и не снижают среднее.", 12, MUTED)
+    _label(card, "Среднее только по дням с записанным питанием.", 12, MUTED)
+    # One visualization at a time: larger readable graphs, shorter page.
+    var tabrow = _row(card)
+    tabrow.name = "StatsSectionSelector"
+    tabrow.add_theme_constant_override("separation", 5)
+    for tab_option in [["Питание", "nutrition"], ["Активность", "activity"], ["Вес", "weight"]]:
+        var section: String = str(tab_option[1])
+        var select_button = _button(tabrow, str(tab_option[0]),
+            func(): _set_stats_detail(section), true)
+        select_button.name = "StatsSection_" + section
+        select_button.custom_minimum_size.y = 42
+        select_button.add_theme_font_size_override("font_size", 12)
+        if section == stats_detail_tab:
+            var active_section = StyleBoxFlat.new()
+            active_section.bg_color = NAV_ACTIVE
+            active_section.set_corner_radius_all(11)
+            for state in ["normal", "hover", "pressed"]:
+                select_button.add_theme_stylebox_override(state, active_section)
+            select_button.add_theme_color_override("font_color", WHITE)
 
-    var calories = _card("Калории", "tint")
-    calories.get_parent().name = "StatsCalorieCard"
-    _compact_card(calories, 12, 8)
-    _label(calories, "По дням" if stats_period == "week" else
-        "Среднее за записанные дни каждой календарной недели", 12, MUTED)
-    var kcal_chart = StatsChartScript.new()
-    kcal_chart.name = "StatsCalorieChart"
-    kcal_chart.custom_minimum_size.y = 160
-    calories.add_child(kcal_chart)
-    kcal_chart.setup(report["columns"], "calories",
-        float(store.data["settings"]["kcal"]), TEXT_ACCENT, ACCENT, MUTED, CHART_GRID)
-    _label(calories, "Пунктир — установленная норма калорий в сутки.", 11, MUTED)
-
-    var macros = _card("Средние БЖУ")
-    macros.get_parent().name = "StatsMacrosCard"
-    _compact_card(macros, 12, 7)
-    _label(macros, "На день с записями питания", 12, MUTED)
-    if int(report["recorded"]) == 0:
-        _label(macros, "Добавь продукты в дневник, чтобы увидеть средние БЖУ.", 13, MUTED)
-    else:
-        var macro_row = _row(macros)
-        macro_row.add_theme_constant_override("separation", 5)
-        _compact_macro(macro_row, "Белки", float(report["avg_p"]), PROTEIN_BG, INK)
-        _compact_macro(macro_row, "Жиры", float(report["avg_f"]), FAT_BG, INK)
-        _compact_macro(macro_row, "Углеводы", float(report["avg_c"]), CARBS_BG, INK)
-
-    var movement = _card("Движение", "activity")
-    movement.get_parent().name = "StatsActivityCard"
-    _compact_card(movement, 12, 8)
-    var contrast_text = WHITE if current_theme == "botanical" else INK
-    _label(movement, "Прогулки: " + str(int(report["walking"])) +
-        " мин · Тренировки: " + str(int(report["exercise"])) + " мин", 12, contrast_text)
-    var activity_chart = StatsChartScript.new()
-    activity_chart.name = "StatsActivityChart"
-    activity_chart.custom_minimum_size.y = 140
-    movement.add_child(activity_chart)
-    activity_chart.setup(report["columns"], "activity", 0.0,
-        GREEN, ACCENT, MUTED, CHART_GRID)
-    _label(movement, "Зелёный — ходьба · Оранжевый — тренировки · Сеансов: " +
-        str(int(report["workouts"])), 11, contrast_text)
-
-    var weight = _card("Динамика веса")
-    weight.get_parent().name = "StatsWeightCard"
-    _compact_card(weight, 12, 8)
-    _label(weight, "Взвешиваний за период: " +
-        str(report["weights"].size()), 12, MUTED)
-    var weight_graph = GraphScript.new()
-    weight_graph.name = "StatsWeightGraph"
-    weight_graph.custom_minimum_size.y = 185
-    weight_graph.set_palette(TEXT_ACCENT, CHART_GRID, MUTED, ACCENT, CHART_AREA, SECONDARY)
-    weight_graph.set_points(report["weights"], float(store.data["settings"]["goal"]))
-    weight.add_child(weight_graph)
+    match stats_detail_tab:
+        "activity":
+            var movement = _card("Движение", "activity")
+            movement.get_parent().name = "StatsActivityCard"
+            _compact_card(movement, 12, 8)
+            var contrast_text = WHITE if current_theme == "botanical" else INK
+            var activity_stats = _row(movement)
+            _metric_tile(activity_stats, str(int(report["walking"])) + " мин", "Прогулки")
+            _metric_tile(activity_stats, str(int(report["exercise"])) + " мин", "Тренировки")
+            var activity_chart = StatsChartScript.new()
+            activity_chart.name = "StatsActivityChart"
+            activity_chart.custom_minimum_size.y = 185
+            movement.add_child(activity_chart)
+            activity_chart.setup(report["columns"], "activity", 0.0,
+                TEXT_ACCENT, ACCENT, MUTED, CHART_GRID)
+            _label(movement, "Зелёный — ходьба · оранжевый — тренировки · Сеансов: " +
+                str(int(report["workouts"])), 12, contrast_text)
+        "weight":
+            var weight = _card("Динамика веса")
+            weight.get_parent().name = "StatsWeightCard"
+            _compact_card(weight, 12, 8)
+            _label(weight, "Измерений за выбранный период: " +
+                str(report["weights"].size()), 12, MUTED)
+            var weight_graph = GraphScript.new()
+            weight_graph.name = "StatsWeightGraph"
+            weight_graph.custom_minimum_size.y = 235
+            weight_graph.set_palette(TEXT_ACCENT, CHART_GRID, MUTED, ACCENT, CHART_AREA, SECONDARY)
+            weight_graph.set_points(report["weights"], float(store.data["settings"]["goal"]))
+            weight.add_child(weight_graph)
+        _:
+            var calories = _card("Калории и БЖУ", "tint")
+            calories.get_parent().name = "StatsCalorieCard"
+            _compact_card(calories, 12, 8)
+            _label(calories, "По дням" if stats_period == "week" else
+                "Средние калории по календарным неделям", 12, MUTED)
+            var kcal_chart = StatsChartScript.new()
+            kcal_chart.name = "StatsCalorieChart"
+            kcal_chart.custom_minimum_size.y = 190
+            calories.add_child(kcal_chart)
+            kcal_chart.setup(report["columns"], "calories",
+                float(store.data["settings"]["kcal"]), TEXT_ACCENT, ACCENT, MUTED, CHART_GRID)
+            _label(calories, "Пунктир — установленная суточная норма.", 12, MUTED)
+            if int(report["recorded"]) == 0:
+                _label(calories, "Добавь продукты в дневник для расчёта БЖУ.", 13, MUTED)
+            else:
+                var macro_heading = _label(calories, "Средние БЖУ за заполненный день", 13, INK)
+                macro_heading.name = "StatsMacrosHeading"
+                var macro_row = _row(calories)
+                macro_row.add_theme_constant_override("separation", 4)
+                _compact_macro(macro_row, "Белки", float(report["avg_p"]), PROTEIN_BG, INK)
+                _compact_macro(macro_row, "Жиры", float(report["avg_f"]), FAT_BG, INK)
+                _compact_macro(macro_row, "Углеводы", float(report["avg_c"]), CARBS_BG, INK)
 
 
 func _show_settings() -> void:
@@ -3682,7 +3703,7 @@ func _show_settings() -> void:
         _show_my_foods()
         return
     var back_to_profile = _card("Настройки приложения")
-    _label(back_to_profile, "Версия 0.7.29 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
+    _label(back_to_profile, "Версия 0.7.30 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
     _button(back_to_profile, "← К личной странице", func(): _navigate_to_tab("profile"), true)
     var card = _card("Личные настройки")
     _button(card, "Моя анкета · пересчитать норму", func(): _begin_onboarding(true), true)
