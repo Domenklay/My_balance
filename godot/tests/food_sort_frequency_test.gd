@@ -111,17 +111,28 @@ func _run() -> void:
         _fail("descending calorie sorting did not put Cherry first")
         return
     var row = results.find_child("FoodSearchRow_0", true, false)
-    var add: Button = _button(row, "+") if row != null else null
+    var add: Button = _button(row, "＋ Порция") if row != null else null
     if add == null:
         _fail("sorted result has no add button")
         return
     add.pressed.emit()
+    await process_frame
+    var chooser = app.get_node_or_null("ProductSheet")
+    var confirm = chooser.find_child("ProductSheetConfirm", true, false) as Button if chooser != null else null
+    if confirm == null or not app.store.day_entries("2026-11-21").is_empty():
+        _fail("sorted result must request confirmation of the chosen portion")
+        return
+    confirm.pressed.emit()
     await process_frame
     var today: Array = app.store.day_entries("2026-11-21")
     if today.size() != 1 or str(today[0].get("food", "")) != "sort_c" or \
             str(today[0].get("meal", "")) != "Обед":
         _fail("sort mode changed the selected product, date or meal")
         return
+    # The confirmed sheet rerenders the catalog.
+    search = app.find_child("FoodNameSearch", true, false) as LineEdit
+    results = app.find_child("FoodSearchResults", true, false)
+    filters = app.find_child("FoodQuickFilters", true, false)
     search.text = ""
     search.text_changed.emit("")
     _button(filters, "Частые").pressed.emit()

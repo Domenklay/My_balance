@@ -73,17 +73,27 @@ func _run() -> void:
         _fail("third page must reveal all 30 results")
         return
     var row: Node = results.find_child("FoodSearchRow_25", true, false)
-    var add: Button = _find_button(row, "+") if row != null else null
+    var add: Button = _find_button(row, "＋ Порция") if row != null else null
     if add == null:
         _fail("third page results must have a functional add action")
         return
     add.pressed.emit()
+    await process_frame
+    var sheet = app.get_node_or_null("ProductSheet")
+    var confirm = sheet.find_child("ProductSheetConfirm", true, false) as Button if sheet != null else null
+    if confirm == null or not app.store.day_entries("2026-11-21").is_empty():
+        _fail("page 3 add must open a portion dialog without writing")
+        return
+    confirm.pressed.emit()
     await process_frame
     var added: Array = app.store.day_entries("2026-11-21")
     if added.size() != 1 or str(added[0].get("food", "")) != "paging_25" or \
             str(added[0].get("meal", "")) != "Обед":
         _fail("third page added the wrong product or changed the chosen meal")
         return
+    # Confirming a portion rebuilds the catalog; reacquire live controls.
+    search = app.find_child("FoodNameSearch", true, false) as LineEdit
+    results = app.find_child("FoodSearchResults", true, false) as VBoxContainer
     search.text = "листопродукт 20"
     search.text_changed.emit(search.text)
     await process_frame

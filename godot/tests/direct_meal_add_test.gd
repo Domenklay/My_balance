@@ -75,10 +75,18 @@ func _run() -> void:
                 _fail("search did not preserve meal/date: " + names[i])
                 return
             var results = app.find_child("FoodSearchResults", true, false)
-            if results == null or _button(results, "+") == null:
-                _fail("catalog does not contain quick add product button")
+            if results == null or _button(results, "＋ Порция") == null:
+                _fail("catalog does not contain a portion picker action")
                 return
-            _button(results, "+").pressed.emit()
+            var before_count: int = app.store.day_entries("2026-11-20").size()
+            _button(results, "＋ Порция").pressed.emit()
+            await process_frame
+            var portion_sheet = app.get_node_or_null("ProductSheet")
+            var accept = portion_sheet.find_child("ProductSheetConfirm", true, false) as Button if portion_sheet != null else null
+            if accept == null or app.store.day_entries("2026-11-20").size() != before_count:
+                _fail("catalog must not write a meal until the portion is confirmed")
+                return
+            accept.pressed.emit()
             await process_frame
         elif i == 1:
             # Desktop test has no scanner, so button opens manual EAN search.
