@@ -54,8 +54,8 @@ func _run() -> void:
         _fail("initial diary must not be stretched by optional widgets")
         return
     var toggle = app.find_child("HomeWidgetSettingsToggle", true, false) as Button
-    if toggle == null:
-        _fail("main screen does not expose its widget preferences")
+    if toggle == null or toggle.get_parent().get_parent().get_parent().name != "DayDateNavigation":
+        _fail("widget settings must be accessible from the date header")
         return
     toggle.pressed.emit()
     await process_frame
@@ -80,8 +80,16 @@ func _run() -> void:
     weight.pressed.emit()
     await process_frame
     if not bool(app.store.home_widgets()["weight"]) or \
-            app.find_child("HomeWeightWidget", true, false) == null:
-        _fail("weight widget cannot be enabled")
+            app.find_child("HomeWeightWidget", true, false) == null or \
+            app.find_child("HomeWeekWidget", true, false) != null or \
+            app.find_child("HomeProgressWidget", true, false) == null:
+        _fail("weight widget should replace week without a second card")
+        return
+    (app.find_child("HomeProgressView_week", true, false) as Button).pressed.emit()
+    await process_frame
+    if app.find_child("HomeWeekWidget", true, false) == null or \
+            app.find_child("HomeWeightWidget", true, false) != null:
+        _fail("one-card selector did not show calories")
         return
 
     var persisted = StoreScript.new()
@@ -102,16 +110,22 @@ func _run() -> void:
         app._render()
         await process_frame
         var summary = app.find_child("HomeWeekSummary", true, false) as Label
+        if summary == null or not summary.text.contains("1500 ккал") or \
+                app.find_child("HomeWeightWidget", true, false) != null:
+            _fail("only week should appear when week is selected in " + theme)
+            return
+        (app.find_child("HomeProgressView_weight", true, false) as Button).pressed.emit()
+        await process_frame
         var weight_summary = app.find_child("HomeWeightSummary", true, false) as Label
         var progress = app.find_child("HomeWeightGoalProgress", true, false) as ProgressBar
-        if summary == null or weight_summary == null or progress == null:
-            _fail("a theme dropped an enabled widget: " + theme)
-            return
-        if not summary.text.contains("1500 ккал") or \
+        if weight_summary == null or progress == null or \
                 not weight_summary.text.contains("78.0 кг") or \
-                absf(progress.value - 50.0) > 0.1:
-            _fail("widget shows incorrect calorie/weight snapshot: " + theme)
+                absf(progress.value - 50.0) > 0.1 or \
+                app.find_child("HomeWeekWidget", true, false) != null:
+            _fail("weight view incorrect, or both widgets visible in " + theme)
             return
+        (app.find_child("HomeProgressView_week", true, false) as Button).pressed.emit()
+        await process_frame
     (app.find_child("HomeWeekOpenStats", true, false) as Button).pressed.emit()
     await process_frame
     if app.tab != "stats" or app.stats_period != "week" or \
@@ -119,6 +133,8 @@ func _run() -> void:
         _fail("weekly shortcut does not open selected date in stats")
         return
     app._navigate_to_tab("day")
+    await process_frame
+    (app.find_child("HomeProgressView_weight", true, false) as Button).pressed.emit()
     await process_frame
     (app.find_child("HomeWeightOpenHistory", true, false) as Button).pressed.emit()
     await process_frame
@@ -130,17 +146,19 @@ func _run() -> void:
     (app.find_child("HomeWidgetChoice_week", true, false) as Button).pressed.emit()
     await process_frame
     if app.find_child("HomeWeekWidget", true, false) != null or \
-            app.find_child("HomeWeightWidget", true, false) == null:
-        _fail("hiding week must keep enabled weight widget")
+            app.find_child("HomeWeightWidget", true, false) == null or \
+            app.find_child("HomeProgressViewSelector", true, false) != null:
+        _fail("hiding week must keep only the weight view")
         return
     (app.find_child("HomeWidgetChoice_weight", true, false) as Button).pressed.emit()
     await process_frame
-    if app.find_child("HomeWeightWidget", true, false) != null:
-        _fail("weight widget did not disappear when disabled")
+    if app.find_child("HomeWeightWidget", true, false) != null or \
+            app.find_child("HomeProgressWidget", true, false) != null:
+        _fail("empty widget preferences must remove the unified card")
         return
     if store.day_entries("2026-11-19").size() != 0 or app.store.day_entries("2026-11-19").size() != 1:
         _fail("changing widgets corrupted food diary records")
         return
-    print("PASS HOME WIDGETS: defaults, legacy import, rollback, independent toggles, three themes, quick links and saved choices")
+    print("PASS HOME WIDGETS: one-card toggling, header settings, persistence, themes and shortcuts")
     app.queue_free()
     quit(0)
