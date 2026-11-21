@@ -186,9 +186,9 @@ static func label_for(dates: Array, mode: String) -> String:
     if dates.is_empty():
         return "Период"
     if mode == "quarter":
-        return str(dates[0]).substr(5, 2) + "." + str(dates[0]).substr(0, 4) + \
+        return (str(dates[0]).substr(5, 2) + "." + str(dates[0]).substr(0, 4) +
             " – " + str(dates[dates.size() - 1]).substr(5, 2) +
-            "." + str(dates[dates.size() - 1]).substr(0, 4)
+            "." + str(dates[dates.size() - 1]).substr(0, 4))
     if mode == "month":
         var year: String = str(dates[0]).substr(0, 4)
         var month: String = str(dates[0]).substr(5, 2)
