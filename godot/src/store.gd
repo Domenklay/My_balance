@@ -489,7 +489,7 @@ func import_json(raw: String, persist: bool = true) -> bool:
     # and fill in safe defaults. Unknown themes are never applied.
     if not settings.has("theme"):
         settings["theme"] = "forest"
-    if not (settings["theme"] is String) or str(settings["theme"]) not in ["forest", "mint", "sand", "dark"]:
+    if not (settings["theme"] is String) or str(settings["theme"]) not in ["forest", "mint", "sand", "dark", "botanical"]:
         return false
     if not settings.has("patterns"):
         settings["patterns"] = true
