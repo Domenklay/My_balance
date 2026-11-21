@@ -4344,9 +4344,11 @@ func _show_settings() -> void:
             store.data["settings"] = previous_settings
             _message("Не удалось сохранить настройки. Прежние значения оставлены.")
     )
+    var summary_shares: Array = store.meal_shares()
     var portions_card = _settings_section("Калории по приёмам пищи", "shares",
         "Завтрак / Обед / Ужин / Перекус · " +
-        " / ".join(store.meal_shares().map(func(amount): return str(amount))) + "%")
+        str(summary_shares[0]) + " / " + str(summary_shares[1]) + " / " +
+        str(summary_shares[2]) + " / " + str(summary_shares[3]) + "%")
     _label(portions_card, "Настрой свои ориентиры. Сумма четырёх процентов должна быть 100%.", 13, MUTED)
     var original_shares: Array = store.meal_shares()
     var portion_fields: Array = []
