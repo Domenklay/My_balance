@@ -127,7 +127,7 @@ func _run() -> void:
     var preview = app.find_child("MealCaloriePreview", true, false) as Label
     var first = app.find_child("MealShareField_0", true, false) as SpinBox
     var third = app.find_child("MealShareField_2", true, false) as SpinBox
-    var daily = app.find_child("DailyCalorieTarget", true, false) as SpinBox
+    var daily = app.find_child("DailyCalorieTarget", true, false) as LineEdit
     if preview == null or first == null or third == null or daily == null:
         _fail("live distribution editor missing controls")
         return
@@ -136,7 +136,8 @@ func _run() -> void:
         _fail("distribution sum did not refresh")
         return
     third.value = 25
-    daily.value = 2000
+    daily.text = "2000"
+    daily.text_changed.emit(daily.text)
     if not preview.text.contains("При 2000 ккал") or not preview.text.contains("Завтрак 600"):
         _fail("calorie breakdown did not respond to new daily target and shares")
         return
