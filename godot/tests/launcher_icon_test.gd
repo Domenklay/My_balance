@@ -19,6 +19,20 @@ func _run() -> void:
     if icon_image.get_width() != 192 or icon_image.get_height() != 192:
         _fail("launcher image dimensions mismatch")
         return
+    # Keep the selected food illustration colorful: salmon should stay orange
+    # and blueberries should stay blue even after launcher optimization.
+    var orange_pixels = 0
+    var blue_pixels = 0
+    for y in range(0, icon_image.get_height(), 2):
+        for x in range(0, icon_image.get_width(), 2):
+            var c: Color = icon_image.get_pixel(x, y)
+            if c.r > 0.63 and c.r > c.g * 1.15 and c.g > c.b * 1.1:
+                orange_pixels += 1
+            if c.b > 0.3 and c.b > c.r * 1.2 and c.b > c.g * 1.2:
+                blue_pixels += 1
+    if orange_pixels < 30 or blue_pixels < 10:
+        _fail("image lost orange salmon or blue berries during compression")
+        return
     var cfg = ConfigFile.new()
     if cfg.load("res://export_presets.cfg") != OK:
         _fail("cannot read Android export settings")
