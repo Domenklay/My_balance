@@ -89,23 +89,22 @@ func _draw_botanical(tint: Color) -> void:
         _draw_branch(Vector2(width + 4.0, height - 105.0), -1.0, tint)
 
 
-# Compact mountain silhouette stays in the upper right of the activity card.
-# It no longer turns into a dark band behind the two action buttons.
+# Small distant peaks only in the top-right, outside the headline,
+# activity totals and bottom actions. Keep it ornamental, not informational.
 func _draw_hills(tint: Color) -> void:
-    if size.x < 50.0 or size.y < 60.0:
+    if size.x < 180.0 or size.y < 75.0:
         return
     var w = size.x
     var h = size.y
-    var far = Color(tint.r, tint.g, tint.b, minf(0.22, tint.a * 1.1))
-    var near = Color(tint.r, tint.g, tint.b, minf(0.30, tint.a * 1.45))
+    var far = Color(tint.r, tint.g, tint.b, minf(0.14, tint.a * 0.9))
+    var near = Color(tint.r, tint.g, tint.b, minf(0.18, tint.a * 1.1))
     draw_colored_polygon(PackedVector2Array([
-        Vector2(w * 0.52, h * 0.57), Vector2(w * 0.64, h * 0.31),
-        Vector2(w * 0.71, h * 0.46), Vector2(w * 0.83, h * 0.20),
-        Vector2(w * 0.93, h * 0.42), Vector2(w, h * 0.28),
-        Vector2(w, h * 0.56)
+        Vector2(w * 0.79, h * 0.30), Vector2(w * 0.86, h * 0.12),
+        Vector2(w * 0.91, h * 0.23), Vector2(w * 0.96, h * 0.09),
+        Vector2(w, h * 0.23), Vector2(w, h * 0.34)
     ]), far)
     draw_colored_polygon(PackedVector2Array([
-        Vector2(w * 0.60, h * 0.59), Vector2(w * 0.73, h * 0.39),
-        Vector2(w * 0.80, h * 0.53), Vector2(w * 0.90, h * 0.32),
-        Vector2(w, h * 0.48), Vector2(w, h * 0.61)
+        Vector2(w * 0.84, h * 0.37), Vector2(w * 0.91, h * 0.22),
+        Vector2(w * 0.96, h * 0.34), Vector2(w, h * 0.18),
+        Vector2(w, h * 0.39)
     ]), near)
