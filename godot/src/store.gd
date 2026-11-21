@@ -133,7 +133,7 @@ func default_data() -> Dictionary:
             "meal_shares": DEFAULT_MEAL_SHARES.duplicate(), "home_widgets": DEFAULT_HOME_WIDGETS.duplicate(), "onboarding_complete": false,
             "personal": {}},
         "foods": [], "entries": [], "activities": [], "weights": [], "notes": {}, "favorites": [],
-        "recipes": [], "meal_templates": [], "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
+        "recipes": [], "meal_templates": [], "day_copy_undo": {}, "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
             "photo": "", "frame": "plain"}
     }
 
@@ -502,13 +502,26 @@ func import_json(raw: String, persist: bool = true) -> bool:
         if template["items"].is_empty() or template["items"].size() > 30:
             return false
         for item in template["items"]:
-            if not (item is Dictionary and item.get("nutrition") is Dictionary):
+            if not valid_template_item(item):
                 return false
             if str(item.get("meal", "")) not in ["Завтрак", "Обед", "Перекус", "Ужин"]:
                 return false
             var grams = item.get("grams", 0)
             if not (grams is float or grams is int) or not is_finite(float(grams)) or float(grams) <= 0.0 or float(grams) > 5000.0:
                 return false
+            if str(item.get("unit", "г")) not in ["г", "мл"]:
+                return false
+            if str(item.get("portion_label", "")).length() > 36:
+                return false
+            if item.has("portion_count"):
+                if not (item["portion_count"] is float or item["portion_count"] is int) or \
+                        not is_finite(float(item["portion_count"])) or float(item["portion_count"]) <= 0.0 or \
+                        float(item["portion_count"]) > 5000.0:
+                    return false
+            if item.has("portion_id"):
+                if not (item["portion_id"] is String) or str(item["portion_id"]).length() > 100 or \
+                        not item.has("portion_count"):
+                    return false
             var nutrition: Dictionary = item["nutrition"]
             if not (nutrition.get("name") is String) or nutrition["name"].is_empty() or nutrition["name"].length() > 160:
                 return false
@@ -516,6 +529,12 @@ func import_json(raw: String, persist: bool = true) -> bool:
                 var n = nutrition.get(nutrient)
                 if not (n is float or n is int) or not is_finite(float(n)) or float(n) < 0.0 or float(n) > (1000.0 if nutrient == "kcal" else 100.0):
                     return false
+    # The undo snapshot was introduced in 0.7.41. Legacy JSON imports
+    # without it continue to work; malformed undo data cannot be imported.
+    if not obj.has("day_copy_undo"):
+        obj["day_copy_undo"] = {}
+    if not valid_copy_undo(obj["day_copy_undo"]):
+        return false
     if not (obj["favorites"] is Array) or obj["favorites"].size() > 500:
         return false
     for id in obj["favorites"]:
@@ -1066,19 +1085,119 @@ static func valid_diary_date(day: String) -> bool:
     return Time.get_date_string_from_unix_time(stamp) == day
 
 
-func copy_day(source_date: String, destination_date: String,
-        replace_destination: bool = false) -> int:
+# One-record identity ignoring the generated entry id/date. Keep snapshots
+# in the signature so changed catalog values do not falsely match historical food.
+static func food_entry_signature(entry: Dictionary) -> String:
+    var nutrition: Dictionary = entry.get("nutrition", {})
+    return JSON.stringify([
+        str(entry.get("food", "")), str(entry.get("meal", "")),
+        float(entry.get("grams", 0)), str(entry.get("unit", "г")),
+        str(entry.get("portion_label", "")),
+        float(entry.get("portion_count", 0)), str(entry.get("portion_id", "")),
+        str(nutrition.get("name", "")), str(nutrition.get("nutrition_unit", "г")),
+        float(nutrition.get("kcal", 0)), float(nutrition.get("p", 0)),
+        float(nutrition.get("f", 0)), float(nutrition.get("c", 0))
+    ])
+
+
+func day_copy_plan(source_date: String, destination_date: String,
+        replace_destination: bool = false, skip_duplicates: bool = false) -> Dictionary:
+    var result: Dictionary = {"entries": [], "source_count": 0, "duplicates": 0,
+        "target_count": 0}
     if not valid_diary_date(source_date) or not valid_diary_date(destination_date) or \
             source_date == destination_date:
-        return 0
-    var sources: Array = day_entries(source_date)
+        return result
+    var source: Array = day_entries(source_date)
+    var target: Array = day_entries(destination_date)
+    result["source_count"] = source.size()
+    result["target_count"] = target.size()
+    var existing_signatures: Dictionary = {}
+    if not replace_destination:
+        for record in target:
+            existing_signatures[food_entry_signature(record)] = true
+    var selected: Array = []
+    for record in source:
+        if existing_signatures.has(food_entry_signature(record)):
+            result["duplicates"] += 1
+            if skip_duplicates:
+                continue
+        selected.append(record)
+    result["entries"] = selected
+    return result
+
+
+# Undo survives an app restart, but only when the copied destination has not
+# changed since the copy. Never revert subsequent manual edits.
+static func valid_copy_undo(value: Variant) -> bool:
+    if not (value is Dictionary):
+        return false
+    if value.is_empty():
+        return true
+    if value.size() != 3 or not (value.get("date") is String and \
+            value.get("before") is Array and value.get("after") is Array):
+        return false
+    var day: String = value["date"]
+    if not valid_diary_date(day) or value["before"].size() > 1500 or \
+            value["after"].size() > 1500:
+        return false
+    for collection in [value["before"], value["after"]]:
+        for record in collection:
+            if not (record is Dictionary):
+                return false
+            if str(record.get("date", "")) != day or \
+                    not (record.get("id") is String) or str(record["id"]).is_empty() or \
+                    str(record.get("meal", "")) not in MEAL_NAMES:
+                return false
+            var grams = record.get("grams", 0)
+            if not (grams is int or grams is float) or not is_finite(float(grams)) or \
+                    float(grams) <= 0.0 or float(grams) > 5000.0:
+                return false
+    return true
+
+
+func can_undo_day_copy(day: String = "") -> bool:
+    var undo: Dictionary = data.get("day_copy_undo", {})
+    if undo.is_empty() or not valid_copy_undo(undo):
+        return false
+    var chosen: String = str(undo["date"])
+    return (day.is_empty() or chosen == day) and day_entries(chosen) == undo["after"]
+
+
+func undo_day_copy() -> bool:
+    if not can_undo_day_copy():
+        return false
+    var undo: Dictionary = data["day_copy_undo"]
+    var chosen: String = str(undo["date"])
+    var original_entries: Array = data["entries"].duplicate(true)
+    var original_undo: Dictionary = undo.duplicate(true)
+    data["entries"] = data["entries"].filter(func(e):
+        return str(e.get("date", "")) != chosen)
+    data["entries"].append_array(undo["before"].duplicate(true))
+    data["day_copy_undo"] = {}
+    if save():
+        return true
+    data["entries"] = original_entries
+    data["day_copy_undo"] = original_undo
+    return false
+
+
+# Append and replace are one filesystem write, with matching previous state
+# retained for a one-step undo. Skipped duplicates never overwrite anything.
+func copy_day(source_date: String, destination_date: String,
+        replace_destination: bool = false, skip_duplicates: bool = false) -> int:
+    var plan: Dictionary = day_copy_plan(
+        source_date, destination_date, replace_destination, skip_duplicates)
+    var sources: Array = plan["entries"]
     if sources.is_empty():
         return 0
-    var destination_size: int = day_entries(destination_date).size()
-    var after_size: int = data["entries"].size() - (destination_size if replace_destination else 0) + sources.size()
-    if after_size > 50000:
+    var destination: Array = day_entries(destination_date)
+    var after_size: int = (data["entries"].size() -
+        (destination.size() if replace_destination else 0) + sources.size())
+    if after_size > 50000 or destination.size() > 1500 or \
+            destination.size() + sources.size() > 1500:
         return 0
     var before: Array = data["entries"].duplicate(true)
+    var previous_undo: Dictionary = data.get("day_copy_undo", {}).duplicate(true)
     if replace_destination:
         data["entries"] = data["entries"].filter(func(e):
             return str(e.get("date", "")) != destination_date)
@@ -1088,9 +1207,13 @@ func copy_day(source_date: String, destination_date: String,
         snapshot["id"] = "day_copy_" + serial + "_" + str(i)
         snapshot["date"] = destination_date
         data["entries"].append(snapshot)
+    data["day_copy_undo"] = {"date": destination_date,
+        "before": destination.duplicate(true),
+        "after": day_entries(destination_date).duplicate(true)}
     if save():
         return sources.size()
     data["entries"] = before
+    data["day_copy_undo"] = previous_undo
     return 0
 
 
@@ -1118,7 +1241,9 @@ func save_meal_template(source_date: String, meal: String, title: String) -> boo
             "grams": float(entry["grams"]),
             "unit": str(entry.get("unit", "г")),
             "portion_label": str(entry.get("portion_label", "")),
-            "nutrition": snapshot.duplicate(true)
+            "nutrition": snapshot.duplicate(true),
+            "portion_count": float(entry.get("portion_count", 0.0)),
+            "portion_id": str(entry.get("portion_id", ""))
         })
     var record = {
         "id": "template_" + str(Time.get_ticks_usec()) + "_" + str(data["meal_templates"].size()),
@@ -1130,6 +1255,62 @@ func save_meal_template(source_date: String, meal: String, title: String) -> boo
         return true
     data["meal_templates"].erase(record)
     return false
+
+# Edit existing templates without changing their id or applying to the diary.
+# All items are snapshots; no dependency on current product catalog.
+static func valid_template_item(item: Variant) -> bool:
+    if not (item is Dictionary and item.get("nutrition") is Dictionary):
+        return false
+    if str(item.get("meal", "")) not in MEAL_NAMES or \
+            str(item.get("unit", "г")) not in ["г", "мл"] or \
+            str(item.get("portion_label", "")).length() > 36 or \
+            str(item.get("portion_id", "")).length() > 100:
+        return false
+    var grams = item.get("grams", 0)
+    if not (grams is int or grams is float) or not is_finite(float(grams)) or \
+            float(grams) <= 0.0 or float(grams) > 5000.0:
+        return false
+    var count = item.get("portion_count", 0.0)
+    if not (count is int or count is float) or not is_finite(float(count)) or \
+            float(count) < 0.0 or float(count) > 5000.0:
+        return false
+    if str(item.get("portion_id", "")) != "" and float(count) <= 0.0:
+        return false
+    var nutrition: Dictionary = item["nutrition"]
+    if not (nutrition.get("name") is String) or \
+            str(nutrition["name"]).is_empty() or str(nutrition["name"]).length() > 160:
+        return false
+    for key in ["kcal", "p", "f", "c"]:
+        var v = nutrition.get(key)
+        if not (v is int or v is float) or not is_finite(float(v)) or \
+                float(v) < 0.0 or float(v) > (1000.0 if key == "kcal" else 100.0):
+            return false
+    return true
+
+
+func update_meal_template(template_id: String, name: String, items: Array) -> bool:
+    var label: String = name.strip_edges()
+    if label.is_empty() or label.length() > 70 or items.is_empty() or items.size() > 30:
+        return false
+    for item in items:
+        if not valid_template_item(item):
+            return false
+    var target: Dictionary = {}
+    for template in data.get("meal_templates", []):
+        if str(template.get("id", "")) == template_id:
+            target = template
+            break
+    if target.is_empty():
+        return false
+    var previous: Dictionary = target.duplicate(true)
+    target["name"] = label
+    target["items"] = items.duplicate(true)
+    if save():
+        return true
+    target.clear()
+    target.merge(previous, true)
+    return false
+
 
 func apply_meal_template(template_id: String, destination_date: String) -> int:
     for template in data["meal_templates"]:
@@ -1149,7 +1330,10 @@ func apply_meal_template(template_id: String, destination_date: String) -> int:
                 "unit": str(item.get("unit", "г")),
                 "portion_label": str(item.get("portion_label", "")),
                 "nutrition": item["nutrition"].duplicate(true)
-            })
+            }
+            if float(item.get("portion_count", 0.0)) > 0.0:
+                created[created.size() - 1]["portion_count"] = float(item["portion_count"])
+                created[created.size() - 1]["portion_id"] = str(item.get("portion_id", ""))
         data["entries"].append_array(created)
         if save():
             return created.size()
