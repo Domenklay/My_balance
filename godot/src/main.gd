@@ -3488,6 +3488,12 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
         picker.select(selection)
     _update_food_preview(picker, filtered, grams, preview, star)
     if results_box != null and meal != null and added_count != null:
+        # Reset pagination only when the search/filter changes, not when
+        # a product is selected or saved to the diary.
+        var search_key: String = query + "|" + str(category.selected if category != null else -1) + "|" + str(favorite_only.button_pressed)
+        if str(results_box.get_meta("food_search_key", "")) != search_key:
+            results_box.set_meta("food_search_key", search_key)
+            results_box.set_meta("visible_count", 12)
         _rebuild_food_results(results_box, filtered, grams, meal, added_count)
 
 func _rebuild_food_results(results_box: VBoxContainer, filtered: Array,
@@ -3495,10 +3501,14 @@ func _rebuild_food_results(results_box: VBoxContainer, filtered: Array,
     for child in results_box.get_children():
         results_box.remove_child(child)
         child.queue_free()
-    _label(results_box, "Найдено: " + str(filtered.size()) + " · первые 12 результатов", 12, MUTED)
-    for index in range(mini(12, filtered.size())):
+    var shown: int = mini(maxi(12, int(results_box.get_meta("visible_count", 12))), filtered.size())
+    _label(results_box, "Найдено: " + str(filtered.size()) + " · показано: " + str(shown), 12, MUTED)
+    if filtered.is_empty():
+        _label(results_box, "Ничего не найдено. Попробуй другое название или бренд.", 12, MUTED)
+    for index in range(shown):
         var item: Dictionary = filtered[index]
         var row = _soft_list_row(results_box)
+        row.name = "FoodSearchRow_" + str(index)
         var info = VBoxContainer.new()
         info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         row.add_child(info)
@@ -3518,6 +3528,14 @@ func _rebuild_food_results(results_box: VBoxContainer, filtered: Array,
             else:
                 _message("Не удалось сохранить продукт.")
         )
+    if shown < filtered.size():
+        var next_count: int = mini(12, filtered.size() - shown)
+        var more = _button(results_box, "Показать ещё " + str(next_count), func():
+            results_box.set_meta("visible_count", shown + 12)
+            _rebuild_food_results(results_box, filtered, grams, meal, added_count)
+        , true)
+        more.name = "FoodLoadMore"
+        more.custom_minimum_size.y = 42
 
 func _update_food_preview(picker: OptionButton, filtered: Array, grams: SpinBox,
         preview: Label, star: Button) -> void:
