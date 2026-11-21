@@ -8,7 +8,9 @@ func _initialize() -> void:
 func _snapshot(app: Control, filename: String) -> void:
     await process_frame
     await process_frame
-    await RenderingServer.frame_post_draw
+    # Some headless/Xvfb drivers never emit frame_post_draw. Force one frame
+    # after two process frames instead of hanging the entire visual job.
+    RenderingServer.force_draw()
     var shot: Image = app.get_viewport().get_texture().get_image()
     if shot == null or shot.is_empty():
         push_error("Screenshot capture returned an empty image: " + filename)
