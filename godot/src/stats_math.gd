@@ -110,8 +110,8 @@ static func summarize(store: RefCounted, anchor: String, mode: String) -> Dictio
         for group in groups:
             columns.append({
                 "label": str(int(group["first"])) + "–" + str(int(group["last"])),
-                "kcal": float(group["total"]) / float(group["logged"])
-                    if int(group["logged"]) > 0 else 0.0,
+                "kcal": (float(group["total"]) / float(group["logged"])
+                    if int(group["logged"]) > 0 else 0.0),
                 "recorded": int(group["logged"]) > 0,
                 "walk": int(group["walk"]),
                 "exercise": int(group["exercise"]),
@@ -144,5 +144,5 @@ static func label_for(dates: Array, mode: String) -> String:
         return month + "." + year
     var a: String = str(dates[0])
     var b: String = str(dates[dates.size() - 1])
-    return a.substr(8, 2) + "." + a.substr(5, 2) +
+    return a.substr(8, 2) + "." + a.substr(5, 2) + \
         " – " + b.substr(8, 2) + "." + b.substr(5, 2) + "." + b.substr(0, 4)
