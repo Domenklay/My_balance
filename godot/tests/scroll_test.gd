@@ -30,6 +30,9 @@ func _run() -> void:
             "grams": 100.0,
             "meal": ["Завтрак", "Обед", "Перекус", "Ужин"][i % 4]
         })
+    # A collapsed day intentionally fits on one screen in v0.7.13.
+    # Open breakfast to simulate the detailed diary where scrolling is required.
+    app._expanded_meals[app.date + "|Завтрак"] = true
     var scrollable_pages = 0
     for page in ["day", "recipes", "activity", "weight", "stats", "profile", "settings"]:
         print("SCROLL DEBUG: before page render: ", page)
