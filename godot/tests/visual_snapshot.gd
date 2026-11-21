@@ -120,6 +120,14 @@ func _capture() -> void:
     app._render()
     await _snapshot(app, "04-stats-month")
     app.stats_period = "week"
+    app.stats_detail_tab = "activity"
+    app.tab = "stats"
+    app._render()
+    await _snapshot(app, "04-stats-activity")
+    app.stats_detail_tab = "weight"
+    app._render()
+    await _snapshot(app, "04-stats-weight")
+    app.stats_detail_tab = "nutrition"
     app.tab = "settings"
     app.settings_page = "foods"
     app._render()
@@ -164,10 +172,14 @@ func _capture() -> void:
     if home_week != null:
         app.scroll.ensure_control_visible(home_week)
         await _snapshot(app, "18-week-widget-enabled")
+    app.home_progress_view = "weight"
+    app._render()
+    await process_frame
     var home_weight = app.find_child("HomeWeightWidget", true, false)
     if home_weight != null:
         app.scroll.ensure_control_visible(home_weight)
         await _snapshot(app, "19-weight-widget-enabled")
+    app.home_progress_view = "week"
     app.store.data["settings"]["home_widgets"] = {"week":false, "weight":false}
     # Capture each installed appearance variant for side-by-side review.
     for variant in ["forest", "mint", "sand", "dark", "botanical"]:
