@@ -155,6 +155,20 @@ func _capture() -> void:
     await _snapshot(app, "15-edit-profile")
     app.profile_edit_open = false
     app._render()
+    # Optional home widgets are hidden by default; capture opt-in view.
+    app.store.data["settings"]["home_widgets"] = {"week":true, "weight":true}
+    app.tab = "day"
+    app._render()
+    await process_frame
+    var home_week = app.find_child("HomeWeekWidget", true, false)
+    if home_week != null:
+        app.scroll.ensure_control_visible(home_week)
+        await _snapshot(app, "18-week-widget-enabled")
+    var home_weight = app.find_child("HomeWeightWidget", true, false)
+    if home_weight != null:
+        app.scroll.ensure_control_visible(home_weight)
+        await _snapshot(app, "19-weight-widget-enabled")
+    app.store.data["settings"]["home_widgets"] = {"week":false, "weight":false}
     # Capture each installed appearance variant for side-by-side review.
     for variant in ["forest", "mint", "sand", "dark", "botanical"]:
         app.store.data["settings"]["theme"] = variant
