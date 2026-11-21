@@ -618,6 +618,11 @@ func _card(title: String, variant: String = "plain") -> VBoxContainer:
         ornament.mouse_filter = Control.MOUSE_FILTER_IGNORE
         ornament.configure(PATTERN_STYLE, PATTERN_COLOR, true, 0.13 if variant == "hero" else 0.07)
         panel.add_child(ornament)
+    if PATTERNS and variant == "activity" and current_theme == "botanical" and tab == "day":
+        var mountain_art = PatternScript.new()
+        mountain_art.name = "BotanicalActivityLandscape"
+        mountain_art.configure("hills", Color("#7ABD9B"), true, 0.20)
+        panel.add_child(mountain_art)
     var content = VBoxContainer.new()
     content.mouse_filter = Control.MOUSE_FILTER_PASS
     content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
