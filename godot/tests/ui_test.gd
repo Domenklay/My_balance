@@ -47,13 +47,24 @@ func _run() -> void:
         push_error("FAILED: mobile navigation missing Recipes or Profile")
         quit(1)
         return
-    var expand_button: Button = _find_button(app, "Найти продукт или ввести штрихкод")
+    var expand_button: Button = _find_button(app, "+ Добавить завтрак")
     if expand_button == null:
-        push_error("FAILED: compact day screen has no search expansion action")
+        push_error("FAILED: breakfast card has no direct add-food action")
         quit(1)
         return
     expand_button.pressed.emit()
     await process_frame
+    var search_from_meal = _find_button(app, "⌕ Найти продукт")
+    if search_from_meal == null:
+        push_error("FAILED: meal chooser is missing product search")
+        quit(1)
+        return
+    search_from_meal.pressed.emit()
+    await process_frame
+    if app.tab != "search" or app.selected_meal != "Завтрак" or not app._meal_entry_locked:
+        push_error("FAILED: meal-specific catalog failed to lock breakfast")
+        quit(1)
+        return
     var search: LineEdit = _find_search(app)
     if search == null:
         push_error("FAILED: food search input missing")
@@ -167,15 +178,27 @@ func _run() -> void:
         push_error("FAILED: meal addition did not confirm success")
         quit(1)
         return
-    # New full catalog: accessible from day, with search results and repeated + add.
+    # Catalog now opens from a specific meal instead of a duplicate day panel.
     app._navigate_to_tab("day")
-    var catalog_button = _find_button(app, "⌕ Открыть полный каталог продуктов")
+    await process_frame
+    var catalog_button = _find_button(app, "◈ Обед")
     if catalog_button == null:
-        push_error("FAILED: full catalog entry point missing")
+        push_error("FAILED: tapping lunch heading must be available")
         quit(1)
         return
     catalog_button.pressed.emit()
     await process_frame
+    var lunch_search = _find_button(app, "⌕ Найти продукт")
+    if lunch_search == null:
+        push_error("FAILED: lunch heading has no product search option")
+        quit(1)
+        return
+    lunch_search.pressed.emit()
+    await process_frame
+    if app.selected_meal != "Обед" or not app._meal_entry_locked:
+        push_error("FAILED: tapping lunch heading did not select lunch")
+        quit(1)
+        return
     if app.tab != "search":
         push_error("FAILED: full catalog did not open")
         quit(1)
