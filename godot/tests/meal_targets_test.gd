@@ -102,17 +102,17 @@ func _run() -> void:
         if card == null:
             _fail("daily meal card is missing")
             return
-        if card.find_child("MealProgress_" + str(i), true, false) == null:
-            _fail("meal-target progress bar missing")
+        if card.find_child("MealProgress_" + str(i), true, false) != null:
+            _fail("empty meal should not waste vertical space on a progress bar")
             return
-        if not _find_label(card, "Ориентир:"):
-            _fail("meal-specific kcal target not displayed")
+        if not _find_label(card, "0 / "):
+            _fail("meal kcal target missing from compact header")
             return
         if _find_label(card, "БЕЛКИ") or _find_label(card, "ЖИРЫ") or _find_label(card, "УГЛЕВОДЫ"):
             _fail("expanded-only macro details clutter the compact meal card")
             return
     var first_card = app.find_child("DailyMeal_0", true, false)
-    var open_button = _find_button(first_card, "▾ Подробнее")
+    var open_button = _find_button(first_card, "⌄")
     if open_button == null:
         _fail("compact meal details toggle missing")
         return
