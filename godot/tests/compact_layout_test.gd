@@ -43,6 +43,17 @@ func _run() -> void:
     if _label_exists(app.body, "Недавно добавляли"):
         _fail("recent-products duplicate card was not removed from day")
         return
+    # Guard against accidentally forcing the kcal counter into a 1-character
+    # column: it used to make an empty meal taller than the full phone screen.
+    for index in range(4):
+        var meal_card = app.find_child("DailyMeal_" + str(index), true, false) as PanelContainer
+        if meal_card == null or meal_card.size.y > 160:
+            _fail("meal section exceeds compact height at index " + str(index))
+            return
+    var daily_ring = app.find_child("DailyCalorieRing", true, false)
+    if daily_ring == null or daily_ring.size.y > 80:
+        _fail("daily calorie ring too tall for compact header")
+        return
     if _button(app, "▾ Открыть заметку") == null:
         _fail("day notes are not collapsed by default")
         return
