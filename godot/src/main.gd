@@ -3315,13 +3315,15 @@ func _request_undo_day_copy() -> void:
         return
     _confirm_action("Отменить последнее копирование?",
         "Вернуть питание до копирования? Спорт, заметки и вес сохранятся.",
-        func():
-            if store.undo_day_copy():
-                _render()
-                _notify_saved("Питание восстановлено")
-            else:
-                _message("Не удалось отменить: записи изменились.")
-        , "Отменить копирование")
+        func(): _perform_undo_day_copy(), "Отменить копирование")
+
+
+func _perform_undo_day_copy() -> void:
+    if store.undo_day_copy():
+        _render()
+        _notify_saved("Питание восстановлено")
+    else:
+        _message("Не удалось отменить: записи изменились.")
 
 
 func _render_copy_calendar(holder: VBoxContainer, state: Dictionary,
