@@ -65,7 +65,7 @@ func _run() -> void:
         if not amount.text.contains("/") or not amount.text.contains("ккал"):
             _fail("expected meal consumed/target counter on meal " + str(i))
             return
-        var correct_titles = ["☀ Завтрак", "🍲 Обед", "🌙 Ужин", "🍎 Перекус"]
+        var correct_titles = ["🌞 Завтрак", "🍲 Обед", "🌙 Ужин", "🍎 Перекус"]
         if heading.text != correct_titles[i]:
             _fail("incorrect meal icon or name on card " + str(i))
             return
