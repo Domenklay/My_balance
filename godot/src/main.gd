@@ -12,6 +12,14 @@ const BarcodeScript = preload("res://src/barcode_lookup.gd")
 const FoodSearchScript = preload("res://src/food_search.gd")
 const AppearanceScript = preload("res://src/appearance.gd")
 const PatternScript = preload("res://src/theme_pattern.gd")
+const NAV_TEXTURES = {
+    "day": preload("res://assets/nav/day.svg"),
+    "recipes": preload("res://assets/nav/recipes.svg"),
+    "activity": preload("res://assets/nav/activity.svg"),
+    "weight": preload("res://assets/nav/weight.svg"),
+    "stats": preload("res://assets/nav/stats.svg"),
+    "profile": preload("res://assets/nav/profile.svg")
+}
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
 var MINT: Color = Color("#cdebd8")
@@ -102,6 +110,8 @@ var _rendered_view: String = ""
 var _scroll_memory: Dictionary = {}
 var _render_serial: int = 0
 var tab_buttons: Dictionary = {}
+var nav_icons: Dictionary = {}
+var nav_labels: Dictionary = {}
 var barcode_http: HTTPRequest
 var catalog_http: HTTPRequest
 var search_http: HTTPRequest
@@ -807,48 +817,81 @@ func _make_tabs() -> void:
     st.bg_color = CARD_BG
     st.border_color = BORDER
     st.border_width_top = 1
-    st.content_margin_left = 7
-    st.content_margin_right = 7
-    st.content_margin_top = 7
-    st.content_margin_bottom = 7
+    st.content_margin_left = 5
+    st.content_margin_right = 5
+    st.content_margin_top = 6
+    st.content_margin_bottom = 6
     bar.add_theme_stylebox_override("panel", st)
     shell.add_child(bar)
     var row = HBoxContainer.new()
     row.add_theme_constant_override("separation", 2)
     bar.add_child(row)
     var tabs = [
-        ["◉", "День", "day"],
-        ["♨", "Рецепты", "recipes"],
-        ["✦", "Спорт", "activity"],
-        ["◇", "Вес", "weight"],
-        ["▥", "Итоги", "stats"],
-        ["♙", "Профиль", "profile"]
+        ["День", "day"], ["Рецепты", "recipes"], ["Спорт", "activity"],
+        ["Вес", "weight"], ["Итоги", "stats"], ["Профиль", "profile"]
     ]
     for item in tabs:
-        var target: String = item[2]
-        var b = _button(row, item[0] + "\n" + item[1], func(): _navigate_to_tab(target), true)
-        b.custom_minimum_size.y = 59
-        b.clip_text = true
-        b.add_theme_font_size_override("font_size", 12)
-        b.add_theme_constant_override("h_separation", 3)
-        tab_buttons[target] = b
+        var target: String = item[1]
+        var title: String = item[0]
+        var button = _button(row, "", func(): _navigate_to_tab(target), true)
+        button.name = "NavTab_" + target
+        button.tooltip_text = title
+        button.custom_minimum_size = Vector2(0, 66)
+        button.focus_mode = Control.FOCUS_ALL
+        # A full-width tap target contains a centered icon and Russian label.
+        var content = VBoxContainer.new()
+        content.name = "NavContent"
+        content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        content.alignment = BoxContainer.ALIGNMENT_CENTER
+        content.add_theme_constant_override("separation", 2)
+        button.add_child(content)
+        content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+        var icon = TextureRect.new()
+        icon.name = "NavIcon_" + target
+        icon.texture = NAV_TEXTURES[target]
+        icon.custom_minimum_size = Vector2(27, 27)
+        icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+        icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+        icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+        icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        content.add_child(icon)
+        var caption = Label.new()
+        caption.name = "NavLabel_" + target
+        caption.text = title
+        caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+        caption.clip_text = true
+        caption.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+        caption.add_theme_font_size_override("font_size", 11)
+        caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        content.add_child(caption)
+        tab_buttons[target] = button
+        nav_icons[target] = icon
+        nav_labels[target] = caption
     _update_tabs()
 
 func _update_tabs() -> void:
     for key in tab_buttons:
-        var b: Button = tab_buttons[key]
+        var button: Button = tab_buttons[key]
         var active = key == tab or (key == "profile" and tab == "settings")
-        var box_style = StyleBoxFlat.new()
-        box_style.bg_color = NAV_ACTIVE if active else CARD_BG
+        var style = StyleBoxFlat.new()
+        style.bg_color = NAV_ACTIVE if active else CARD_BG
         if HIGH_CONTRAST and active:
-            box_style.border_color = SOFT_GOLD
-            box_style.set_border_width_all(2)
-        box_style.set_corner_radius_all(14)
+            style.border_color = SOFT_GOLD
+            style.set_border_width_all(2)
+        style.set_corner_radius_all(14)
         for state in ["normal", "hover", "pressed"]:
-            b.add_theme_stylebox_override(state, box_style)
-        var color = WHITE if active else MUTED
+            button.add_theme_stylebox_override(state, style)
+        var color = WHITE if active else (MUTED.lightened(0.12) if DARK_MODE else MUTED.darkened(0.12))
         for state in ["font_color", "font_hover_color", "font_pressed_color"]:
-            b.add_theme_color_override(state, color)
+            button.add_theme_color_override(state, color)
+        if nav_icons.has(key) and is_instance_valid(nav_icons[key]):
+            var icon: TextureRect = nav_icons[key]
+            icon.modulate = color
+        if nav_labels.has(key) and is_instance_valid(nav_labels[key]):
+            var caption: Label = nav_labels[key]
+            caption.add_theme_color_override("font_color", color)
 
 
 func _style_progress(bar: ProgressBar) -> void:
@@ -3202,7 +3245,7 @@ func _show_settings() -> void:
         _show_my_foods()
         return
     var back_to_profile = _card("Настройки приложения")
-    _label(back_to_profile, "Версия 0.7.23 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
+    _label(back_to_profile, "Версия 0.7.24 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
     _button(back_to_profile, "← К личной странице", func(): _navigate_to_tab("profile"), true)
     var card = _card("Личные настройки")
     _button(card, "Моя анкета · пересчитать норму", func(): _begin_onboarding(true), true)
