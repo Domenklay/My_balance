@@ -515,7 +515,7 @@ func import_json(raw: String, persist: bool = true) -> bool:
                 return false
             if item.has("portion_count"):
                 if not (item["portion_count"] is float or item["portion_count"] is int) or \
-                        not is_finite(float(item["portion_count"])) or float(item["portion_count"]) <= 0.0 or \
+                        not is_finite(float(item["portion_count"])) or float(item["portion_count"]) < 0.0 or \
                         float(item["portion_count"]) > 5000.0:
                     return false
             if item.has("portion_id"):

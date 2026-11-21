@@ -3590,12 +3590,17 @@ func _render_template_editor_items(holder: VBoxContainer, draft: Dictionary) -> 
         , true)
         remove.name = "TemplateEditRemove_" + str(index)
         remove.custom_minimum_size = Vector2(34, 36)
-        var amount_row = _row(content)
-        _label(amount_row, "Количество, " + str(item.get("unit", "г")), 12, MUTED)
-        var amount = _number(amount_row, float(item.get("grams", 100.0)),
+        # A horizontal label + expanding SpinBox wrapped text vertically on
+        # narrow screens and made this row several hundred pixels tall.
+        var amount_column = VBoxContainer.new()
+        amount_column.add_theme_constant_override("separation", 3)
+        content.add_child(amount_column)
+        _label(amount_column, "Количество, " + str(item.get("unit", "г")), 12, MUTED)
+        var amount = _number(amount_column, float(item.get("grams", 100.0)),
             1.0, 5000.0, 0.1)
         amount.name = "TemplateEditAmount_" + str(index)
-        amount.custom_minimum_size = Vector2(96, 42)
+        amount.custom_minimum_size = Vector2(120, 42)
+        amount.size_flags_vertical = Control.SIZE_SHRINK_CENTER
         amount.value_changed.connect(func(value: float):
             if not is_equal_approx(float(item.get("grams", 0.0)), value):
                 item["grams"] = value
