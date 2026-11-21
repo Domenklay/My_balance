@@ -1743,6 +1743,7 @@ func _show_meal_add_actions(meal_name: String) -> void:
             var row = _soft_list_row(fields)
             var name = _button(row, str(item.get("name", "Продукт")), func():
                 sheet["root"].queue_free()
+                await get_tree().process_frame
                 _quick_food_sheet(item)
             , true)
             name.clip_text = true
@@ -1767,11 +1768,11 @@ func _show_meal_add_actions(meal_name: String) -> void:
             continue
         if favorites_shown == 0:
             _label(fields, "★ Избранное", 15, TEXT_ACCENT)
-        var favorite_button = _button(fields, "★ " + str(favorite.get("name", "Продукт")),
-            func():
-                sheet["root"].queue_free()
-                _quick_food_sheet(favorite)
-            , true)
+        var favorite_button = _button(fields, "★ " + str(favorite.get("name", "Продукт")), func():
+            sheet["root"].queue_free()
+            await get_tree().process_frame
+            _quick_food_sheet(favorite)
+        , true)
         favorite_button.clip_text = true
         favorite_button.custom_minimum_size.y = 39
         favorites_shown += 1
