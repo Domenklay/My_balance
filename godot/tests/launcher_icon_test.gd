@@ -43,7 +43,7 @@ func _run() -> void:
     if cfg.get_value("preset.0.options", "package/unique_name", "") != "com.domenklay.mybalance.godot":
         _fail("Android package identifier changed unexpectedly")
         return
-    if int(cfg.get_value("preset.0.options", "version/code", 0)) != 50:
+    if int(cfg.get_value("preset.0.options", "version/code", 0)) != 51:
         _fail("Android versionCode not updated")
         return
     print("PASS LAUNCHER ICON: chosen illustration loaded and Android icon paths updated")

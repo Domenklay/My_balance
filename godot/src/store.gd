@@ -632,7 +632,10 @@ func recent_food_entries(limit: int = 6) -> Array:
             break
     return result
 
-func frequent_foods(limit: int = 8) -> Array:
+func frequent_foods(limit: int = 8, min_uses: int = 1) -> Array:
+    # Only products entered repeatedly appear in the frequent shortcuts.
+    if limit <= 0:
+        return []
     var counts: Dictionary = {}
     var last_used: Dictionary = {}
     var examples: Dictionary = {}
@@ -655,6 +658,8 @@ func frequent_foods(limit: int = 8) -> Array:
         food_index[str(food.get("id", ""))] = food
     var result: Array = []
     for id in ids:
+        if int(counts[id]) < min_uses:
+            continue
         if food_index.has(id):
             result.append(food_index[id])
         elif examples[id].get("nutrition") is Dictionary:
@@ -664,6 +669,18 @@ func frequent_foods(limit: int = 8) -> Array:
         if result.size() >= limit:
             break
     return result
+
+# Based entirely on the existing diary; no new personal history is stored.
+func food_usage_counts() -> Dictionary:
+    var counts: Dictionary = {}
+    for entry in data["entries"]:
+        if not (entry is Dictionary):
+            continue
+        var food_id: String = str(entry.get("food", ""))
+        if not food_id.is_empty():
+            counts[food_id] = int(counts.get(food_id, 0)) + 1
+    return counts
+
 
 func food_by_barcode(code: String) -> Dictionary:
     if not _is_barcode(code):

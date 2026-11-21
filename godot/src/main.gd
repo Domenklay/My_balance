@@ -3262,7 +3262,7 @@ func _food_form(parent: VBoxContainer) -> void:
     parent.add_child(favorite_only)
     var picker = _choice(parent, [])
     var category_label = _label(parent, "Категория", 13, MUTED)
-    var category = _choice(parent, ["Все", "Базовые", "Брендовые", "Мои продукты", "Избранное", "Недавние"])
+    var category = _choice(parent, ["Все", "Базовые", "Брендовые", "Мои продукты", "Избранное", "Недавние", "Частые"])
     var units_hint = _label(parent, "Количество: выбери продукт (г или мл)", 14, MUTED)
     units_hint.name = "FoodQuantityUnitHint"
     var values = _row(parent)
@@ -3340,7 +3340,7 @@ func _food_form(parent: VBoxContainer) -> void:
     quick_tabs.name = "FoodQuickFilters"
     quick_tabs.add_theme_constant_override("separation", 4)
     for option in [
-        ["Недавние", 5], ["★ Избранное", 4], ["Все", 0]
+        ["Недавние", 5], ["Частые", 6], ["★ Избранное", 4], ["Все", 0]
     ]:
         var target_index: int = int(option[1])
         var filter_button = _button(quick_tabs, str(option[0]), func():
@@ -3372,6 +3372,23 @@ func _food_form(parent: VBoxContainer) -> void:
             edit.add_theme_font_size_override("font_size", 12)
     else:
         _label(quick_lists, "Недавние продукты появятся после добавления еды.", 12, MUTED)
+    var common: Array = store.frequent_foods(3, 2)
+    if not common.is_empty():
+        _label(quick_lists, "Часто добавляю", 14, TEXT_ACCENT)
+        var common_buttons = _row(quick_lists)
+        common_buttons.name = "FrequentFoodShortcuts"
+        common_buttons.add_theme_constant_override("separation", 4)
+        for food_record in common:
+            var common_food: Dictionary = food_record
+            var common_name: String = str(common_food.get("name", "Продукт"))
+            var common_button = _button(common_buttons, common_name, func():
+                _quick_food_sheet(common_food)
+            , true)
+            common_button.name = "FrequentFood_" + str(common_food.get("id", ""))
+            common_button.tooltip_text = common_name
+            common_button.clip_text = true
+            common_button.custom_minimum_size.y = 38
+            common_button.add_theme_font_size_override("font_size", 11)
     var favorite_count = 0
     for favorite_id in store.data.get("favorites", []):
         if favorite_count >= 3:
@@ -3389,6 +3406,21 @@ func _food_form(parent: VBoxContainer) -> void:
         favorite_count += 1
     search.text_changed.connect(func(_value: String):
         quick_lists.visible = search.text.strip_edges().is_empty()
+    )
+    # One compact sorter for local results; online Open Food Facts search keeps
+    # its own result ordering and label-review workflow.
+    var sort_row = _row(parent)
+    sort_row.name = "FoodSorting"
+    sort_row.add_theme_constant_override("separation", 6)
+    _label(sort_row, "Сортировка", 12, MUTED)
+    var sort_order = _choice(sort_row, ["Подходящие", "Частые", "Название А–Я", "Ккал ↑", "Ккал ↓"])
+    sort_order.name = "FoodSortOrder"
+    sort_order.custom_minimum_size.x = 182
+    sort_row.visible = false
+    sort_order.item_selected.connect(func(index: int):
+        results_box.set_meta("sort_mode", index)
+        _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star,
+            category, results_box, meal, added_count)
     )
     # Results and portion selection are shown first. Legacy batch-add
     # controls remain accessible but are collapsed to avoid a long page.
@@ -3414,8 +3446,9 @@ func _food_form(parent: VBoxContainer) -> void:
     parent.move_child(online_results_box, 5)
     parent.move_child(quick_tabs, 6)
     parent.move_child(quick_lists, 7)
-    parent.move_child(results_box, 8)
-    parent.move_child(advanced_button, 9)
+    parent.move_child(sort_row, 8)
+    parent.move_child(results_box, 9)
+    parent.move_child(advanced_button, 10)
     parent.move_child(barcode_panel, parent.get_child_count() - 1)
     parent.move_child(barcode_divider, parent.get_child_count() - 2)
     _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star, category, results_box, meal, added_count)
@@ -3429,20 +3462,20 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
         previous_id = str(filtered[picker.selected].get("id", ""))
     filtered.clear()
     var all = store.all_foods()
-    all.sort_custom(func(a, b):
-        var a_favorite = store.is_favorite(str(a.get("id", "")))
-        var b_favorite = store.is_favorite(str(b.get("id", "")))
-        if a_favorite != b_favorite:
-            return a_favorite
-        return str(a.get("name", "")).nocasecmp_to(str(b.get("name", ""))) < 0
-    )
     var query = search.text.strip_edges().to_lower()
     if results_box != null:
         results_box.visible = not query.is_empty() or (category != null and category.selected != 0)
+        var sorting = results_box.get_parent().get_node_or_null("FoodSorting") as HBoxContainer
+        if sorting != null:
+            sorting.visible = results_box.visible
     var recent_ids: Dictionary = {}
     if category != null and category.selected == 5:
         for recent_food in store.recent_foods(20):
             recent_ids[str(recent_food.get("id", ""))] = true
+    var frequent_ids: Dictionary = {}
+    if category != null and category.selected == 6:
+        for frequent_food in store.frequent_foods(100, 2):
+            frequent_ids[str(frequent_food.get("id", ""))] = true
     var owned_ids: Dictionary = {}
     if category != null and category.selected == 3:
         for own_food in store.data["foods"]:
@@ -3471,7 +3504,20 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
                 5:
                     if not recent_ids.has(item_id):
                         continue
+                6:
+                    if not frequent_ids.has(item_id):
+                        continue
         filtered.append(item)
+    # Sorting is applied to the entire filtered set, before pagination.
+    # The selected product is restored by id, never by its old index.
+    var usage_counts: Dictionary = store.food_usage_counts()
+    var favorites_index: Dictionary = {}
+    for favorite_id in store.data.get("favorites", []):
+        favorites_index[str(favorite_id)] = true
+    var sort_mode: int = int(results_box.get_meta("sort_mode", 0)) if results_box != null else 0
+    filtered.sort_custom(func(a, b):
+        return FoodSearchScript.sort_before(a, b, query, sort_mode, usage_counts, favorites_index)
+    )
     picker.clear()
     var selection = 0
     for i in range(filtered.size()):
@@ -3490,7 +3536,7 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
     if results_box != null and meal != null and added_count != null:
         # Reset pagination only when the search/filter changes, not when
         # a product is selected or saved to the diary.
-        var search_key: String = query + "|" + str(category.selected if category != null else -1) + "|" + str(favorite_only.button_pressed)
+        var search_key: String = query + "|" + str(category.selected if category != null else -1) + "|" + str(favorite_only.button_pressed) + "|" + str(sort_mode)
         if str(results_box.get_meta("food_search_key", "")) != search_key:
             results_box.set_meta("food_search_key", search_key)
             results_box.set_meta("visible_count", 12)
