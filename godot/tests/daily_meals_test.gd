@@ -69,12 +69,28 @@ func _run() -> void:
     var lunch = _find_button(app, "+ Добавить обед")
     lunch.pressed.emit()
     await process_frame
+    if app.tab != "day" or app.selected_meal != "Обед":
+        _fail("lunch add button did not preserve the selected meal")
+        return
+    var options = app.get_node_or_null("ProductSheet")
+    if options == null or _find_button(options, "▣ Сканировать штрихкод") == null:
+        _fail("lunch sheet has no barcode scanner option")
+        return
+    var choose_search = _find_button(options, "⌕ Найти продукт")
+    if choose_search == null:
+        _fail("lunch sheet has no product search option")
+        return
+    choose_search.pressed.emit()
+    await process_frame
     if app.tab != "search" or app.selected_meal != "Обед" or app.date != "2026-11-20":
         _fail("lunch action did not open catalog for selected day")
         return
+    if not app._meal_entry_locked or app._selected_food_date() != "2026-11-20":
+        _fail("meal/date were not locked after choosing lunch")
+        return
     var meal = _find_meal_choice(app)
-    if meal == null or meal.get_item_text(meal.selected) != "Обед":
-        _fail("food catalog did not preselect lunch")
+    if meal == null or meal.get_item_text(meal.selected) != "Обед" or not meal.disabled:
+        _fail("food catalog did not lock the lunch destination")
         return
     var results = app.find_child("FoodSearchResults", true, false)
     var add_button = _find_button(results, "+") if results != null else null
