@@ -40,7 +40,7 @@ func _run() -> void:
         _fail("duplicate standalone add-food controls still shown")
         return
     var names = ["Завтрак", "Обед", "Ужин", "Перекус"]
-    var titles = ["☀ Завтрак", "Обед", "☾ Ужин", "🍎 Перекус"]
+    var titles = ["☀ Завтрак", "🍲 Обед", "🌙 Ужин", "🍎 Перекус"]
     var code = str(app.store.bundled_foods[0].get("barcode", ""))
     if code.is_empty():
         _fail("offline barcode catalog missing test food")
