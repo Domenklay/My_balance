@@ -11,6 +11,7 @@ const OnboardingMath = preload("res://src/onboarding_math.gd")
 const BarcodeScript = preload("res://src/barcode_lookup.gd")
 const AppearanceScript = preload("res://src/appearance.gd")
 const PatternScript = preload("res://src/theme_pattern.gd")
+const PlateIconScript = preload("res://src/meal_plate_icon.gd")
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
 var MINT: Color = Color("#cdebd8")
@@ -1756,9 +1757,13 @@ func _show_day() -> void:
         accent.custom_minimum_size = Vector2(4, 28)
         accent.mouse_filter = Control.MOUSE_FILTER_IGNORE
         title_row.add_child(accent)
+        if meal_name == "Обед":
+            var plate_icon = PlateIconScript.new()
+            plate_icon.set_tint(INK)
+            title_row.add_child(plate_icon)
         var meal_title = Button.new()
         meal_title.name = "MealHeader_" + str(section_index)
-        meal_title.text = str(section_info["icon"]) + " " + meal_name
+        meal_title.text = meal_name if meal_name == "Обед" else str(section_info["icon"]) + " " + meal_name
         meal_title.flat = true
         meal_title.alignment = HORIZONTAL_ALIGNMENT_LEFT
         meal_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
