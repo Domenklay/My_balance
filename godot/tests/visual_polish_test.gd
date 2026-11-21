@@ -75,12 +75,13 @@ func _run() -> void:
         if not amount.text.contains("/") or not amount.text.contains("ккал"):
             _fail("expected meal consumed/target counter on meal " + str(i))
             return
-        var correct_titles = ["🌞 Завтрак", "🍲 Обед", "🌙 Ужин", "🍎 Перекус"]
-        if heading.text != correct_titles[i]:
-            _fail("incorrect meal icon or name on card " + str(i))
+        var correct_titles = ["Завтрак", "Обед", "Ужин", "Перекус"]
+        var art = app.find_child("MealArt_" + str(i), true, false) as TextureRect
+        if heading.text != correct_titles[i] or art == null or art.texture == null:
+            _fail("meal has missing name or illustrated icon: " + str(i))
             return
-        if i == 1 and card.find_child("MealPlateIcon", true, false) != null:
-            _fail("lunch should use the same colored emoji style as the other meals")
+        if art.custom_minimum_size.x > 26 or art.size.y > 36:
+            _fail("meal illustration is not compact: " + str(i))
             return
         if amount.size.y > 43:
             _fail("counter wraps vertically on meal " + str(i))

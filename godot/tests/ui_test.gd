@@ -31,7 +31,7 @@ func _run() -> void:
     root.add_child(app)
     await process_frame
     app.store.data = app.store.default_data()
-    # This test targets the classic emoji-headed layout, not botanical art.
+    # Verify the same illustrated meal headings in the classic theme.
     app._refresh_appearance()
     app.tab = "day"
     if not app.store.save():
@@ -183,7 +183,7 @@ func _run() -> void:
     # Catalog now opens from a specific meal instead of a duplicate day panel.
     app._navigate_to_tab("day")
     await process_frame
-    var catalog_button = _find_button(app, "🍲 Обед")
+    var catalog_button = _find_button(app, "Обед")
     if catalog_button == null:
         push_error("FAILED: tapping lunch heading must be available")
         quit(1)

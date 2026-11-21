@@ -101,6 +101,8 @@ jobs:
         run: /tmp/godot --headless --path godot --script res://tests/theme_test.gd
       - name: Test six polished bottom navigation icons and theme colors
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/navigation_icons_test.gd
+      - name: Test unified meal icons and softer day card visuals
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/meal_visual_style_test.gd
       - name: Test Botanical Contrast theme, foliage and compact UI
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/botanical_theme_test.gd
       - name: Verify compact day cards, navigation, note and calorie editing

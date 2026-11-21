@@ -50,18 +50,19 @@ func _run() -> void:
     if hero.get_child_count() != 1:
         _fail("ornament must not overlap calorie totals in botanical day hero")
         return
-    var art_labels = ["🥣", "🍲", "🥗", "🍓"]
+    # Each meal has a real rounded-line icon instead of device-specific emoji.
     var colors = ["#FFF2DE", "#E9F5E9", "#E9EEFC", "#FFF0F2"]
     for i in range(4):
         var meal = app.find_child("DailyMeal_" + str(i), true, false) as PanelContainer
-        var art = app.find_child("BotanicalMealArt_" + str(i), true, false) as Label
+        var art = app.find_child("MealArt_" + str(i), true, false) as TextureRect
         var plus = app.find_child("MealQuickAdd_" + str(i), true, false) as Button
         var arrow = app.find_child("MealExpand_" + str(i), true, false) as Button
         if meal == null or art == null or plus == null or arrow == null:
             _fail("decorated meal row controls missing: " + str(i))
             return
-        if art.text != art_labels[i]:
-            _fail("incorrect food icon for meal " + str(i))
+        if art.texture == null or art.texture.get_width() < 32 or \
+                art.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+            _fail("missing or nonresponsive food icon for meal " + str(i))
             return
         if meal.get_theme_stylebox("panel").bg_color != Color(colors[i]):
             _fail("distinct colored section background missing: " + str(i))
@@ -113,7 +114,7 @@ func _run() -> void:
     if app.find_child("ThemeSwatch_botanical", true, false) == null:
         _fail("new theme not available under profile settings")
         return
-    if not _has_text(app, "Версия 0.7.24"):
+    if not _has_text(app, "Версия 0.7.25"):
         _fail("app version not shown on settings screen")
         return
     print("PASS BOTANICAL THEME: distinct cream/forest cards, corner foliage, safe compact meal actions, save and contrast")

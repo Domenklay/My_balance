@@ -5,6 +5,7 @@ on:
     paths:
       - "godot/tests/visual_snapshot.gd"
       - "godot/src/**"
+      - "godot/assets/**"
       - "godot/icon.svg"
       - "godot/project.godot"
       - ".github/workflows/godot-visual.yml"
