@@ -47,3 +47,46 @@ static func nutrients(food: Dictionary, base_amount: float) -> Dictionary:
     for key in ["kcal", "p", "f", "c"]:
         result[key] = float(food.get(key, 0.0)) * base_amount / 100.0
     return result
+
+# Restore an actual last-used amount without silently guessing the mass of a
+# spoon, piece or household cup. Entries made before 0.7.35 have no saved
+# count: reconstruct only exactly representable 0.1-step quantities.
+static func recalled_choice(options: Array, last: Dictionary) -> Dictionary:
+    var empty: Dictionary = {"index": 0, "quantity": 100.0, "restored": false}
+    if last.is_empty() or options.is_empty():
+        return empty
+    var raw_amount = last.get("grams", 0.0)
+    if not (raw_amount is int or raw_amount is float):
+        return empty
+    var amount: float = float(raw_amount)
+    if not is_finite(amount) or amount <= 0.0 or amount > 5000.0 or \
+            str(last.get("unit", "")) != str(options[0].get("unit", "")):
+        return empty
+    var fallback: Dictionary = {"index": 0, "quantity": amount, "restored": true}
+    var label: String = str(last.get("portion_label", ""))
+    if label.is_empty():
+        return fallback
+    var recorded_id: String = str(last.get("portion_id", ""))
+    for i in range(1, options.size()):
+        var option: Dictionary = options[i]
+        if str(option.get("label", "")) != label:
+            continue
+        if not recorded_id.is_empty() and recorded_id != str(option.get("id", "")):
+            continue
+        var one: float = float(option.get("amount", 0.0))
+        if not is_finite(one) or one <= 0.0:
+            continue
+        var count: float = amount / one
+        var saved_count: Variant = last.get("portion_count", 0.0)
+        if (saved_count is int or saved_count is float) and \
+                is_finite(float(saved_count)) and float(saved_count) > 0.0 and \
+                absf(float(saved_count) * one - amount) < 0.001:
+            count = float(saved_count)
+        elif absf(snappedf(count, 0.1) - count) > 0.00001:
+            # Old diary rows have no unit-count metadata. Prefer exact grams
+            # rather than rounding the remembered serving to another weight.
+            continue
+        if count >= 0.1 and count <= 5000.0 and \
+                absf(quantity_to_base(option, count) - amount) < 0.001:
+            return {"index": i, "quantity": count, "restored": true}
+    return fallback

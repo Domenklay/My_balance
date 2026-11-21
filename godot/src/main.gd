@@ -1991,7 +1991,10 @@ func _repeat_recent_in_meal(food: Dictionary, recent: Dictionary, sheet: Diction
     # opening the sheet, never the last meal stored in the old diary entry.
     var grams = float(recent.get("grams", 0))
     var portion_label = str(recent.get("portion_label", ""))
-    if store.add_food_entry(food, grams, selected_meal, _selected_food_date(), portion_label):
+    var last_count: float = float(recent.get("portion_count", 0.0))
+    var last_measure_id: String = str(recent.get("portion_id", ""))
+    if store.add_food_entry(food, grams, selected_meal, _selected_food_date(),
+            portion_label, last_count, last_measure_id):
         sheet["root"].queue_free()
         _barcode_add_success()
     else:
@@ -2413,7 +2416,11 @@ func _show_day() -> void:
                 var caption = _label(meal_row, str(f.get("name", "Продукт")) + "\n" +
                     str(entry.get("grams", 0)) + " " + str(entry.get("unit", "г")) +
                     " · " + str(roundi(store.entry_kcal(entry))) + " ккал" +
-                    (" · " + str(entry.get("portion_label", "")) if not str(entry.get("portion_label", "")).is_empty() else ""), 13)
+                    (" · " +
+                        (str(snappedf(float(entry.get("portion_count", 0.0)), 0.1)) + " × "
+                        if float(entry.get("portion_count", 0.0)) > 0.0 else "") +
+                        str(entry.get("portion_label", ""))
+                        if not str(entry.get("portion_label", "")).is_empty() else ""), 13)
                 caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
                 _button(meal_row, "✎", func(): _edit_entry(entry), true)
                 _button(meal_row, "×", func(): _confirm_delete("Удалить запись питания?", func():
@@ -3075,33 +3082,82 @@ func _name_meal_template_sheet(meal_name: String) -> void:
             _sheet_error(sheet, "Не удалось сохранить. Проверь название и состав.")
     )
 
-func _quick_food_sheet(food: Dictionary, from_barcode: bool = false) -> void:
+func _quick_food_sheet(food: Dictionary, from_barcode: bool = false,
+        preferred_measure: String = "") -> void:
     var unit: String = PortionMath.base_unit(food)
-    var description = "Проверь КБЖУ на упаковке (на 100 " + unit + ")." if from_barcode else "Выбери меру и количество. Свои размеры порций сохраняются."
+    var description: String = (
+        "Проверь КБЖУ на этикетке (на 100 " + unit + ")."
+        if from_barcode else "Быстрые порции · свои меры · сохранение последнего выбора."
+    )
     var sheet = _mobile_sheet("Продукт найден" if from_barcode else str(food.get("name", "Продукт")),
-        description, "Добавить" if from_barcode else "Добавить в дневник", 680.0)
+        description, "Добавить" if from_barcode else "Добавить в дневник", 675.0)
     var fields: VBoxContainer = sheet["fields"]
+    fields.add_theme_constant_override("separation", 7)
     if from_barcode or not str(food.get("image_url", "")).is_empty():
         _barcode_product_overview(fields, food, sheet["root"])
-    _label(fields, str(food.get("name", "Продукт")), 17, INK)
+    _label(fields, str(food.get("name", "Продукт")), 16, INK)
     _label(fields, str(roundi(float(food.get("kcal", 0)))) + " ккал / 100 " + unit +
         " · Б " + str(food.get("p", 0)) + " Ж " + str(food.get("f", 0)) +
         " У " + str(food.get("c", 0)), 12, MUTED)
-    _label(fields, "Единица измерения", 14, MUTED)
+
     var options: Array = store.portion_options(food)
+    var last: Dictionary = store.last_food_portion(food)
+    var recalled: Dictionary = PortionMath.recalled_choice(options, last)
+    var selected_index: int = int(recalled["index"])
+    var initial_quantity: float = float(recalled["quantity"])
+    if not preferred_measure.is_empty():
+        for i in range(1, options.size()):
+            if str(options[i].get("label", "")) == preferred_measure:
+                selected_index = i
+                initial_quantity = 1.0
+                break
+    if not last.is_empty() and preferred_measure.is_empty():
+        var last_amount: String = str(snappedf(float(last["grams"]), 0.1)) + " " + unit
+        var previous_text: String = "В прошлый раз: " + last_amount
+        if selected_index > 0:
+            previous_text = ("В прошлый раз: " + str(snappedf(initial_quantity, 0.1)) +
+                " × " + str(options[selected_index]["label"]) + " · " + last_amount)
+        var last_label = _label(fields, previous_text, 12, TEXT_ACCENT)
+        last_label.name = "QuickLastPortion"
+
+    _label(fields, "Мера", 13, MUTED)
     var labels: Array = []
     for option in options:
-        var caption = str(option["label"])
+        var caption: String = str(option["label"])
         if not str(option["id"]).is_empty():
             caption += " · " + str(snappedf(float(option["amount"]), 0.1)) + " " + unit
         labels.append(caption)
-    var measure = _choice(fields, labels)
-    _label(fields, "Количество", 14, MUTED)
-    var quantity = _number(fields, 100.0, 0.1, 5000.0, 0.1)
+    var measure: OptionButton = _choice(fields, labels)
+    measure.name = "QuickPortionMeasure"
+    measure.select(selected_index)
+
+    _label(fields, "Количество", 13, MUTED)
+    var quantity: SpinBox = _number(fields, initial_quantity, 0.1, 5000.0, 0.1)
+    quantity.name = "QuickPortionQuantity"
     var presets = _row(fields)
-    for amount in [50, 100, 150, 200]:
-        var value: int = amount
-        _button(presets, str(value) + " " + unit, func(): quantity.value = value, true)
+    presets.name = "QuickPortionPresets"
+    presets.add_theme_constant_override("separation", 4)
+    var preset_values: Array = [50.0, 100.0, 150.0, 200.0]
+    var preset_buttons: Array = []
+    for i in range(4):
+        var slot: int = i
+        var preset: Button = _button(presets, "", func():
+            quantity.value = float(preset_values[slot])
+        , true)
+        preset.name = "QuickPortionPreset_" + str(i)
+        preset.custom_minimum_size = Vector2(0, 40)
+        preset.add_theme_font_size_override("font_size", 12)
+        preset_buttons.append(preset)
+    var show_presets = func():
+        var is_weight: bool = measure.selected == 0
+        var values: Array = [50.0, 100.0, 150.0, 200.0] if is_weight else [0.5, 1.0, 2.0, 3.0]
+        var captions: Array = [] if is_weight else ["½", "1", "2", "3"]
+        for i in range(4):
+            preset_values[i] = values[i]
+            preset_buttons[i].text = (
+                str(roundi(float(values[i]))) + " " + unit if is_weight else str(captions[i])
+            )
+    show_presets.call()
     var package_size: float = BarcodeScript.package_amount(food)
     if package_size > 0.0:
         var package_button = _button(fields,
@@ -3109,17 +3165,12 @@ func _quick_food_sheet(food: Dictionary, from_barcode: bool = false) -> void:
             func():
                 measure.select(0)
                 quantity.value = package_size
-                presets.visible = true
+                show_presets.call()
         , true)
         package_button.name = "QuickPackagePortion"
-    var result_label = _label(fields, "", 14, TEXT_ACCENT)
-    _label(fields, "Приём пищи", 14, MUTED)
-    var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
-    meal.disabled = _meal_entry_locked
-    var initial_meal = ["Завтрак", "Обед", "Перекус", "Ужин"].find(selected_meal)
-    if initial_meal >= 0:
-        meal.select(initial_meal)
-    meal.item_selected.connect(func(index: int): selected_meal = meal.get_item_text(index))
+
+    var result_label = _label(fields, "", 15, TEXT_ACCENT)
+    result_label.name = "QuickPortionPreview"
     var amount_value = func() -> float:
         if measure.selected < 0 or measure.selected >= options.size():
             return 0.0
@@ -3128,7 +3179,7 @@ func _quick_food_sheet(food: Dictionary, from_barcode: bool = false) -> void:
         var total: float = float(amount_value.call())
         var calculated: Dictionary = PortionMath.nutrients(food, total)
         if calculated.is_empty():
-            result_label.text = "Количество должно быть не более 5000 " + unit + "."
+            result_label.text = "Слишком большая порция. Максимум — 5000 " + unit + "."
             return
         result_label.text = (
             str(snappedf(total, 0.1)) + " " + unit + " · " +
@@ -3139,27 +3190,66 @@ func _quick_food_sheet(food: Dictionary, from_barcode: bool = false) -> void:
         )
     measure.item_selected.connect(func(index: int):
         quantity.value = 100.0 if index == 0 else 1.0
-        presets.visible = index == 0
+        show_presets.call()
         refresh.call(quantity.value)
     )
     quantity.value_changed.connect(refresh)
     refresh.call(quantity.value)
-    _label(fields, "Своя мера для этого продукта", 14, TEXT_ACCENT)
-    _label(fields, "Например: шт., ломтик, баночка, упаковка. Укажи вес или объём с этикетки.", 12, MUTED)
-    var custom = _text_input(fields, "Название меры (например, 1 упаковка)")
+
+    _label(fields, "Приём пищи", 13, MUTED)
+    var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
+    meal.name = "QuickPortionMeal"
+    meal.disabled = _meal_entry_locked
+    var initial_meal = ["Завтрак", "Обед", "Перекус", "Ужин"].find(selected_meal)
+    if initial_meal >= 0:
+        meal.select(initial_meal)
+    meal.item_selected.connect(func(index: int): selected_meal = meal.get_item_text(index))
+
+    # The custom measure editor is collapsed; saving a measure opens the
+    # selected new measure directly with count 1 instead of resetting to 100 g.
+    var custom_toggle: Button = _button(fields, "▾ Своя мера: шт., ложка, стакан", Callable(), true)
+    custom_toggle.name = "QuickCustomPortionToggle"
+    custom_toggle.custom_minimum_size.y = 40
+    var custom_fields = VBoxContainer.new()
+    custom_fields.name = "QuickCustomPortionFields"
+    custom_fields.add_theme_constant_override("separation", 6)
+    custom_fields.visible = false
+    fields.add_child(custom_fields)
+    custom_toggle.pressed.connect(func():
+        custom_fields.visible = not custom_fields.visible
+        custom_toggle.text = ("▴ Свернуть свои меры" if custom_fields.visible else
+            "▾ Своя мера: шт., ложка, стакан")
+    )
+    _label(custom_fields, "Выбери название или напиши своё", 12, MUTED)
+    var templates = _choice(custom_fields, [
+        "Своя мера", "1 шт.", "1 ч. л.", "1 ст. л.",
+        "1 стакан", "1 чашка", "1 ломтик", "1 упаковка"
+    ])
+    templates.name = "QuickCustomMeasureTemplates"
+    var custom: LineEdit = _text_input(custom_fields, "Название меры (например, 1 упаковка)")
+    custom.name = "QuickCustomMeasureLabel"
     custom.max_length = 36
-    _label(fields, "Количество " + unit + " в одной мере", 12, MUTED)
-    var custom_amount = _number(fields, 100.0, 0.1, 5000.0, 0.1)
-    _button(fields, "Сохранить свою меру", func():
-        if store.save_food_portion(str(food.get("id", "")), custom.text, custom_amount.value):
+    templates.item_selected.connect(func(index: int):
+        if index > 0:
+            custom.text = templates.get_item_text(index)
+    )
+    _label(custom_fields, "Сколько " + unit + " в одной мере?", 12, MUTED)
+    var custom_amount: SpinBox = _number(custom_fields, 100.0, 0.1, 5000.0, 0.1)
+    custom_amount.name = "QuickCustomMeasureAmount"
+    _label(custom_fields, "Укажи вес или объём с упаковки либо по измерению. " +
+        "Массу ложки, штуки и стакана приложение не угадывает.", 11, MUTED)
+    var save_measure = _button(custom_fields, "Сохранить меру", func():
+        var title: String = custom.text.strip_edges()
+        if store.save_food_portion(str(food.get("id", "")), title, custom_amount.value):
             sheet["root"].queue_free()
-            _quick_food_sheet(food, from_barcode)
+            _quick_food_sheet(food, from_barcode, title)
             _notify_saved("Мера сохранена")
         else:
-            _sheet_error(sheet, "Не удалось сохранить меру. Проверь название, количество и дубликаты.")
+            _sheet_error(sheet, "Не удалось сохранить меру. Проверь название, вес и дубликаты.")
     , true)
+    save_measure.name = "QuickCustomMeasureSave"
     if options.size() > 1:
-        _button(fields, "Удалить выбранную меру", func():
+        _button(custom_fields, "Удалить выбранную меру", func():
             if measure.selected <= 0:
                 _sheet_error(sheet, "Сначала выбери сохранённую меру.")
                 return
@@ -3167,18 +3257,22 @@ func _quick_food_sheet(food: Dictionary, from_barcode: bool = false) -> void:
             if store.delete_food_portion(str(option["id"])):
                 sheet["root"].queue_free()
                 _quick_food_sheet(food, from_barcode)
-                _notify_saved("Мера удалена")
+                _notify_saved("Мера удалена, старые записи сохранены")
             else:
                 _sheet_error(sheet, "Не удалось удалить меру.")
         , true)
+
     var confirm: Button = sheet["confirm"]
     confirm.pressed.connect(func():
         var total: float = float(amount_value.call())
-        if total <= 0.0:
+        if total <= 0.0 or measure.selected < 0 or measure.selected >= options.size():
             _sheet_error(sheet, "Допускается не более 5000 " + unit + " за запись.")
             return
-        var portion_label = "" if measure.selected == 0 else str(options[measure.selected]["label"])
-        if store.add_food_entry(food, total, meal.get_item_text(meal.selected), _selected_food_date(), portion_label):
+        var portion_label: String = "" if measure.selected == 0 else str(options[measure.selected]["label"])
+        var measure_id: String = "" if measure.selected == 0 else str(options[measure.selected]["id"])
+        var count: float = quantity.value if measure.selected > 0 else 0.0
+        if store.add_food_entry(food, total, meal.get_item_text(meal.selected),
+                _selected_food_date(), portion_label, count, measure_id):
             sheet["root"].queue_free()
             if from_barcode:
                 _barcode_add_success()
@@ -3641,6 +3735,8 @@ func _edit_entry(entry: Dictionary) -> void:
         entry["grams"] = grams.value
         entry["unit"] = PortionMath.base_unit(product)
         entry["portion_label"] = ""
+        entry.erase("portion_count")
+        entry.erase("portion_id")
         entry["meal"] = meals[meal.selected]
         if not store.save():
             entry.clear()

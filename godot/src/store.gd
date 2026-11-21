@@ -544,6 +544,16 @@ func import_json(raw: String, persist: bool = true) -> bool:
             return false
         if str(entry.get("portion_label", "")).length() > 36:
             return false
+        # 0.7.35 adds optional serving count and measure id. Legacy JSON
+        # backups omit both and remain valid; malformed new values are rejected.
+        if entry.has("portion_count"):
+            var count = entry["portion_count"]
+            if not (count is float or count is int) or \
+                    not is_finite(float(count)) or float(count) <= 0.0 or float(count) > 5000.0:
+                return false
+        if entry.has("portion_id"):
+            if not (entry["portion_id"] is String) or str(entry["portion_id"]).length() > 100:
+                return false
     var original_data = data
     data = obj
     if persist and not save():
@@ -626,7 +636,9 @@ func recent_food_entries(limit: int = 6) -> Array:
             "unit": str(entry.get("unit", PortionMath.base_unit(food))),
             "portion_label": str(entry.get("portion_label", "")),
             "date": str(entry.get("date", "")),
-            "meal": str(entry.get("meal", ""))
+            "meal": str(entry.get("meal", "")),
+            "portion_count": entry.get("portion_count", 0.0),
+            "portion_id": str(entry.get("portion_id", ""))
         })
         if result.size() >= limit:
             break
@@ -825,10 +837,14 @@ func delete_saved_record(collection: String, record: Dictionary) -> bool:
     return false
 
 func add_food_entry(food: Dictionary, grams: float, meal: String, day: String,
-        portion_label: String = "") -> bool:
+        portion_label: String = "", portion_count: float = 0.0,
+        portion_id: String = "") -> bool:
     if food.is_empty() or not is_finite(grams) or grams <= 0.0 or grams > 5000.0:
         return false
     if meal not in ["Завтрак", "Обед", "Перекус", "Ужин"] or portion_label.length() > 36:
+        return false
+    if not is_finite(portion_count) or portion_count < 0.0 or portion_count > 5000.0 or \
+            portion_id.length() > 100 or (portion_count == 0.0 and not portion_id.is_empty()):
         return false
     var base_unit: String = PortionMath.base_unit(food)
     var entry = {
@@ -848,6 +864,9 @@ func add_food_entry(food: Dictionary, grams: float, meal: String, day: String,
         "portion_label": portion_label,
         "meal": meal
     }
+    if portion_count > 0.0:
+        entry["portion_count"] = portion_count
+        entry["portion_id"] = portion_id
     data["entries"].append(entry)
     if not save():
         data["entries"].erase(entry)
@@ -1047,6 +1066,30 @@ func delete_meal_template(template_id: String) -> bool:
 
 func portion_options(food: Dictionary) -> Array:
     return PortionMath.options(food, data["food_portions"])
+
+# Last recorded serving per food id: computed from the diary so upgrades
+# restore old entries automatically, without a parallel per-food cache.
+func last_food_portion(food: Dictionary) -> Dictionary:
+    var food_id: String = str(food.get("id", ""))
+    if food_id.is_empty():
+        return {}
+    var unit: String = PortionMath.base_unit(food)
+    for i in range(data["entries"].size() - 1, -1, -1):
+        var entry: Dictionary = data["entries"][i]
+        if str(entry.get("food", "")) != food_id or \
+                str(entry.get("unit", "г")) != unit:
+            continue
+        var amount: float = float(entry.get("grams", 0.0))
+        if not is_finite(amount) or amount <= 0.0 or amount > 5000.0:
+            continue
+        return {
+            "grams": amount, "unit": unit,
+            "portion_label": str(entry.get("portion_label", "")),
+            "portion_count": entry.get("portion_count", 0.0),
+            "portion_id": str(entry.get("portion_id", ""))
+        }
+    return {}
+
 
 func save_food_portion(food_id: String, label: String, amount: float) -> bool:
     var food: Dictionary = food_by_id(food_id)
