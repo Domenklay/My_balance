@@ -277,10 +277,10 @@ func _ready() -> void:
     header_panel.name = "AppHeader"
     var head_style = StyleBoxFlat.new()
     head_style.bg_color = HEADER_BG
-    head_style.content_margin_left = 21
-    head_style.content_margin_right = 19
-    head_style.content_margin_top = 8
-    head_style.content_margin_bottom = 8
+    head_style.content_margin_left = 16
+    head_style.content_margin_right = 16
+    head_style.content_margin_top = 6
+    head_style.content_margin_bottom = 6
     header_panel.add_theme_stylebox_override("panel", head_style)
     shell.add_child(header_panel)
     header_pattern = PatternScript.new()
@@ -294,16 +294,18 @@ func _ready() -> void:
     brand.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     brand.add_theme_constant_override("separation", 3)
     heading.add_child(brand)
-    header_title = _label(brand, "Мой баланс", 21, WHITE)
-    header_subtitle = _label(brand, "Забота о себе каждый день", 12, HEADER_MUTED)
+    header_title = _label(brand, "Мой баланс", 20, WHITE)
+    header_subtitle = _label(brand, "Забота о себе каждый день", 10, HEADER_MUTED)
     emblem_panel = PanelContainer.new()
-    emblem_panel.custom_minimum_size = Vector2(38, 38)
+    emblem_panel.custom_minimum_size = Vector2(42, 42)
+    emblem_panel.size_flags_horizontal = Control.SIZE_SHRINK_END
+    emblem_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
     var logo_style = StyleBoxFlat.new()
     logo_style.bg_color = LOGO_BG
-    logo_style.set_corner_radius_all(15)
-    logo_style.content_margin_left = 11
-    logo_style.content_margin_right = 11
-    logo_style.content_margin_top = 7
+    logo_style.set_corner_radius_all(13)
+    logo_style.content_margin_left = 5
+    logo_style.content_margin_right = 5
+    logo_style.content_margin_top = 5
     logo_style.content_margin_bottom = 5
     emblem_panel.add_theme_stylebox_override("panel", logo_style)
     heading.add_child(emblem_panel)
@@ -609,7 +611,7 @@ func _card(title: String, variant: String = "plain") -> VBoxContainer:
     style.content_margin_bottom = 17
     panel.add_theme_stylebox_override("panel", style)
     body.add_child(panel)
-    if PATTERNS and variant in ["hero", "tint"]:
+    if PATTERNS and variant in ["hero", "tint"] and tab != "day":
         var ornament = PatternScript.new()
         ornament.mouse_filter = Control.MOUSE_FILTER_IGNORE
         ornament.configure(PATTERN_STYLE, PATTERN_COLOR, true, 0.13 if variant == "hero" else 0.07)
@@ -654,7 +656,7 @@ func _compact_macro(parent: Node, name: String, value: float,
     style.content_margin_bottom = 5
     panel.add_theme_stylebox_override("panel", style)
     parent.add_child(panel)
-    var label = _label(panel, name + " " + str(roundi(value)) + " г", 12, foreground)
+    var label = _label(panel, name + " " + str(roundi(value)) + " г", 11, foreground)
     label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     label.autowrap_mode = TextServer.AUTOWRAP_OFF
     label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -877,7 +879,14 @@ func _render(reset_position: bool = false) -> void:
     var current_serial = _render_serial
     _update_tabs()
     if is_instance_valid(header_subtitle):
-        header_subtitle.visible = tab != "day"
+        header_subtitle.visible = true
+    # Botanical texture belongs on the wallpaper, not behind nutrition values.
+    if is_instance_valid(wallpaper_pattern):
+        wallpaper_pattern.configure(PATTERN_STYLE, PATTERN_COLOR, PATTERNS,
+            0.055 if tab == "day" else (0.11 if DARK_MODE else 0.09))
+    if is_instance_valid(header_pattern):
+        header_pattern.configure(PATTERN_STYLE, PATTERN_COLOR,
+            PATTERNS and tab != "day", 0.065)
     body.add_theme_constant_override("separation", 7 if tab == "day" else 9)
     for child in body.get_children():
         body.remove_child(child)
@@ -1704,9 +1713,9 @@ func _show_day() -> void:
     hero_content.add_child(ring)
     var macros = _row(hero)
     macros.add_theme_constant_override("separation", 5)
-    _compact_macro(macros, "Б", store.day_macro(date, "p"), PROTEIN_BG, MACRO_PROTEIN)
-    _compact_macro(macros, "Ж", store.day_macro(date, "f"), FAT_BG, MACRO_FAT)
-    _compact_macro(macros, "У", store.day_macro(date, "c"), CARBS_BG, MACRO_CARBS)
+    _compact_macro(macros, "Белки", store.day_macro(date, "p"), PROTEIN_BG, MACRO_PROTEIN)
+    _compact_macro(macros, "Жиры", store.day_macro(date, "f"), FAT_BG, MACRO_FAT)
+    _compact_macro(macros, "Углеводы", store.day_macro(date, "c"), CARBS_BG, MACRO_CARBS)
 
     # Compact sections are always present. Only the selected meal unfolds.
     # Expansion state is in-memory, keyed by date: diary records are untouched.
@@ -1736,66 +1745,76 @@ func _show_day() -> void:
         meal_card.get_parent().name = "DailyMeal_" + str(section_index)
         if section_index == 0:
             diary_food_card = meal_card
+        # One-row meal summary: tap its title or + to select a product,
+        # tap chevron to open editing, nutrients and saved meal templates.
         var title_row = _row(meal_card)
-        title_row.add_theme_constant_override("separation", 6)
+        title_row.name = "MealCompactRow_" + str(section_index)
+        title_row.add_theme_constant_override("separation", 4)
+        var accent = ColorRect.new()
+        accent.name = "MealAccent_" + str(section_index)
+        accent.color = Color(str(section_info["accent"]))
+        accent.custom_minimum_size = Vector2(4, 28)
+        accent.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        title_row.add_child(accent)
         var meal_title = Button.new()
         meal_title.name = "MealHeader_" + str(section_index)
         meal_title.text = str(section_info["icon"]) + " " + meal_name
         meal_title.flat = true
         meal_title.alignment = HORIZONTAL_ALIGNMENT_LEFT
         meal_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        meal_title.custom_minimum_size.y = 30
+        meal_title.size_flags_stretch_ratio = 1.2
+        meal_title.custom_minimum_size.y = 38
         meal_title.clip_text = true
-        meal_title.add_theme_font_size_override("font_size", 16)
+        meal_title.add_theme_font_size_override("font_size", 15)
         for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
             meal_title.add_theme_color_override(state, INK)
         meal_title.pressed.connect(func(): _show_meal_add_actions(meal_name))
         title_row.add_child(meal_title)
-        var count_label = _label(title_row, str(roundi(meal_kcal)) + " ккал · " +
-            str(meals_for_day.size()) + " продуктов", 12, TEXT_ACCENT)
-        count_label.custom_minimum_size.x = 146
+        var count_caption = (
+            str(roundi(meal_kcal)) + " / " + str(roundi(meal_target)) + " ккал"
+            if share > 0 else str(roundi(meal_kcal)) + " ккал"
+        )
+        var count_label = _label(title_row, count_caption, 12, TEXT_ACCENT)
+        count_label.name = "MealCalorieSummary_" + str(section_index)
+        count_label.custom_minimum_size.x = 100
         count_label.size_flags_horizontal = Control.SIZE_SHRINK_END
         count_label.autowrap_mode = TextServer.AUTOWRAP_OFF
         count_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
         count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-        if share > 0:
-            _label(meal_card, "Ориентир: " + str(roundi(meal_target)) + " ккал (" +
-                str(share) + "% в сутки)", 12, MUTED)
-            if meal_kcal > meal_target:
-                _label(meal_card, "Превышение: +" +
-                    str(roundi(meal_kcal - meal_target)) + " ккал", 12, ACCENT)
+        count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+        var add_button = _button(title_row, "+", func(): _show_meal_add_actions(meal_name), true)
+        add_button.name = "MealQuickAdd_" + str(section_index)
+        add_button.tooltip_text = "Добавить продукт в " + meal_name.to_lower()
+        add_button.custom_minimum_size = Vector2(37, 38)
+        add_button.add_theme_font_size_override("font_size", 21)
+        var expand_button = _button(title_row, "⌃" if expanded else "⌄", func():
+            _expanded_meals[section_key] = not expanded
+            _render()
+        , true)
+        expand_button.name = "MealExpand_" + str(section_index)
+        expand_button.tooltip_text = "Свернуть" if expanded else "Подробнее"
+        expand_button.custom_minimum_size = Vector2(37, 38)
+        expand_button.add_theme_font_size_override("font_size", 19)
+        if meal_kcal > 0 and share > 0:
             var meal_bar = ProgressBar.new()
             meal_bar.name = "MealProgress_" + str(section_index)
-            meal_bar.visible = meal_kcal > 0.0
             meal_bar.min_value = 0.0
             meal_bar.max_value = maxf(1.0, meal_target)
             meal_bar.value = minf(meal_kcal, meal_bar.max_value)
             _style_progress(meal_bar)
-            meal_bar.custom_minimum_size.y = 5
+            meal_bar.custom_minimum_size.y = 4
             var meal_fill = StyleBoxFlat.new()
             meal_fill.bg_color = Color("#E0705D") if meal_kcal > meal_target else section_info["accent"]
             meal_fill.set_corner_radius_all(8)
             meal_bar.add_theme_stylebox_override("fill", meal_fill)
             meal_card.add_child(meal_bar)
-        else:
-            _label(meal_card, "Без отдельного ориентира", 12, MUTED)
-            if meal_kcal > 0:
-                _label(meal_card, "Учтено " + str(roundi(meal_kcal)) +
-                    " ккал без установленной доли", 12, TEXT_ACCENT)
-        var controls = _row(meal_card)
-        controls.add_theme_constant_override("separation", 6)
-        var expand_button = _button(controls, "▴ Свернуть" if expanded else "▾ Подробнее", func():
-            _expanded_meals[section_key] = not expanded
-            _render()
-        , true)
-        expand_button.custom_minimum_size.y = 35
-        expand_button.add_theme_font_size_override("font_size", 12)
-        var add_button = _button(controls, "+ Добавить " + meal_name.to_lower(),
-            func(): _show_meal_add_actions(meal_name), true)
-        add_button.custom_minimum_size.y = 35
-        add_button.add_theme_font_size_override("font_size", 12)
+        if meal_kcal > meal_target and share > 0:
+            _label(meal_card, "Превышение: +" +
+                str(roundi(meal_kcal - meal_target)) + " ккал", 12, ACCENT)
         if not expanded:
             continue
+        _label(meal_card, str(meals_for_day.size()) + " продуктов · " +
+            str(share) + "% дневной цели", 12, MUTED)
         var macro_line = (
             "БЕЛКИ " + str(snappedf(float(meal_stats["p"]), 0.1)) + " г · " +
             "ЖИРЫ " + str(snappedf(float(meal_stats["f"]), 0.1)) + " г · " +
