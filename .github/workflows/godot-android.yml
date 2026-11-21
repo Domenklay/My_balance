@@ -123,6 +123,8 @@ jobs:
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/calorie_goal_edit_test.gd
       - name: Test profile weight goal and quick navigation actions
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/profile_dashboard_test.gd
+      - name: Test v0.7.39 three-month reports, previous-period comparisons and full weight trend
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/stats_0739_test.gd
       - name: Test week/month stats, accurate averages, month boundaries and charts
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/stats_dashboard_0728_test.gd
       - name: Test optional weekly graph and weight widgets, migrations and preferences

@@ -18,7 +18,7 @@ func set_palette(line: Color, grid: Color, text: Color, accent: Color, area: Col
     HALO = halo
     queue_redraw()
 
-func set_points(weight_entries: Array, target: float) -> void:
+func set_points(weight_entries: Array, target: float, max_points: int = 30) -> void:
     goal = target
     samples = []
     for item in weight_entries:
@@ -27,8 +27,9 @@ func set_points(weight_entries: Array, target: float) -> void:
             if val >= 20.0 and val <= 400.0:
                 samples.append({"date": str(item["date"]), "value": val})
     samples.sort_custom(func(a, b): return str(a["date"]) < str(b["date"]))
-    if samples.size() > 30:
-        samples = samples.slice(samples.size() - 30)
+    var limit: int = clampi(max_points, 1, 120)
+    if samples.size() > limit:
+        samples = samples.slice(samples.size() - limit)
     queue_redraw()
 
 func _date_label(iso_date: String) -> String:
@@ -74,9 +75,19 @@ func _draw() -> void:
         draw_dashed_line(Vector2(left, goal_y), Vector2(right, goal_y), GOLD, 1.4, 5.0)
     var positions = PackedVector2Array()
     var count = samples.size()
+    # X coordinates follow the actual calendar dates. Sparse weigh-ins must
+    # not be displayed at equally spaced distances as daily measurements.
+    var first_stamp: float = float(Time.get_unix_time_from_datetime_string(
+        str(samples[0]["date"]) + "T12:00:00"))
+    var last_stamp: float = float(Time.get_unix_time_from_datetime_string(
+        str(samples[count - 1]["date"]) + "T12:00:00"))
+    var time_span: float = maxf(1.0, last_stamp - first_stamp)
     for i in range(count):
-        var x = (left + right) * 0.5 if count == 1 else lerpf(left, right, float(i) / float(count - 1))
-        var y = lerpf(bottom, top, (float(samples[i]["value"]) - minimum) / range_y)
+        var stamp: float = float(Time.get_unix_time_from_datetime_string(
+            str(samples[i]["date"]) + "T12:00:00"))
+        var x: float = ((left + right) * 0.5 if count == 1 else
+            lerpf(left, right, clampf((stamp - first_stamp) / time_span, 0.0, 1.0)))
+        var y: float = lerpf(bottom, top, (float(samples[i]["value"]) - minimum) / range_y)
         positions.append(Vector2(x, y))
     if positions.size() > 1:
         # A subtle area under the curve creates an easier-to-read trend.

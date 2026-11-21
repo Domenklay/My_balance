@@ -31,7 +31,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.38"
+const APP_VERSION = "0.7.39"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -4098,7 +4098,7 @@ func _edit_weight_entry(weight_record: Dictionary) -> void:
 
 
 func _set_stats_period(mode: String) -> void:
-    if mode not in ["week", "month"]:
+    if mode not in ["week", "month", "quarter"]:
         return
     if stats_anchor.is_empty():
         stats_anchor = date
@@ -4109,8 +4109,9 @@ func _set_stats_period(mode: String) -> void:
 func _shift_stats_period(amount: int) -> void:
     if stats_anchor.is_empty():
         stats_anchor = date
-    if stats_period == "month":
-        var month = _month_offset(stats_anchor.substr(0, 7), amount)
+    if stats_period in ["month", "quarter"]:
+        var delta_months: int = amount * (3 if stats_period == "quarter" else 1)
+        var month = StatsMathScript.shifted_month(stats_anchor.substr(0, 7), delta_months)
         var next_first = _month_offset(month, 1) + "-01"
         var last_day = store.change_date(next_first, -1)
         var preferred = mini(int(stats_anchor.substr(8, 2)), int(last_day.substr(8, 2)))
@@ -4131,6 +4132,8 @@ func _show_stats() -> void:
     if stats_anchor.is_empty():
         stats_anchor = date
     var report: Dictionary = StatsMathScript.summarize(store, stats_anchor, stats_period)
+    var previous_anchor: String = StatsMathScript.previous_anchor(store, stats_anchor, stats_period)
+    var previous_report: Dictionary = StatsMathScript.summarize(store, previous_anchor, stats_period)
     var card = _card("", "overview")
     card.get_parent().name = "StatsPeriodCard"
     _compact_card(card, 12, 8)
@@ -4138,7 +4141,7 @@ func _show_stats() -> void:
     var period_buttons = _row(card)
     period_buttons.name = "StatsPeriodSelector"
     period_buttons.add_theme_constant_override("separation", 6)
-    for option in [["Неделя", "week"], ["Месяц", "month"]]:
+    for option in [["Неделя", "week"], ["Месяц", "month"], ["3 месяца", "quarter"]]:
         var selected_mode: String = str(option[1])
         var button = _button(period_buttons, str(option[0]),
             func(): _set_stats_period(selected_mode), true)
@@ -4152,13 +4155,6 @@ func _show_stats() -> void:
             for style_name in ["normal", "hover", "pressed"]:
                 button.add_theme_stylebox_override(style_name, selected_style)
             button.add_theme_color_override("font_color", WHITE)
-    var jump_current = _button(period_buttons, "Сейчас", func():
-        stats_anchor = Time.get_date_string_from_system()
-        _render(true)
-    , true)
-    jump_current.name = "StatsCurrentPeriod"
-    jump_current.custom_minimum_size.y = 38
-    jump_current.add_theme_font_size_override("font_size", 12)
     var navigator = _row(card)
     navigator.name = "StatsDateNavigation"
     navigator.add_theme_constant_override("separation", 6)
@@ -4168,12 +4164,23 @@ func _show_stats() -> void:
     var period_label = _label(navigator,
         StatsMathScript.label_for(report["dates"], stats_period), 14, TEXT_ACCENT)
     period_label.name = "StatsPeriodDates"
+    period_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+    period_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+    period_label.add_theme_font_size_override("font_size", 12 if stats_period == "quarter" else 13)
     period_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     period_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     period_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     var following = _button(navigator, "▶", func(): _shift_stats_period(1), true)
     following.name = "StatsNextPeriod"
     following.custom_minimum_size = Vector2(42, 38)
+    var jump_current = _button(navigator, "Сейчас", func():
+        stats_anchor = Time.get_date_string_from_system()
+        _render(true)
+    , true)
+    jump_current.name = "StatsCurrentPeriod"
+    jump_current.custom_minimum_size = Vector2(66, 38)
+    jump_current.size_flags_horizontal = Control.SIZE_SHRINK_END
+    jump_current.add_theme_font_size_override("font_size", 11)
     var metrics = _row(card)
     metrics.add_theme_constant_override("separation", 5)
     var average = "—" if int(report["recorded"]) == 0 else (
@@ -4185,6 +4192,20 @@ func _show_stats() -> void:
     var stats_explanation = _label(card,
         "Среднее по дням с питанием, пустые дни не считаются.", 12, MUTED)
     stats_explanation.name = "StatsMethodNote"
+    var previous_days: int = int(previous_report["recorded"])
+    var current_days: int = int(report["recorded"])
+    var compare_text: String = ""
+    if current_days > 0 and previous_days > 0:
+        var delta_kcal: float = float(report["avg_kcal"]) - float(previous_report["avg_kcal"])
+        compare_text = ("К прошлому периоду: " +
+            ("+" if delta_kcal > 0 else "") + str(roundi(delta_kcal)) +
+            " ккал/заполненный день. Дней с питанием: " +
+            str(current_days) + " и " + str(previous_days) + ".")
+    else:
+        compare_text = ("Сравнение с прошлым периодом: нужны записи питания " +
+            "в обоих периодах (" + str(current_days) + " и " + str(previous_days) + " дн.).")
+    var compare_label = _label(card, compare_text, 12, TEXT_ACCENT)
+    compare_label.name = "StatsPreviousComparison"
     # One visualization at a time: larger readable graphs, shorter page.
     var tabrow = _row(card)
     tabrow.name = "StatsSectionSelector"
@@ -4221,6 +4242,17 @@ func _show_stats() -> void:
                 TEXT_ACCENT, ACCENT, MUTED, CHART_GRID)
             _label(movement, "Зелёный — ходьба · оранжевый — тренировки · Сеансов: " +
                 str(int(report["workouts"])), 12, contrast_text)
+            if int(report["walking"]) + int(report["exercise"]) +
+                    int(previous_report["walking"]) + int(previous_report["exercise"]) > 0:
+                var walk_change: int = int(report["walking"]) - int(previous_report["walking"])
+                var exercise_change: int = int(report["exercise"]) - int(previous_report["exercise"])
+                var activity_compare = _label(movement,
+                    "К прошлому периоду: ходьба " +
+                    ("+" if walk_change > 0 else "") + str(walk_change) +
+                    " мин · тренировки " +
+                    ("+" if exercise_change > 0 else "") + str(exercise_change) + " мин",
+                    12, contrast_text)
+                activity_compare.name = "StatsActivityComparison"
         "weight":
             var weight = _card("Динамика веса")
             weight.get_parent().name = "StatsWeightCard"
@@ -4239,14 +4271,17 @@ func _show_stats() -> void:
             weight_graph.name = "StatsWeightGraph"
             weight_graph.custom_minimum_size.y = 235
             weight_graph.set_palette(TEXT_ACCENT, CHART_GRID, MUTED, ACCENT, CHART_AREA, SECONDARY)
-            weight_graph.set_points(report["weights"], float(store.data["settings"]["goal"]))
+            weight_graph.set_points(report["weights"], float(store.data["settings"]["goal"]),
+                120 if stats_period == "quarter" else 30)
             weight.add_child(weight_graph)
         _:
             var calories = _card("Калории и БЖУ", "tint")
             calories.get_parent().name = "StatsCalorieCard"
             _compact_card(calories, 12, 8)
-            _label(calories, "По дням" if stats_period == "week" else
-                "Средние калории по календарным неделям", 12, MUTED)
+            var calorie_group_hint: String = ("По дням" if stats_period == "week"
+                else ("Средние калории по календарным неделям" if stats_period == "month"
+                else "Средние калории по месяцам (только заполненные дни)"))
+            _label(calories, calorie_group_hint, 12, MUTED)
             var kcal_chart = StatsChartScript.new()
             kcal_chart.name = "StatsCalorieChart"
             kcal_chart.custom_minimum_size.y = 190

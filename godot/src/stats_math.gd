@@ -2,18 +2,37 @@ extends RefCounted
 
 # Read-only period aggregates. Empty days never contribute to mean calories.
 # Nutrition is taken from stored entry snapshots, preserving historical edits.
+static func shifted_month(month: String, amount: int) -> String:
+    var index: int = int(month.substr(0, 4)) * 12 + int(month.substr(5, 2)) - 1 + amount
+    var year: int = floori(float(index) / 12.0)
+    var month_number: int = posmod(index, 12) + 1
+    return str(year) + "-" + str(month_number).pad_zeros(2)
+
+
+# Matching full calendar periods. For multi-month reports the comparison is
+# the preceding three complete calendar months, not a rolling 90-day guess.
+static func previous_anchor(store, anchor: String, mode: String) -> String:
+    if mode == "week":
+        return store.change_date(anchor, -7)
+    return shifted_month(anchor.substr(0, 7), -3 if mode == "quarter" else -1) + "-15"
+
+
 static func dates_for(store, anchor: String, mode: String) -> Array:
     if mode == "week":
         return store.week_dates(anchor)
     var month: String = anchor.substr(0, 7)
-    var first: String = month + "-01"
-    var unix: int = int(Time.get_unix_time_from_datetime_string(first + "T12:00:00"))
+    var first_month: String = shifted_month(month, -2) if mode == "quarter" else month
+    var after_last_month: String = shifted_month(month, 1)
+    var unix: int = int(Time.get_unix_time_from_datetime_string(first_month + "-01T12:00:00"))
     var days: Array = []
-    for offset in range(31):
-        var date: String = Time.get_date_string_from_unix_time(unix + offset * 86400)
-        if not date.begins_with(month):
+    for offset in range(100 if mode == "quarter" else 31):
+        var day: String = Time.get_date_string_from_unix_time(unix + offset * 86400)
+        if mode == "quarter":
+            if day.substr(0, 7) == after_last_month:
+                break
+        elif not day.begins_with(month):
             break
-        days.append(date)
+        days.append(day)
     return days
 
 static func summarize(store, anchor: String, mode: String) -> Dictionary:
@@ -83,6 +102,34 @@ static func summarize(store, anchor: String, mode: String) -> Dictionary:
                 "exercise": int(value["exercise"]),
                 "activity": int(value["activities"]) > 0
             })
+    elif mode == "quarter":
+        # Exactly three full calendar months; each bar uses the mean of days
+        # with entries, so empty days cannot appear as zero-calorie readings.
+        var month_groups: Array = []
+        for value in calendar:
+            var month_key: String = str(value["date"]).substr(0, 7)
+            if month_groups.is_empty() or str(month_groups[month_groups.size() - 1]["month"]) != month_key:
+                month_groups.append({
+                    "month": month_key, "total": 0.0, "logged": 0,
+                    "walk": 0, "exercise": 0, "activity": 0
+                })
+            var group: Dictionary = month_groups[month_groups.size() - 1]
+            if int(value["entries"]) > 0:
+                group["logged"] += 1
+                group["total"] += float(value["kcal"])
+            group["walk"] += int(value["walk"])
+            group["exercise"] += int(value["exercise"])
+            group["activity"] += int(value["activities"])
+        for group in month_groups:
+            columns.append({
+                "label": str(group["month"]).substr(5, 2) + "." +
+                    str(group["month"]).substr(2, 2),
+                "kcal": (float(group["total"]) / float(group["logged"])
+                    if int(group["logged"]) > 0 else 0.0),
+                "recorded": int(group["logged"]) > 0,
+                "walk": int(group["walk"]), "exercise": int(group["exercise"]),
+                "activity": int(group["activity"]) > 0
+            })
     else:
         # Calendar Monday–Sunday weeks, clipped to this calendar month.
         var first_weekday: int = int(Time.get_datetime_dict_from_datetime_string(
@@ -138,6 +185,10 @@ static func summarize(store, anchor: String, mode: String) -> Dictionary:
 static func label_for(dates: Array, mode: String) -> String:
     if dates.is_empty():
         return "Период"
+    if mode == "quarter":
+        return str(dates[0]).substr(5, 2) + "." + str(dates[0]).substr(0, 4) + \
+            " – " + str(dates[dates.size() - 1]).substr(5, 2) +
+            "." + str(dates[dates.size() - 1]).substr(0, 4)
     if mode == "month":
         var year: String = str(dates[0]).substr(0, 4)
         var month: String = str(dates[0]).substr(5, 2)
