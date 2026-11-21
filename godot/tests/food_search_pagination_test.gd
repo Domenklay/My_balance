@@ -84,10 +84,10 @@ func _run() -> void:
             str(added[0].get("meal", "")) != "Обед":
         _fail("third page added the wrong product or changed the chosen meal")
         return
-    search.text = "листопродукт 2"
+    search.text = "листопродукт 20"
     search.text_changed.emit(search.text)
     await process_frame
-    if _row_count(results) != 10 or results.find_child("FoodLoadMore", true, false) != null:
+    if _row_count(results) != 1 or results.find_child("FoodLoadMore", true, false) != null:
         _fail("new query should reset pagination and show only matching items")
         return
     search.text = "несуществующий тестовый продукт 123"
