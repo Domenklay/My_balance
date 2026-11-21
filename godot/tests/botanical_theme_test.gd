@@ -73,6 +73,9 @@ func _run() -> void:
     if not _has_text(activity, "Прогулки:"):
         _fail("activity information obscured by art")
         return
+    if activity.find_child("BotanicalActivityLandscape", true, false) == null:
+        _fail("mountain scene not shown behind botanical activity card")
+        return
     var add = app.find_child("MealQuickAdd_1", true, false) as Button
     add.pressed.emit()
     await process_frame
