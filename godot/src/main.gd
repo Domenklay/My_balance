@@ -31,7 +31,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.40"
+const APP_VERSION = "0.7.41"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -2464,7 +2464,7 @@ func _show_day() -> void:
     _compact_macro(macros, "Белки", store.day_macro(date, "p"), PROTEIN_BG, MACRO_PROTEIN)
     _compact_macro(macros, "Жиры", store.day_macro(date, "f"), FAT_BG, MACRO_FAT)
     _compact_macro(macros, "Углеводы", store.day_macro(date, "c"), CARBS_BG, MACRO_CARBS)
-    var day_tools_toggle = _button(hero, "⋯ Быстрые действия с днём" +
+    var day_tools_toggle = _button(hero, "⋯ Действия с днём" +
         (" ▴" if day_tools_expanded else " ▾"), func():
             day_tools_expanded = not day_tools_expanded
             _render()
@@ -2473,7 +2473,10 @@ func _show_day() -> void:
     day_tools_toggle.custom_minimum_size.y = 36
     day_tools_toggle.add_theme_font_size_override("font_size", 12)
     if day_tools_expanded:
-        var day_tool_buttons = _row(hero)
+        var small_screen: bool = get_viewport_rect().size.x < 390.0
+        var day_tool_buttons: BoxContainer = (
+            VBoxContainer.new() if small_screen else HBoxContainer.new())
+        hero.add_child(day_tool_buttons)
         day_tool_buttons.name = "DayToolsActions"
         day_tool_buttons.add_theme_constant_override("separation", 5)
         var copy_button = _button(day_tool_buttons, "↻ Копировать день",
@@ -2486,6 +2489,12 @@ func _show_day() -> void:
         templates_button.name = "DayTemplatesOpen"
         templates_button.custom_minimum_size.y = 39
         templates_button.add_theme_font_size_override("font_size", 12)
+        if store.can_undo_day_copy(date):
+            var undo = _button(hero, "↶ Отменить копирование",
+                func(): _request_undo_day_copy(), true)
+            undo.name = "DayCopyUndo"
+            undo.custom_minimum_size.y = 39
+            undo.add_theme_font_size_override("font_size", 12)
 
     # Compact sections are always present. Only the selected meal unfolds.
     # Expansion state is in-memory, keyed by date: diary records are untouched.
@@ -3300,6 +3309,73 @@ func _request_catalog_update() -> void:
 
 # Summary uses the historical nutrient snapshot; editing a catalog food or
 # deleting an original recipe must never affect copied or saved diary entries.
+func _request_undo_day_copy() -> void:
+    if not store.can_undo_day_copy(date):
+        _message("Этот день уже изменён или копирования для отмены нет.")
+        return
+    _confirm_action("Отменить последнее копирование?",
+        "Вернуть питание до копирования? Спорт, заметки и вес сохранятся.",
+        func():
+            if store.undo_day_copy():
+                _render()
+                _notify_saved("Питание восстановлено")
+            else:
+                _message("Не удалось отменить: записи изменились.")
+        , "Отменить копирование")
+
+
+func _render_copy_calendar(holder: VBoxContainer, state: Dictionary,
+        field: LineEdit, destination: String) -> void:
+    for child in holder.get_children():
+        holder.remove_child(child)
+        child.queue_free()
+    var month: String = str(state["month"])
+    var navigation = _row(holder)
+    var prev = _button(navigation, "‹", func():
+        state["month"] = _month_offset(str(state["month"]), -1)
+        _render_copy_calendar(holder, state, field, destination)
+    , true)
+    prev.custom_minimum_size = Vector2(38, 38)
+    var caption = _label(navigation, month, 15, TEXT_ACCENT)
+    caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    var next = _button(navigation, "›", func():
+        state["month"] = _month_offset(str(state["month"]), 1)
+        _render_copy_calendar(holder, state, field, destination)
+    , true)
+    next.custom_minimum_size = Vector2(38, 38)
+    var grid = GridContainer.new()
+    grid.name = "DayCopyCalendarGrid"
+    grid.columns = 7
+    grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    grid.add_theme_constant_override("h_separation", 2)
+    grid.add_theme_constant_override("v_separation", 2)
+    holder.add_child(grid)
+    for weekday in ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]:
+        var heading = _label(grid, weekday, 11, MUTED)
+        heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    var first_info = Time.get_datetime_dict_from_datetime_string(month + "-01T12:00:00", true)
+    var padding: int = (int(first_info.get("weekday", 1)) + 6) % 7
+    for _i in range(padding):
+        _label(grid, "")
+    var end_stamp: int = int(Time.get_unix_time_from_datetime_string(
+        _month_offset(month, 1) + "-01T12:00:00")) - 86400
+    var last_day: int = int(Time.get_datetime_dict_from_unix_time(end_stamp).get("day", 28))
+    for d in range(1, last_day + 1):
+        var candidate: String = month + "-" + str(d).pad_zeros(2)
+        var logged: bool = not store.day_entries(candidate).is_empty()
+        var pick = _button(grid, str(d) + ("•" if logged else ""), func():
+            field.text = candidate
+            field.text_changed.emit(candidate)
+        , true)
+        pick.name = "DayCopyCalendar_" + candidate
+        pick.custom_minimum_size = Vector2(33, 37)
+        pick.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        pick.add_theme_font_size_override("font_size", 11)
+        pick.disabled = not logged or candidate == destination
+    _label(holder, "• — день с питанием; пустые даты недоступны.", 11, MUTED)
+
+
 func _day_food_summary(chosen_date: String) -> Dictionary:
     var result: Dictionary = {"count": 0, "kcal": 0.0, "p": 0.0, "f": 0.0, "c": 0.0}
     for entry in store.day_entries(chosen_date):
@@ -3329,8 +3405,22 @@ func _copy_day_sheet() -> void:
             source.text = store.change_date(destination, offset)
             source.text_changed.emit(source.text)
         , true)
+    var calendar = VBoxContainer.new()
+    calendar.name = "DayCopyCalendar"
+    calendar.visible = false
+    calendar.add_theme_constant_override("separation", 4)
+    var cursor: Dictionary = {"month": source_default.substr(0, 7)}
+    var calendar_toggle = _button(fields, "▦ Выбрать дату в календаре", func():
+        calendar.visible = not calendar.visible
+        if calendar.visible:
+            _render_copy_calendar(calendar, cursor, source, destination)
+    , true)
+    calendar_toggle.name = "DayCopyCalendarToggle"
+    calendar_toggle.custom_minimum_size.y = 38
+    fields.add_child(calendar)
     _label(fields, "Что делать с питанием выбранного дня", 13, MUTED)
-    var mode = _choice(fields, ["Добавить к существующим", "Заменить питание"])
+    var mode = _choice(fields, [
+        "Добавить без совпадений", "Заменить питание", "Добавить всё, включая повторы"])
     mode.name = "DayCopyMode"
     var preview = _label(fields, "", 13, TEXT_ACCENT)
     preview.name = "DayCopyPreview"
@@ -3339,19 +3429,29 @@ func _copy_day_sheet() -> void:
         if not StoreScript.valid_diary_date(from_date) or from_date == destination:
             preview.text = "Укажи другую существующую календарную дату."
             return
-        var summary: Dictionary = _day_food_summary(from_date)
-        var count: int = int(summary["count"])
-        if count == 0:
+        var plan: Dictionary = store.day_copy_plan(
+            from_date, destination, mode.selected == 1, mode.selected == 0)
+        var candidates: Array = plan["entries"]
+        if int(plan["source_count"]) == 0:
             preview.text = "На выбранную дату нет записей питания."
             return
-        var existing_count: int = store.day_entries(destination).size()
-        preview.text = (str(count) + " продуктов · " +
-            str(roundi(float(summary["kcal"]))) + " ккал" +
-            "\nБ " + str(snappedf(float(summary["p"]), 0.1)) +
-            " · Ж " + str(snappedf(float(summary["f"]), 0.1)) +
-            " · У " + str(snappedf(float(summary["c"]), 0.1)) +
-            "\nНа " + destination + ": " + str(existing_count) + " записей. " +
-            ("Они будут заменены." if mode.selected == 1 else "Новые записи добавятся."))
+        var amounts: Dictionary = {"kcal": 0.0, "p": 0.0, "f": 0.0, "c": 0.0}
+        for record in candidates:
+            var original_food: Dictionary = store.entry_food(record)
+            var ratio: float = float(record.get("grams", 0)) / 100.0
+            for key in ["kcal", "p", "f", "c"]:
+                amounts[key] = float(amounts[key]) + float(original_food.get(key, 0)) * ratio
+        var final_kcal: float = float(amounts["kcal"]) + \
+            (0.0 if mode.selected == 1 else store.day_calories(destination))
+        preview.text = (str(candidates.size()) + " из " + str(plan["source_count"]) +
+            " записей · " + str(roundi(float(amounts["kcal"]))) + " ккал" +
+            "\nБ " + str(snappedf(float(amounts["p"]), 0.1)) +
+            " · Ж " + str(snappedf(float(amounts["f"]), 0.1)) +
+            " · У " + str(snappedf(float(amounts["c"]), 0.1)) +
+            "\nВсего после копирования: " + str(roundi(final_kcal)) + " ккал." +
+            (" Совпадений: " + str(plan["duplicates"]) + "."
+                if int(plan["duplicates"]) > 0 else "") +
+            (" Всё уже добавлено." if candidates.is_empty() else ""))
     source.text_changed.connect(func(_txt: String): refresh.call())
     mode.item_selected.connect(func(_index: int): refresh.call())
     refresh.call()
@@ -3361,19 +3461,23 @@ func _copy_day_sheet() -> void:
         if not StoreScript.valid_diary_date(from_date) or from_date == destination:
             _sheet_error(sheet, "Выбери корректную дату, отличную от текущей.")
             return
-        var source_count: int = store.day_entries(from_date).size()
-        if source_count == 0:
-            _sheet_error(sheet, "В выбранный день нет записей питания.")
-            return
         var replace_existing: bool = mode.selected == 1
+        var skip_matches: bool = mode.selected == 0
+        var plan: Dictionary = store.day_copy_plan(
+            from_date, destination, replace_existing, skip_matches)
+        var count_to_copy: int = plan["entries"].size()
+        if count_to_copy == 0:
+            _sheet_error(sheet, "Нет новых записей для копирования.")
+            return
         var old_count: int = store.day_entries(destination).size()
-        var explanation: String = ("Добавить " + str(source_count) +
+        var explanation: String = ("Добавить " + str(count_to_copy) +
             " записей из " + from_date + " в " + destination + "?"
             if not replace_existing else
-            "Заменить " + str(old_count) + " существующих записей питания " +
-            "на " + str(source_count) + " из " + from_date + "?")
+            "Заменить " + str(old_count) + " записей питания " +
+            "на " + str(count_to_copy) + " из " + from_date + "?")
         _confirm_day_copy(explanation, replace_existing, func():
-            var copied: int = store.copy_day(from_date, destination, replace_existing)
+            var copied: int = store.copy_day(
+                from_date, destination, replace_existing, skip_matches)
             if copied > 0:
                 sheet["root"].queue_free()
                 _render()
@@ -4870,11 +4974,12 @@ func _confirm_restore_json(raw: String, source: String) -> void:
     confirmation.canceled.connect(func(): confirmation.queue_free())
     confirmation.popup_centered(Vector2i(365, 210))
 
-func _confirm_action(title: String, description: String, action: Callable) -> void:
+func _confirm_action(title: String, description: String, action: Callable,
+        confirm_label: String = "Повторить") -> void:
     var dialog = ConfirmationDialog.new()
     dialog.title = title
     dialog.dialog_text = description
-    dialog.ok_button_text = "Повторить"
+    dialog.ok_button_text = confirm_label
     add_child(dialog)
     dialog.confirmed.connect(func(): action.call(); dialog.queue_free())
     dialog.canceled.connect(func(): dialog.queue_free())
