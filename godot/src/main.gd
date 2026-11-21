@@ -2256,6 +2256,7 @@ func _on_barcode_scan_error(reason: String) -> void:
     if _meal_entry_locked and not is_instance_valid(barcode_message):
         var chosen = selected_meal
         _open_meal_catalog(chosen)
+    _reveal_barcode_section()
     _barcode_message("Не удалось открыть сканер: " + reason + ". Введи код вручную.")
 
 func _on_barcode_scan_cancelled() -> void:
