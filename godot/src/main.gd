@@ -2085,7 +2085,7 @@ func _lookup_online_products(raw_terms: String) -> void:
         child.queue_free()
     online_search_label.text = "Ищем «" + query + "» в Open Food Facts…"
     var headers = PackedStringArray([
-        "User-Agent: MyBalance/0.7.23 (+https://github.com/Domenklay/My_balance)",
+        "User-Agent: MyBalance/0.7.31 (+https://github.com/Domenklay/My_balance)",
         "Accept: application/json"
     ])
     if search_http.request(url, headers, HTTPClient.METHOD_GET) != OK:
@@ -2682,7 +2682,7 @@ func _lookup_barcode(raw: String) -> void:
     pending_barcode = code
     _barcode_message("Поиск товара " + code + " в Open Food Facts…")
     var headers = PackedStringArray([
-        "User-Agent: MyBalance/0.5.7 (+https://github.com/Domenklay/My_balance)",
+        "User-Agent: MyBalance/0.7.31 (+https://github.com/Domenklay/My_balance)",
         "Accept: application/json"
     ])
     var error = barcode_http.request(BarcodeScript.product_url(code), headers, HTTPClient.METHOD_GET)
@@ -2841,6 +2841,7 @@ func _barcode_product_overview(parent: Node, product: Dictionary, sheet_root: No
     var http = HTTPRequest.new()
     http.name = "BarcodeImageRequest"
     http.body_size_limit = 800000
+    http.max_redirects = 0
     http.timeout = 8.0
     sheet_root.add_child(http)
     http.request_completed.connect(func(result: int, status: int,
@@ -3875,7 +3876,7 @@ func _show_settings() -> void:
         _show_my_foods()
         return
     var back_to_profile = _card("Настройки приложения")
-    _label(back_to_profile, "Версия 0.7.30 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
+    _label(back_to_profile, "Версия 0.7.31 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
     _button(back_to_profile, "← К личной странице", func(): _navigate_to_tab("profile"), true)
     var card = _card("Личные настройки")
     _button(card, "Моя анкета · пересчитать норму", func(): _begin_onboarding(true), true)
