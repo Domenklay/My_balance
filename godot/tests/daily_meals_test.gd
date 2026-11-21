@@ -93,11 +93,18 @@ func _run() -> void:
         _fail("food catalog did not lock the lunch destination")
         return
     var results = app.find_child("FoodSearchResults", true, false)
-    var add_button = _find_button(results, "+") if results != null else null
+    var add_button = _find_button(results, "＋ Порция") if results != null else null
     if add_button == null:
-        _fail("food catalog has no add button")
+        _fail("food catalog has no portion action")
         return
     add_button.pressed.emit()
+    await process_frame
+    var chooser = app.get_node_or_null("ProductSheet")
+    var confirm = chooser.find_child("ProductSheetConfirm", true, false) as Button if chooser != null else null
+    if chooser == null or confirm == null or not app.store.day_entries("2026-11-20").is_empty():
+        _fail("catalog wrote a food record without portion confirmation")
+        return
+    confirm.pressed.emit()
     await process_frame
     var saved = app.store.day_entries("2026-11-20")
     if saved.size() != 1 or str(saved[0]["meal"]) != "Обед":
