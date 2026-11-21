@@ -2123,7 +2123,7 @@ func _show_online_search_results(records: Array) -> void:
         old.queue_free()
     if records.is_empty():
         online_results_box.visible = false
-        online_search_label.text = "Продукты с полными КБЖУ не найдены. Попробуй другое название."
+        online_search_label.text = "Товары не найдены. Попробуй название или бренд."
         return
     online_results_box.visible = true
     online_search_label.text = "Найдено " + str(records.size()) + \
@@ -2136,10 +2136,20 @@ func _show_online_search_results(records: Array) -> void:
         row.add_child(info)
         var name_label = _label(info, str(product.get("name", "Продукт")), 12, INK)
         name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-        _label(info, str(roundi(float(product.get("kcal", 0)))) +
-            " ккал / 100 " + PortionMath.base_unit(product) + " · Б " +
-            str(product.get("p", 0)) + " Ж " + str(product.get("f", 0)) +
-            " У " + str(product.get("c", 0)), 11, MUTED)
+        var details: String = str(product.get("brand", ""))
+        var package_text: String = str(product.get("quantity", "")).strip_edges()
+        if not package_text.is_empty():
+            details += (" · " if not details.is_empty() else "") + package_text
+        if not details.is_empty():
+            _label(info, details, 11, MUTED)
+        var review: String = BarcodeScript.nutrition_review_label(product)
+        if not product.get("missing_fields", []).is_empty():
+            _label(info, review, 11, ACCENT)
+        else:
+            _label(info, str(roundi(float(product.get("kcal", 0)))) +
+                " ккал / 100 " + PortionMath.base_unit(product) + " · Б " +
+                str(product.get("p", 0)) + " Ж " + str(product.get("f", 0)) +
+                " У " + str(product.get("c", 0)), 11, MUTED)
         var choose = _button(row, "Выбрать", func():
             _confirm_barcode_product(product)
         , true)
@@ -2706,8 +2716,10 @@ func _on_barcode_http_completed(result: int, response_code: int, _headers: Packe
     _confirm_barcode_product(outcome)
 
 func _manual_barcode_product(code: String) -> Dictionary:
-    return {"barcode": code, "name": "", "kcal": 0.0,
-        "p": 0.0, "f": 0.0, "c": 0.0, "source": "Пользователь"}
+    return {"barcode": code, "name": "", "kcal": -1.0,
+        "p": -1.0, "f": -1.0, "c": -1.0,
+        "missing_fields": ["kcal", "p", "f", "c"],
+        "source": "Пользователь", "nutrition_unit": "г"}
 
 func _mobile_sheet(title: String, description: String, accept_label: String, requested_height: float = 530.0) -> Dictionary:
     # Draw a real in-app card rather than a native dark ConfirmationDialog.
@@ -3068,6 +3080,8 @@ func _quick_food_sheet(food: Dictionary, from_barcode: bool = false) -> void:
     var sheet = _mobile_sheet("Продукт найден" if from_barcode else str(food.get("name", "Продукт")),
         description, "Добавить" if from_barcode else "Добавить в дневник", 680.0)
     var fields: VBoxContainer = sheet["fields"]
+    if from_barcode or not str(food.get("image_url", "")).is_empty():
+        _barcode_product_overview(fields, food, sheet["root"])
     _label(fields, str(food.get("name", "Продукт")), 17, INK)
     _label(fields, str(roundi(float(food.get("kcal", 0)))) + " ккал / 100 " + unit +
         " · Б " + str(food.get("p", 0)) + " Ж " + str(food.get("f", 0)) +
@@ -3087,6 +3101,16 @@ func _quick_food_sheet(food: Dictionary, from_barcode: bool = false) -> void:
     for amount in [50, 100, 150, 200]:
         var value: int = amount
         _button(presets, str(value) + " " + unit, func(): quantity.value = value, true)
+    var package_size: float = BarcodeScript.package_amount(food)
+    if package_size > 0.0:
+        var package_button = _button(fields,
+            "Вся упаковка · " + str(snappedf(package_size, 0.1)) + " " + unit,
+            func():
+                measure.select(0)
+                quantity.value = package_size
+                presets.visible = true
+        , true)
+        package_button.name = "QuickPackagePortion"
     var result_label = _label(fields, "", 14, TEXT_ACCENT)
     _label(fields, "Приём пищи", 14, MUTED)
     var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
