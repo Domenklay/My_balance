@@ -4,6 +4,40 @@ extends RefCounted
 const OFF_BASE = "https://world.openfoodfacts.org/api/v2/product/"
 const OFF_FIELDS = "code,product_name,product_name_ru,brands,nutriments,quantity,nutrition_data_per"
 
+const SEARCH_BASE = "https://world.openfoodfacts.org/cgi/search.pl"
+
+# Free-text lookup is only available via the legacy OFF search endpoint.
+static func search_url(terms: String) -> String:
+    var query = terms.strip_edges()
+    if query.length() < 2 or query.length() > 70:
+        return ""
+    return SEARCH_BASE + "?search_terms=" + query.uri_encode() +
+        "&search_simple=1&action=process&json=1&page=1&page_size=24" +
+        "&fields=" + OFF_FIELDS
+
+static func parse_search_results(payload: Variant, limit: int = 12) -> Array:
+    var results: Array = []
+    if not (payload is Dictionary and payload.get("products") is Array):
+        return results
+    var seen: Dictionary = {}
+    for product in payload["products"]:
+        if not (product is Dictionary):
+            continue
+        var code = normalize_code(str(product.get("code", "")))
+        if code.is_empty() or seen.has(code):
+            continue
+        var parsed: Dictionary = parse_product({"status": 1, "product": product}, code)
+        if parsed.has("error"):
+            continue
+        parsed["id"] = "barcode_" + code
+        parsed["brand"] = str(product.get("brands", "")).strip_edges().substr(0, 80)
+        parsed["nutrition_unit"] = "г"
+        seen[code] = true
+        results.append(parsed)
+        if results.size() >= limit:
+            break
+    return results
+
 static func normalize_code(raw: String) -> String:
     var code = raw.strip_edges()
     if code.length() not in [8, 12, 13, 14]:
