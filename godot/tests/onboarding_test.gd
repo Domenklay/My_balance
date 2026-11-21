@@ -148,14 +148,14 @@ func _run() -> void:
         _fail("first step did not advance after valid inputs")
         return
     var preview = app.find_child("OnboardingEstimate", true, false) as Label
-    var calories = app.find_child("OnboardingCalories", true, false) as SpinBox
+    var calories = app.find_child("OnboardingCalories", true, false) as LineEdit
     var activity = app.find_child("OnboardingActivity", true, false) as OptionButton
     var target = app.find_child("OnboardingGoal", true, false) as OptionButton
     if preview == null or calories == null or activity == null or target == null:
         _fail("activity/goal/calorie result controls missing")
         return
     if not preview.text.contains("Оценка поддержания") or not preview.text.contains("1970") or \
-            absf(calories.value - 1970.0) > 1.0:
+            absf(float(calories.text) - 1970.0) > 1.0:
         _fail("88kg user's sedentary maintenance estimate did not use entered personal data")
         return
     activity.select(1)
@@ -166,10 +166,10 @@ func _run() -> void:
             not _find_summary(app, "88"):
         _fail("second step hides the age/height/weight used in calculation")
         return
-    if not preview.text.contains("Оценка поддержания") or calories.value < 1000 or calories.value > 5000:
+    if not preview.text.contains("Оценка поддержания") or float(calories.text) < 1000 or float(calories.text) > 5000:
         _fail("activity and goal did not produce live estimate")
         return
-    calories.value = 1790
+    calories.text = "1790"
     var finish = _button(app, "Сохранить и начать")
     if finish == null:
         _fail("second step has no Save button")
