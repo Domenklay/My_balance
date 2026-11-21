@@ -1820,7 +1820,7 @@ func _lookup_online_products(raw_terms: String) -> void:
         child.queue_free()
     online_search_label.text = "Ищем «" + query + "» в Open Food Facts…"
     var headers = PackedStringArray([
-        "User-Agent: MyBalance/0.7.22 (+https://github.com/Domenklay/My_balance)",
+        "User-Agent: MyBalance/0.7.23 (+https://github.com/Domenklay/My_balance)",
         "Accept: application/json"
     ])
     if search_http.request(url, headers, HTTPClient.METHOD_GET) != OK:
@@ -1872,8 +1872,8 @@ func _show_online_search_results(records: Array) -> void:
         var name_label = _label(info, str(product.get("name", "Продукт")), 12, INK)
         name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
         _label(info, str(roundi(float(product.get("kcal", 0)))) +
-            " ккал / 100 г · Б " + str(product.get("p", 0)) +
-            " Ж " + str(product.get("f", 0)) +
+            " ккал / 100 " + PortionMath.base_unit(product) + " · Б " +
+            str(product.get("p", 0)) + " Ж " + str(product.get("f", 0)) +
             " У " + str(product.get("c", 0)), 11, MUTED)
         var choose = _button(row, "Выбрать", func():
             _confirm_barcode_product(product)
@@ -2394,15 +2394,26 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
     var name = _text_input(fields, "Название продукта", str(product.get("name", "")))
     _label(fields, "Основа КБЖУ с этикетки", 13, MUTED)
     var basis = _choice(fields, ["На 100 г", "На 100 мл"])
+    basis.name = "BarcodeNutritionBasis"
     basis.select(1 if PortionMath.base_unit(product) == "мл" else 0)
-    _label(fields, "Калории • на 100 г / мл", 13, MUTED)
+    var detected_basis = str(product.get("unit_certainty", "unknown"))
+    if str(product.get("source", "")) == "Open Food Facts":
+        var basis_note = "Единица определена по упаковке. Сверь её и КБЖУ с этикеткой."
+        if detected_basis in ["serving", "unknown"]:
+            basis_note = "Основа КБЖУ не подтверждена. Выбери 100 г или 100 мл по этикетке."
+        _label(fields, basis_note, 12, ACCENT)
+    _label(fields, "Калории на 100 г или 100 мл (в зависимости от выбранной основы)", 13, MUTED)
     var kcal = _number(fields, float(product.get("kcal", 0)), 0, 1000, 0.1)
     _label(fields, "Белки • Жиры • Углеводы на 100 г", 13, MUTED)
     var nutrition_row = _row(fields)
     var protein = _number(nutrition_row, float(product.get("p", 0)), 0, 100, 0.1)
     var fat = _number(nutrition_row, float(product.get("f", 0)), 0, 100, 0.1)
     var carbs = _number(nutrition_row, float(product.get("c", 0)), 0, 100, 0.1)
-    _label(fields, "Вес порции, г", 13, MUTED)
+    var serving_basis_label = _label(fields, "Количество порции, " +
+        ("мл" if basis.selected == 1 else "г"), 13, MUTED)
+    basis.item_selected.connect(func(index: int):
+        serving_basis_label.text = "Количество порции, " + ("мл" if index == 1 else "г")
+    )
     var grams = _number(fields, 100, 1, 5000, 1)
     _label(fields, "Приём пищи", 13, MUTED)
     var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
