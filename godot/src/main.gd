@@ -12,6 +12,12 @@ const BarcodeScript = preload("res://src/barcode_lookup.gd")
 const FoodSearchScript = preload("res://src/food_search.gd")
 const AppearanceScript = preload("res://src/appearance.gd")
 const PatternScript = preload("res://src/theme_pattern.gd")
+const MEAL_TEXTURES = [
+    preload("res://assets/meals/breakfast.svg"),
+    preload("res://assets/meals/lunch.svg"),
+    preload("res://assets/meals/dinner.svg"),
+    preload("res://assets/meals/snack.svg")
+]
 const NAV_TEXTURES = {
     "day": preload("res://assets/nav/day.svg"),
     "recipes": preload("res://assets/nav/recipes.svg"),
@@ -641,10 +647,11 @@ func _card(title: String, variant: String = "plain") -> VBoxContainer:
     style.border_color = BORDER if variant == "plain" or HIGH_CONTRAST else style.bg_color
     if current_theme == "botanical":
         style.border_color = Color("#D9BF8C") if variant == "hero" else BORDER
-    style.set_border_width_all(2 if HIGH_CONTRAST or current_theme == "botanical" else 1)
-    style.shadow_color = Color(0.0, 0.0, 0.0, 0.13 if DARK_MODE else 0.08)
-    style.shadow_size = 6 if current_theme == "botanical" else (5 if variant == "hero" else 3)
-    style.shadow_offset = Vector2(0, 3)
+    style.set_border_width_all(2 if HIGH_CONTRAST else 1)
+    # Pastel cards rely on their colored stripe, not a heavy border/shadow.
+    style.shadow_color = Color(0.0, 0.0, 0.0, 0.11 if DARK_MODE else 0.065)
+    style.shadow_size = 4 if variant == "hero" else (3 if current_theme == "botanical" else 2)
+    style.shadow_offset = Vector2(0, 2)
     style.content_margin_left = 17
     style.content_margin_right = 17
     style.content_margin_top = 17
@@ -661,7 +668,7 @@ func _card(title: String, variant: String = "plain") -> VBoxContainer:
     if PATTERNS and variant == "activity" and current_theme == "botanical" and tab == "day":
         var mountain_art = PatternScript.new()
         mountain_art.name = "BotanicalActivityLandscape"
-        mountain_art.configure("hills", Color("#7ABD9B"), true, 0.20)
+        mountain_art.configure("hills", Color("#A7D9BB"), true, 0.13)
         panel.add_child(mountain_art)
     var content = VBoxContainer.new()
     content.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -684,8 +691,8 @@ func _compact_card(content: VBoxContainer, margin: int = 9, spacing: int = 5) ->
             style.content_margin_right = margin
             style.content_margin_top = margin
             style.content_margin_bottom = margin
-            style.shadow_size = 4 if current_theme == "botanical" else 2
-            style.shadow_offset = Vector2(0, 2 if current_theme == "botanical" else 1)
+            style.shadow_size = 2 if current_theme == "botanical" else 1
+            style.shadow_offset = Vector2(0, 1)
     content.add_theme_constant_override("separation", spacing)
 
 
@@ -2008,10 +2015,10 @@ func _show_day() -> void:
     # No extra standalone title card: every meal already has its own header.
     var existing = store.day_entries(date)
     var sections = [
-        {"meal":"Завтрак", "icon":"🌞", "variant":"overview", "accent":ACCENT},
-        {"meal":"Обед", "icon":"🍲", "variant":"tint", "accent":TEXT_ACCENT},
-        {"meal":"Ужин", "icon":"🌙", "variant":"activity", "accent":ACTIVITY_TEXT},
-        {"meal":"Перекус", "icon":"🍎", "variant":"plain", "accent":NAV_ACTIVE}
+        {"meal":"Завтрак", "variant":"overview", "accent":ACCENT},
+        {"meal":"Обед", "variant":"tint", "accent":TEXT_ACCENT},
+        {"meal":"Ужин", "variant":"activity", "accent":ACTIVITY_TEXT},
+        {"meal":"Перекус", "variant":"plain", "accent":NAV_ACTIVE}
     ]
     var shares: Array = store.meal_shares()
     var yesterday: String = store.change_date(date, -1)
@@ -2040,8 +2047,8 @@ func _show_day() -> void:
             ]
             var meal_style = meal_card.get_parent().get_theme_stylebox("panel") as StyleBoxFlat
             meal_style.bg_color = botanical_colors[section_index]
-            meal_style.border_color = botanical_edges[section_index].lightened(0.18)
-            meal_style.set_border_width_all(1)
+            meal_style.border_color = botanical_edges[section_index].lightened(0.43)
+            meal_style.set_border_width_all(2 if HIGH_CONTRAST else 1)
         if section_index == 0:
             diary_food_card = meal_card
         # One-row meal summary: tap its title or + to select a product,
@@ -2055,19 +2062,30 @@ func _show_day() -> void:
         accent.custom_minimum_size = Vector2(4, 28)
         accent.mouse_filter = Control.MOUSE_FILTER_IGNORE
         title_row.add_child(accent)
+        # Four matching rounded line icons replace mixed-system emoji on
+        # every theme. Keep each icon noninteractive so the meal's title and
+        # action buttons retain their original hit targets.
+        var food_art = TextureRect.new()
+        food_art.name = "MealArt_" + str(section_index)
+        food_art.texture = MEAL_TEXTURES[section_index]
+        food_art.custom_minimum_size = Vector2(24, 24)
+        food_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+        food_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+        food_art.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+        food_art.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+        food_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
         if current_theme == "botanical":
-            var food_art = Label.new()
-            food_art.text = str(["🥣", "🍲", "🥗", "🍓"][section_index])
-            food_art.name = "BotanicalMealArt_" + str(section_index)
-            food_art.add_theme_font_size_override("font_size", 23)
-            food_art.custom_minimum_size.x = 27
-            food_art.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-            food_art.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-            food_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-            title_row.add_child(food_art)
+            var icon_colors = [
+                Color("#9F6424"), Color("#2D7650"),
+                Color("#4C66AA"), Color("#AD4A6C")
+            ]
+            food_art.modulate = icon_colors[section_index]
+        else:
+            food_art.modulate = WHITE if DARK_MODE else INK
+        title_row.add_child(food_art)
         var meal_title = Button.new()
         meal_title.name = "MealHeader_" + str(section_index)
-        meal_title.text = meal_name if current_theme == "botanical" else str(section_info["icon"]) + " " + meal_name
+        meal_title.text = meal_name
         meal_title.flat = true
         meal_title.alignment = HORIZONTAL_ALIGNMENT_LEFT
         meal_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3245,7 +3263,7 @@ func _show_settings() -> void:
         _show_my_foods()
         return
     var back_to_profile = _card("Настройки приложения")
-    _label(back_to_profile, "Версия 0.7.24 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
+    _label(back_to_profile, "Версия 0.7.25 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
     _button(back_to_profile, "← К личной странице", func(): _navigate_to_tab("profile"), true)
     var card = _card("Личные настройки")
     _button(card, "Моя анкета · пересчитать норму", func(): _begin_onboarding(true), true)
