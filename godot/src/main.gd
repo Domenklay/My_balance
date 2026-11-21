@@ -1757,6 +1757,8 @@ func _show_day() -> void:
     var ring = RingScript.new()
     ring.name = "DailyCalorieRing"
     ring.custom_minimum_size = Vector2(58, 58)
+    ring.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+    ring.size_flags_horizontal = Control.SIZE_SHRINK_END
     ring.set_palette(HERO_TRACK, HERO_FILL, WHITE)
     ring.set_value(total, target)
     hero_content.add_child(ring)
