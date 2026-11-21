@@ -3412,7 +3412,11 @@ func _shift_stats_period(amount: int) -> void:
     if stats_anchor.is_empty():
         stats_anchor = date
     if stats_period == "month":
-        stats_anchor = _month_offset(stats_anchor.substr(0, 7), amount) + "-01"
+        var month = _month_offset(stats_anchor.substr(0, 7), amount)
+        var next_first = _month_offset(month, 1) + "-01"
+        var last_day = store.change_date(next_first, -1)
+        var preferred = mini(int(stats_anchor.substr(8, 2)), int(last_day.substr(8, 2)))
+        stats_anchor = month + "-" + str(preferred).pad_zeros(2)
     else:
         stats_anchor = store.change_date(stats_anchor, amount * 7)
     _render(true)
