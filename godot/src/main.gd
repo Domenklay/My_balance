@@ -111,6 +111,8 @@ var frames_expanded: bool = false
 var profile_more_expanded: bool = false
 var day_more_expanded: bool = false
 var home_widget_editor_open: bool = false
+var home_progress_view: String = "week"
+var stats_detail_tab: String = "nutrition"
 var onboarding_step: int = 0
 var onboarding_edit: bool = false
 var onboarding_draft: Dictionary = {}
@@ -1014,6 +1016,14 @@ func _date_nav(parent: Node) -> void:
         calendar_expanded = not calendar_expanded
         _render()
     , true)
+    if tab == "day":
+        var customize_button = _button(r, "⚙", func():
+            home_widget_editor_open = not home_widget_editor_open
+            _render()
+        , true)
+        customize_button.name = "HomeWidgetSettingsToggle"
+        customize_button.tooltip_text = "Настроить виджеты главной страницы"
+        customize_button.add_theme_font_size_override("font_size", 19)
 
 func _calendar(parent: Node) -> void:
     var top = _row(parent)
@@ -2146,6 +2156,42 @@ func _show_food_search() -> void:
     _food_form(catalog)
 
 
+func _show_home_widget_editor(parent: Node) -> void:
+    var area = VBoxContainer.new()
+    area.name = "HomeWidgetSettings"
+    area.add_theme_constant_override("separation", 5)
+    parent.add_child(area)
+    _label(area, "Показывать в блоке «Мой прогресс»:", 12, MUTED)
+    var enabled_widgets: Dictionary = store.home_widgets()
+    for option in [["week", "График калорий за неделю"],
+            ["weight", "Вес и достижение цели"]]:
+        var key: String = str(option[0])
+        var is_enabled: bool = bool(enabled_widgets.get(key, false))
+        var item = _button(area, ("✓  " if is_enabled else "○  ") + str(option[1]),
+            func():
+                if store.set_home_widget(key, not is_enabled):
+                    # An enabled view is never allowed to remain selected
+                    # after the user turns that specific view off.
+                    if not is_enabled:
+                        home_progress_view = key
+                    _render()
+                    _notify_saved("Виджеты главной обновлены")
+                else:
+                    _message("Не удалось сохранить настройки виджетов.")
+        , true)
+        item.name = "HomeWidgetChoice_" + key
+        item.custom_minimum_size.y = 38
+        item.alignment = HORIZONTAL_ALIGNMENT_LEFT
+        item.add_theme_font_size_override("font_size", 13)
+
+
+func _set_home_progress_view(view: String) -> void:
+    if view not in ["week", "weight"] or not bool(store.home_widgets().get(view, false)):
+        return
+    home_progress_view = view
+    _render()
+
+
 func _show_day() -> void:
     var overview = _card("", "overview")
     _compact_card(overview, 5, 2)
@@ -2163,6 +2209,8 @@ func _show_day() -> void:
                     item.custom_minimum_size.y = 38
     if calendar_expanded:
         _calendar(overview)
+    if home_widget_editor_open:
+        _show_home_widget_editor(overview)
 
     var total: float = store.day_calories(date)
     var target: float = float(store.data["settings"]["kcal"])
@@ -2431,68 +2479,97 @@ func _show_day() -> void:
         quick_link.custom_minimum_size.y = 39
         quick_link.add_theme_font_size_override("font_size", 13)
 
-    # Optional widgets start hidden for existing users. Never add a large
-    # dashboard to the compact food log until the user explicitly enables it.
+    # Both 0.7.29 preferences stay independently saved, but the diary only
+    # renders one compact graph at a time to avoid another long scroll.
     var enabled_widgets: Dictionary = store.home_widgets()
-    if bool(enabled_widgets.get("week", false)):
-        var week_data: Dictionary = StatsMathScript.summarize(store, date, "week")
-        var week_widget = _card("", "tint")
-        week_widget.get_parent().name = "HomeWeekWidget"
-        _compact_card(week_widget, 11, 6)
-        var week_header = _row(week_widget)
-        var week_label = _label(week_header, "Калории за неделю", 16, INK)
-        week_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        var stats_link = _button(week_header, "Итоги", func():
-            stats_anchor = date
-            stats_period = "week"
-            _navigate_to_tab("stats")
-        , true)
-        stats_link.name = "HomeWeekOpenStats"
-        stats_link.custom_minimum_size.y = 37
-        stats_link.size_flags_horizontal = Control.SIZE_SHRINK_END
-        var week_average = "Нет записей" if int(week_data["recorded"]) == 0 else (
-            str(roundi(float(week_data["avg_kcal"]))) + " ккал / день с питанием"
-        )
-        var week_summary = _label(week_widget,
-            week_average + " · " + str(week_data["recorded"]) + " из 7 дней", 12, MUTED)
-        week_summary.name = "HomeWeekSummary"
-        var small_chart = StatsChartScript.new()
-        small_chart.name = "HomeWeekChart"
-        small_chart.custom_minimum_size.y = 104
-        week_widget.add_child(small_chart)
-        small_chart.setup(week_data["columns"], "calories",
-            float(store.data["settings"]["kcal"]), TEXT_ACCENT, ACCENT, MUTED, CHART_GRID)
-
-    if bool(enabled_widgets.get("weight", false)):
-        var current: Dictionary = ProfileProgressScript.summarize(
-            store.data["settings"], store.data["weights"])
-        var weight_widget = _card("", "overview")
-        weight_widget.get_parent().name = "HomeWeightWidget"
-        _compact_card(weight_widget, 11, 7)
-        var weight_header = _row(weight_widget)
-        var weight_title = _label(weight_header, "Мой вес", 16, INK)
-        weight_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        var weight_link = _button(weight_header, "История веса",
-            func(): _navigate_to_tab("weight"), true)
-        weight_link.name = "HomeWeightOpenHistory"
-        weight_link.custom_minimum_size.y = 37
-        weight_link.add_theme_font_size_override("font_size", 12)
-        weight_link.size_flags_horizontal = Control.SIZE_SHRINK_END
-        var weight_numbers = _label(weight_widget,
-            str(snappedf(float(current["latest"]), 0.1)) + " кг сейчас · " +
-            str(snappedf(float(current["goal"]), 0.1)) + " кг цель", 14, TEXT_ACCENT)
-        weight_numbers.name = "HomeWeightSummary"
-        var weight_bar = ProgressBar.new()
-        weight_bar.name = "HomeWeightGoalProgress"
-        weight_bar.min_value = 0.0
-        weight_bar.max_value = 100.0
-        weight_bar.value = float(current["progress"])
-        _style_progress(weight_bar)
-        weight_bar.custom_minimum_size.y = 8
-        weight_widget.add_child(weight_bar)
-        _label(weight_widget, "Прогресс: " +
-            str(roundi(float(current["progress"]))) + "%" +
-            (" · От стартового веса" if not bool(current["has_records"]) else ""), 11, MUTED)
+    if bool(enabled_widgets.get("week", false)) or bool(enabled_widgets.get("weight", false)):
+        var visible_view: String = home_progress_view
+        if not bool(enabled_widgets.get(visible_view, false)):
+            visible_view = "week" if bool(enabled_widgets.get("week", false)) else "weight"
+        var progress_card = _card("", "tint")
+        progress_card.get_parent().name = "HomeProgressWidget"
+        _compact_card(progress_card, 11, 6)
+        var progress_head = _row(progress_card)
+        progress_head.add_theme_constant_override("separation", 7)
+        var progress_title = _label(progress_head, "Мой прогресс", 16, INK)
+        progress_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        if bool(enabled_widgets.get("week", false)) and bool(enabled_widgets.get("weight", false)):
+            var chooser = _row(progress_card)
+            chooser.name = "HomeProgressViewSelector"
+            chooser.add_theme_constant_override("separation", 6)
+            for pair in [["Калории", "week"], ["Вес", "weight"]]:
+                var view: String = str(pair[1])
+                var choice = _button(chooser, str(pair[0]), func():
+                    _set_home_progress_view(view)
+                , true)
+                choice.name = "HomeProgressView_" + view
+                choice.custom_minimum_size.y = 38
+                choice.add_theme_font_size_override("font_size", 13)
+                if view == visible_view:
+                    var selected = StyleBoxFlat.new()
+                    selected.bg_color = NAV_ACTIVE
+                    selected.set_corner_radius_all(11)
+                    for mode in ["normal", "hover", "pressed"]:
+                        choice.add_theme_stylebox_override(mode, selected)
+                    choice.add_theme_color_override("font_color", WHITE)
+        var inner = VBoxContainer.new()
+        inner.add_theme_constant_override("separation", 6)
+        progress_card.add_child(inner)
+        if visible_view == "week":
+            inner.name = "HomeWeekWidget"
+            var week_data: Dictionary = StatsMathScript.summarize(store, date, "week")
+            var week_header = _row(inner)
+            var week_title = _label(week_header, "Калории за неделю", 13, INK)
+            week_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            var stats_link = _button(week_header, "Итоги", func():
+                stats_anchor = date
+                stats_period = "week"
+                stats_detail_tab = "nutrition"
+                _navigate_to_tab("stats")
+            , true)
+            stats_link.name = "HomeWeekOpenStats"
+            stats_link.custom_minimum_size.y = 37
+            stats_link.size_flags_horizontal = Control.SIZE_SHRINK_END
+            var week_average = "Нет записей" if int(week_data["recorded"]) == 0 else (
+                str(roundi(float(week_data["avg_kcal"]))) + " ккал / день с питанием"
+            )
+            var week_summary = _label(inner,
+                week_average + " · " + str(week_data["recorded"]) + " из 7 дней", 12, MUTED)
+            week_summary.name = "HomeWeekSummary"
+            var small_chart = StatsChartScript.new()
+            small_chart.name = "HomeWeekChart"
+            small_chart.custom_minimum_size.y = 100
+            inner.add_child(small_chart)
+            small_chart.setup(week_data["columns"], "calories",
+                float(store.data["settings"]["kcal"]), TEXT_ACCENT, ACCENT, MUTED, CHART_GRID)
+        else:
+            inner.name = "HomeWeightWidget"
+            var current: Dictionary = ProfileProgressScript.summarize(
+                store.data["settings"], store.data["weights"])
+            var weight_head = _row(inner)
+            var current_label = _label(weight_head, "Вес и цель", 13, INK)
+            current_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            var weight_link = _button(weight_head, "История веса",
+                func(): _navigate_to_tab("weight"), true)
+            weight_link.name = "HomeWeightOpenHistory"
+            weight_link.custom_minimum_size.y = 37
+            weight_link.size_flags_horizontal = Control.SIZE_SHRINK_END
+            weight_link.add_theme_font_size_override("font_size", 12)
+            var weight_numbers = _label(inner,
+                str(snappedf(float(current["latest"]), 0.1)) + " кг сейчас · " +
+                str(snappedf(float(current["goal"]), 0.1)) + " кг цель", 14, TEXT_ACCENT)
+            weight_numbers.name = "HomeWeightSummary"
+            var weight_bar = ProgressBar.new()
+            weight_bar.name = "HomeWeightGoalProgress"
+            weight_bar.min_value = 0.0
+            weight_bar.max_value = 100.0
+            weight_bar.value = float(current["progress"])
+            _style_progress(weight_bar)
+            weight_bar.custom_minimum_size.y = 8
+            inner.add_child(weight_bar)
+            _label(inner, "Прогресс: " +
+                str(roundi(float(current["progress"]))) + "%" +
+                (" · От стартового веса" if not bool(current["has_records"]) else ""), 12, MUTED)
 
     # The collapsed note is a single compact row, not a tall empty card.
     var notes_card = _card("")
@@ -2537,39 +2614,6 @@ func _show_day() -> void:
         notes_card.add_child(notes)
         note_status_label = _label(notes_card, "Заметка сохраняется автоматически", 12, MUTED)
 
-    var customize = _card("")
-    customize.get_parent().name = "HomeWidgetSettings"
-    _compact_card(customize, 9, 5)
-    var options = _row(customize)
-    var caption = _label(options, "Дополнительные виджеты", 13, MUTED)
-    caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    var toggle = _button(options,
-        "Скрыть" if home_widget_editor_open else "Настроить", func():
-            home_widget_editor_open = not home_widget_editor_open
-            _render()
-    , true)
-    toggle.name = "HomeWidgetSettingsToggle"
-    toggle.custom_minimum_size.y = 37
-    toggle.size_flags_horizontal = Control.SIZE_SHRINK_END
-    toggle.add_theme_font_size_override("font_size", 12)
-    if home_widget_editor_open:
-        _label(customize, "Выбирай только полезное. Параметры сохраняются и после перезапуска.", 12, MUTED)
-        for option in [["week", "График калорий за неделю"],
-                ["weight", "Мой вес и прогресс"]]:
-            var key: String = str(option[0])
-            var chosen: bool = bool(enabled_widgets.get(key, false))
-            var text_value: String = ("✓  " if chosen else "○  ") + str(option[1])
-            var choice = _button(customize, text_value, func():
-                if store.set_home_widget(key, not chosen):
-                    _render()
-                    _notify_saved("Виджеты главной обновлены")
-                else:
-                    _message("Не удалось сохранить настройки виджетов.")
-            , true)
-            choice.name = "HomeWidgetChoice_" + key
-            choice.custom_minimum_size.y = 40
-            choice.alignment = HORIZONTAL_ALIGNMENT_LEFT
-            choice.add_theme_font_size_override("font_size", 13)
 
 func _jump_to_food() -> void:
     # Follow any pending card-rebuild and saved scroll restoration.
