@@ -87,16 +87,31 @@ func _run() -> void:
         app._render()
         await process_frame
         var kcal = app.find_child("StatsCalorieChart", true, false)
-        var activity = app.find_child("StatsActivityChart", true, false)
-        var weight = app.find_child("StatsWeightGraph", true, false)
         var period = app.find_child("StatsPeriodDates", true, false) as Label
-        if kcal == null or activity == null or weight == null or period == null:
-            _fail("stats charts or period navigation missing in " + theme)
+        if kcal == null or period == null or \
+                kcal.columns.size() != 7 or not period.text.contains("16.11"):
+            _fail("weekly nutrition chart or date range missing in " + theme)
             return
-        if kcal.columns.size() != 7 or activity.columns.size() != 7 or \
-                weight.samples.size() != 2 or not period.text.contains("16.11"):
-            _fail("wrong weekly chart data or period caption in " + theme)
+        if app.find_child("StatsActivityChart", true, false) != null or \
+                app.find_child("StatsWeightGraph", true, false) != null:
+            _fail("other charts should not lengthen the page in " + theme)
             return
+        (app.find_child("StatsSection_activity", true, false) as Button).pressed.emit()
+        await process_frame
+        var activity = app.find_child("StatsActivityChart", true, false)
+        if activity == null or activity.columns.size() != 7 or \
+                app.find_child("StatsCalorieChart", true, false) != null:
+            _fail("activity selector not working in " + theme)
+            return
+        (app.find_child("StatsSection_weight", true, false) as Button).pressed.emit()
+        await process_frame
+        var weight = app.find_child("StatsWeightGraph", true, false)
+        if weight == null or weight.samples.size() != 2 or \
+                app.find_child("StatsActivityChart", true, false) != null:
+            _fail("weight selector not working in " + theme)
+            return
+        (app.find_child("StatsSection_nutrition", true, false) as Button).pressed.emit()
+        await process_frame
     var change_mode = app.find_child("StatsPeriod_month", true, false) as Button
     if change_mode == null:
         _fail("month control missing")
@@ -104,10 +119,16 @@ func _run() -> void:
     change_mode.pressed.emit()
     await process_frame
     if app.stats_period != "month" or \
-            app.find_child("StatsCalorieChart", true, false).columns.size() != 6 or \
-            app.find_child("StatsWeightGraph", true, false).samples.size() != 3:
-        _fail("switching to monthly report did not update all charts")
+            app.find_child("StatsCalorieChart", true, false).columns.size() != 6:
+        _fail("switching to monthly report did not update nutrition chart")
         return
+    (app.find_child("StatsSection_weight", true, false) as Button).pressed.emit()
+    await process_frame
+    if app.find_child("StatsWeightGraph", true, false).samples.size() != 3:
+        _fail("monthly weight chart should cover the full month")
+        return
+    (app.find_child("StatsSection_nutrition", true, false) as Button).pressed.emit()
+    await process_frame
     var previous = app.find_child("StatsPreviousPeriod", true, false) as Button
     previous.pressed.emit()
     await process_frame
@@ -126,6 +147,6 @@ func _run() -> void:
     if app.stats_anchor != "2026-11-14" or app.date != "2026-11-21":
         _fail("moving back a week must not move the daily journal date")
         return
-    print("PASS STATS DASHBOARD: correct full calendar months, no fake zero days, macros, period charts, navigation and themes")
+    print("PASS STATS DASHBOARD: correct periods, sparse-day means, compact graph sections, themes and navigation")
     app.queue_free()
     quit(0)
