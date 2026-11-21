@@ -75,6 +75,29 @@ func _capture() -> void:
     app.store.data["notes"][app.date] = "Вечером захотелось сладкого после прогулки."
     app._render()
     await _snapshot(app, "02-day-filled-top")
+    # Dedicated reference shots for the new smart-diary actions.
+    app.date = "2026-11-20"
+    app.day_tools_expanded = true
+    app._render()
+    await _snapshot(app, "02-day-smart-tools")
+    app._copy_day_sheet()
+    await _snapshot(app, "02-day-copy-preview")
+    if app.get_node_or_null("ProductSheet") != null:
+        app.get_node("ProductSheet").queue_free()
+    await process_frame
+    app.store.data["meal_templates"].append({
+        "id":"visual_template","name":"Мой любимый завтрак",
+        "items":[{"food":"d0","meal":"Завтрак","grams":130.0,"unit":"г",
+            "nutrition":{"name":"Овсяные хлопья","kcal":370.0,"p":13.0,"f":7.0,"c":62.0}}]
+    })
+    app._meal_templates_sheet()
+    await _snapshot(app, "02-day-saved-templates")
+    if app.get_node_or_null("ProductSheet") != null:
+        app.get_node("ProductSheet").queue_free()
+    await process_frame
+    app.day_tools_expanded = false
+    app.date = "2026-11-19"
+    app._render()
     app.food_form_expanded = true
     app._render()
     await process_frame

@@ -186,7 +186,7 @@ func _run() -> void:
     templates.pressed.emit()
     await process_frame
     sheet = app.get_node_or_null("ProductSheet")
-    if sheet == null or not sheet.find_child("ProductSheetConfirm", true, false) is Button:
+    if sheet == null or not (sheet.find_child("ProductSheetConfirm", true, false) is Button):
         _fail("empty templates menu missing or unclosable")
         return
     sheet.queue_free()
