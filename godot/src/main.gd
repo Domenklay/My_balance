@@ -9,6 +9,7 @@ const RewardsScript = preload("res://src/rewards.gd")
 const ProfilePhotoScript = preload("res://src/profile_photo.gd")
 const OnboardingMath = preload("res://src/onboarding_math.gd")
 const BarcodeScript = preload("res://src/barcode_lookup.gd")
+const FoodSearchScript = preload("res://src/food_search.gd")
 const AppearanceScript = preload("res://src/appearance.gd")
 const PatternScript = preload("res://src/theme_pattern.gd")
 var GREEN: Color = Color("#195b4a")
@@ -103,6 +104,11 @@ var _render_serial: int = 0
 var tab_buttons: Dictionary = {}
 var barcode_http: HTTPRequest
 var catalog_http: HTTPRequest
+var search_http: HTTPRequest
+var online_search_field: LineEdit
+var online_results_box: VBoxContainer
+var online_search_label: Label
+var online_request_query: String = ""
 var diary_food_card: VBoxContainer
 var barcode_scanner: Object = null
 var barcode_input: LineEdit
@@ -269,6 +275,10 @@ func _ready() -> void:
     catalog_http.timeout = 25.0
     add_child(catalog_http)
     catalog_http.request_completed.connect(_on_catalog_http_completed)
+    search_http = HTTPRequest.new()
+    search_http.timeout = 18.0
+    add_child(search_http)
+    search_http.request_completed.connect(_on_online_search_completed)
     if OS.has_feature("android") and Engine.has_singleton("MyBalanceBarcode"):
         barcode_scanner = Engine.get_singleton("MyBalanceBarcode")
         if barcode_scanner.has_signal("barcode_scanned"):
@@ -1795,7 +1805,7 @@ func _show_meal_add_actions(meal_name: String) -> void:
 
 func _show_food_search() -> void:
     var intro = _card("Каталог продуктов", "hero")
-    _label(intro, "Поиск, сравнение КБЖУ и добавление нескольких продуктов подряд.", 14, HERO_MUTED)
+    _label(intro, "Локальные продукты и онлайн-база Open Food Facts.", 14, HERO_MUTED)
     _label(intro, "Дата: " + _selected_food_date() + " · Приём пищи: " + selected_meal, 13, HERO_MUTED)
     _button(intro, "← Вернуться в дневник", func(): _navigate_to_tab("day"), true)
     var catalog = _card("Найти и добавить продукты")
@@ -2711,8 +2721,7 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
             if own_food is Dictionary:
                 owned_ids[str(own_food.get("id", ""))] = true
     for item in all:
-        var searchable = str(item.get("name", "")) + " " + str(item.get("brand", ""))
-        if not query.is_empty() and not searchable.to_lower().contains(query):
+        if not FoodSearchScript.matches(item, query):
             continue
         var item_id = str(item.get("id", ""))
         if favorite_only.button_pressed and not store.is_favorite(item_id):
@@ -3031,7 +3040,7 @@ func _show_settings() -> void:
         _show_my_foods()
         return
     var back_to_profile = _card("Настройки приложения")
-    _label(back_to_profile, "Версия 0.7.21 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
+    _label(back_to_profile, "Версия 0.7.22 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
     _button(back_to_profile, "← К личной странице", func(): _navigate_to_tab("profile"), true)
     var card = _card("Личные настройки")
     _button(card, "Моя анкета · пересчитать норму", func(): _begin_onboarding(true), true)
