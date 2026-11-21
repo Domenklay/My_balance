@@ -1711,6 +1711,17 @@ func _open_meal_catalog(meal_name: String) -> void:
     _render(true)
 
 
+func _reveal_barcode_section() -> void:
+    var section = find_child("FoodBarcodePanel", true, false) as VBoxContainer
+    var divider = find_child("FoodBarcodeDivider", true, false) as HSeparator
+    if section != null:
+        section.visible = true
+    if divider != null:
+        divider.visible = true
+    if is_instance_valid(barcode_input):
+        _ensure_field_visible(barcode_input)
+
+
 func _meal_scan_or_manual(meal_name: String) -> void:
     selected_meal = meal_name
     _meal_entry_locked = true
@@ -1719,6 +1730,7 @@ func _meal_scan_or_manual(meal_name: String) -> void:
         barcode_scanner.scanBarcode()
     else:
         _open_meal_catalog(meal_name)
+        _reveal_barcode_section()
         _barcode_message("На этом устройстве сканирование недоступно. Введи EAN/UPC с упаковки.")
 
 
@@ -1794,6 +1806,7 @@ func _show_meal_add_actions(meal_name: String) -> void:
     var manual = _button(fields, "Ввести штрихкод вручную", func():
         sheet["root"].queue_free()
         _open_meal_catalog(meal_name)
+        _reveal_barcode_section()
         _barcode_message("Введи номер с упаковки в поле EAN/UPC.")
     , true)
     manual.name = "MealEnterBarcode"
@@ -2611,6 +2624,7 @@ func _quick_food_sheet(food: Dictionary, from_barcode: bool = false) -> void:
 
 func _food_form(parent: VBoxContainer) -> void:
     var barcode_panel = VBoxContainer.new()
+    barcode_panel.name = "FoodBarcodePanel"
     barcode_panel.add_theme_constant_override("separation", 6)
     parent.add_child(barcode_panel)
     _label(barcode_panel, "Найти продукт по штрихкоду", 17, TEXT_ACCENT)
@@ -2635,6 +2649,7 @@ func _food_form(parent: VBoxContainer) -> void:
     barcode_find.custom_minimum_size.x = 74
     barcode_message = _label(barcode_panel, "Встроено " + str(store.bundled_foods.size()) + " товаров с кодами. Другие ищем через интернет.", 12, MUTED)
     var barcode_divider = HSeparator.new()
+    barcode_divider.name = "FoodBarcodeDivider"
     parent.add_child(barcode_divider)
     var search_heading = _label(parent, "Поиск продуктов по названию", 16, TEXT_ACCENT)
     var filtered: Array = []
