@@ -49,9 +49,17 @@ func _run() -> void:
     search.text = "листопродукт"
     search.text_changed.emit(search.text)
     await process_frame
-    if not results.visible or _row_count(results) != 12 or \
-            _find_button(results, "Показать ещё 12") == null:
-        _fail("first page must show 12 of 30 results")
+    var first_rows: int = _row_count(results)
+    var first_more: Button = _find_button(results, "Показать ещё 12")
+    if not results.visible or first_rows != 12 or first_more == null:
+        var summary := ""
+        for child in results.get_children():
+            if child is Label:
+                summary += child.text + "; "
+        _fail("first page must show 12 of 30 results; rows=" + str(first_rows) +
+            " visible=" + str(results.visible) + " button=" + str(first_more != null) +
+            " labels=" + summary +
+            " total_stored=" + str(app.store.data["foods"].size()))
         return
     _find_button(results, "Показать ещё 12").pressed.emit()
     await process_frame
