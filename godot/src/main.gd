@@ -1750,14 +1750,19 @@ func _show_food_search() -> void:
 
 func _show_day() -> void:
     var overview = _card("", "overview")
-    _compact_card(overview, 8, 4)
+    _compact_card(overview, 5, 2)
     _date_nav(overview)
+    # Reduce decorative date padding without shrinking touch targets below 38.
+    overview.get_parent().name = "DayDateNavigation"
     for control in overview.get_children():
         if control is HBoxContainer:
+            control.add_theme_constant_override("separation", 5)
             for item in control.get_children():
                 if item is Button:
-                    item.custom_minimum_size.y = 36
+                    item.custom_minimum_size = Vector2(42, 38)
                     item.add_theme_font_size_override("font_size", 13)
+                elif item is Label:
+                    item.custom_minimum_size.y = 38
     if calendar_expanded:
         _calendar(overview)
 
@@ -1784,13 +1789,13 @@ func _show_day() -> void:
     ring.size_flags_horizontal = Control.SIZE_SHRINK_END
     ring.set_palette(HERO_TRACK, HERO_FILL, WHITE)
     ring.set_value(total, target)
-    var edit_goal = _button(hero_content, "✎", func(): _show_calorie_goal_editor(), true)
+    var edit_goal = _button(hero_content, "Норма", func(): _show_calorie_goal_editor(), true)
     edit_goal.name = "EditDailyCalorieGoal"
-    edit_goal.tooltip_text = "Изменить норму калорий"
-    edit_goal.custom_minimum_size = Vector2(35, 36)
+    edit_goal.tooltip_text = "Изменить суточную норму калорий"
+    edit_goal.custom_minimum_size = Vector2(68, 38)
     edit_goal.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
     edit_goal.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-    edit_goal.add_theme_font_size_override("font_size", 18)
+    edit_goal.add_theme_font_size_override("font_size", 12)
     hero_content.add_child(ring)
     var macros = _row(hero)
     macros.add_theme_constant_override("separation", 5)
@@ -1997,6 +2002,7 @@ func _show_day() -> void:
 
     var activity = _card("Движение сегодня", "activity")
     activity.get_parent().name = "DailyActivity"
+    _compact_card(activity, 11, 5)
     var walking = 0
     var exercise = 0
     for a in store.day_activities(date):
@@ -2004,14 +2010,33 @@ func _show_day() -> void:
             walking += int(a.get("minutes", 0))
         else:
             exercise += int(a.get("minutes", 0))
-    _label(activity, "Прогулки: " + str(walking) +
-        " мин  ·  Тренировки: " + str(exercise) + " мин", 14, ACTIVITY_TEXT)
+    var activity_caption = _label(activity, "Прогулки: " + str(walking) +
+        " мин  ·  Тренировки: " + str(exercise) + " мин", 13, ACTIVITY_TEXT)
+    activity_caption.name = "DailyActivitySummary"
     var shortcuts = _row(activity)
-    _button(shortcuts, "+ Спорт", func(): _navigate_to_tab("activity"), true)
-    _button(shortcuts, "+ Вес", func(): _navigate_to_tab("weight"), true)
+    shortcuts.add_theme_constant_override("separation", 6)
+    for quick_link in [
+        _button(shortcuts, "+ Спорт", func(): _navigate_to_tab("activity"), true),
+        _button(shortcuts, "+ Вес", func(): _navigate_to_tab("weight"), true)
+    ]:
+        quick_link.custom_minimum_size.y = 39
+        quick_link.add_theme_font_size_override("font_size", 13)
 
-    var notes_card = _card("Заметка о дне")
-    _button(notes_card, "▴ Скрыть заметку" if day_more_expanded else "▾ Открыть заметку",
+    # The collapsed note is a single compact row, not a tall empty card.
+    var notes_card = _card("")
+    notes_card.get_parent().name = "DailyNote"
+    _compact_card(notes_card, 10, 4)
+    var notes_header = _row(notes_card)
+    notes_header.add_theme_constant_override("separation", 6)
+    var note_heading = VBoxContainer.new()
+    note_heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    note_heading.add_theme_constant_override("separation", 1)
+    notes_header.add_child(note_heading)
+    _label(note_heading, "Заметка о дне", 18, INK)
+    if not day_more_expanded and not str(store.data["notes"].get(date, "")).strip_edges().is_empty():
+        _label(note_heading, "Заметка сохранена", 11, MUTED)
+    var notes_toggle = _button(notes_header,
+        "▴ Скрыть заметку" if day_more_expanded else "▾ Открыть заметку",
         func():
             if note_save_timer.time_left > 0.0:
                 note_save_timer.stop()
@@ -2019,6 +2044,10 @@ func _show_day() -> void:
             day_more_expanded = not day_more_expanded
             _render()
     , true)
+    notes_toggle.name = "DailyNoteToggle"
+    notes_toggle.custom_minimum_size = Vector2(145, 38)
+    notes_toggle.size_flags_horizontal = Control.SIZE_SHRINK_END
+    notes_toggle.add_theme_font_size_override("font_size", 12)
     if day_more_expanded:
         var notes = TextEdit.new()
         notes.custom_minimum_size.y = 110
@@ -2035,8 +2064,6 @@ func _show_day() -> void:
         )
         notes_card.add_child(notes)
         note_status_label = _label(notes_card, "Заметка сохраняется автоматически", 12, MUTED)
-    elif not str(store.data["notes"].get(date, "")).strip_edges().is_empty():
-        _label(notes_card, "Заметка сохранена", 12, MUTED)
 
 func _jump_to_food() -> void:
     # Follow any pending card-rebuild and saved scroll restoration.
@@ -2882,7 +2909,7 @@ func _show_settings() -> void:
         _show_my_foods()
         return
     var back_to_profile = _card("Настройки приложения")
-    _label(back_to_profile, "Версия 0.7.19 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
+    _label(back_to_profile, "Версия 0.7.20 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
     _button(back_to_profile, "← К личной странице", func(): _navigate_to_tab("profile"), true)
     var card = _card("Личные настройки")
     _button(card, "Моя анкета · пересчитать норму", func(): _begin_onboarding(true), true)
