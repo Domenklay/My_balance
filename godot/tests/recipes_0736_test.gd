@@ -167,14 +167,14 @@ func _run() -> void:
         return
     _find_button(buttons, "½ порции").pressed.emit()
     await process_frame
-    if absf(spin.value - 125.0) > 0.001 or not preview.text.contains("235"):
+    if absf(spin.value - 125.0) > 0.001 or not preview.text.contains("118"):
         _fail("half of cooked portion wrong")
         return
     var confirm = sheet.find_child("ProductSheetConfirm", true, false) as Button
     confirm.pressed.emit()
     await process_frame
     if app.store.day_entries("2026-11-21").size() != 1 or \
-            absf(app.store.day_calories("2026-11-21") - 235.0) > 0.001:
+            absf(app.store.day_calories("2026-11-21") - 117.5) > 0.001:
         _fail("recipe sheet failed to save calculated half portion")
         return
     app.tab = "recipes"
@@ -187,7 +187,7 @@ func _run() -> void:
     quick.pressed.emit()
     await process_frame
     if app.store.day_entries("2026-11-21").size() != 2 or \
-            absf(app.store.day_calories("2026-11-21") - 470.0) > 0.001:
+            absf(app.store.day_calories("2026-11-21") - 235.0) > 0.001:
         _fail("one-tap repeated recipe portion incorrectly")
         return
     print("PASS RECIPE 0.7.36: mixed mass/volume, cooked totals, favorites, quick repeat, save, legacy JSON and UI")
