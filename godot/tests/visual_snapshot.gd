@@ -114,6 +114,12 @@ func _capture() -> void:
         app.tab = page
         app._render()
         await _snapshot(app, "04-"+page)
+    app.tab = "stats"
+    app.stats_period = "month"
+    app.stats_anchor = app.date
+    app._render()
+    await _snapshot(app, "04-stats-month")
+    app.stats_period = "week"
     app.tab = "settings"
     app.settings_page = "foods"
     app._render()
