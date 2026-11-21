@@ -21,6 +21,9 @@ func _draw() -> void:
     if kind == "botanical":
         _draw_botanical(tint)
         return
+    if kind == "hills":
+        _draw_hills(tint)
+        return
     var spacing = 72.0
     var cols = int(ceil(size.x / spacing)) + 1
     var rows = int(ceil(size.y / spacing)) + 1
@@ -84,3 +87,26 @@ func _draw_botanical(tint: Color) -> void:
     if height > 190.0:
         _draw_branch(Vector2(-5.0, height - 78.0), 1.0, tint)
         _draw_branch(Vector2(width + 4.0, height - 105.0), -1.0, tint)
+
+
+# Distant layered hills echo the selected mockup's activity section.
+# Low-opacity polygons live behind text/buttons; no input handling.
+func _draw_hills(tint: Color) -> void:
+    if size.x < 50.0 or size.y < 60.0:
+        return
+    var w = size.x
+    var h = size.y
+    var far = Color(tint.r, tint.g, tint.b, minf(0.17, tint.a * 0.7))
+    var near = Color(tint.r, tint.g, tint.b, minf(0.3, tint.a * 1.2))
+    draw_colored_polygon(PackedVector2Array([
+        Vector2(0, h * 0.78), Vector2(w * 0.18, h * 0.58),
+        Vector2(w * 0.41, h * 0.73), Vector2(w * 0.61, h * 0.50),
+        Vector2(w * 0.84, h * 0.71), Vector2(w, h * 0.58),
+        Vector2(w, h), Vector2(0, h)
+    ]), far)
+    draw_colored_polygon(PackedVector2Array([
+        Vector2(0, h * 0.93), Vector2(w * 0.17, h * 0.72),
+        Vector2(w * 0.34, h * 0.88), Vector2(w * 0.59, h * 0.67),
+        Vector2(w * 0.77, h * 0.81), Vector2(w, h * 0.7),
+        Vector2(w, h), Vector2(0, h)
+    ]), near)
