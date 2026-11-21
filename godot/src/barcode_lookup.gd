@@ -2,7 +2,7 @@ extends RefCounted
 
 # Open Food Facts barcode response adapter. Values are per 100 g / 100 ml.
 const OFF_BASE = "https://world.openfoodfacts.org/api/v2/product/"
-const OFF_FIELDS = "code,product_name,product_name_ru,brands,nutriments,quantity,nutrition_data_per"
+const OFF_FIELDS = "code,product_name,product_name_ru,brands,nutriments,quantity,product_quantity_unit,serving_size,nutrition_data_per"
 
 const SEARCH_BASE = "https://world.openfoodfacts.org/cgi/search.pl"
 
@@ -31,7 +31,8 @@ static func parse_search_results(payload: Variant, limit: int = 12) -> Array:
             continue
         parsed["id"] = "barcode_" + code
         parsed["brand"] = str(product.get("brands", "")).strip_edges().substr(0, 80)
-        parsed["nutrition_unit"] = "г"
+        # Keep the nutrient basis detected during product parsing.
+        # Never overwrite it with a hard-coded gram basis.
         seen[code] = true
         results.append(parsed)
         if results.size() >= limit:
@@ -77,6 +78,37 @@ static func product_url(code: String) -> String:
         return ""
     return OFF_BASE + code + ".json?fields=" + OFF_FIELDS
 
+# OFF's *_100g numeric keys mean per 100 g OR 100 ml for drinks.
+# nutrition_data_per ("100g"/"serving") is *not* reliable evidence of mass.
+# Prefer explicitly recorded product package units. If absent, fall back to
+# grams and require the person to confirm the label before saving.
+static func detect_basis(product: Dictionary) -> Dictionary:
+    var unit = str(product.get("product_quantity_unit", "")).strip_edges().to_lower()
+    if unit in ["ml", "cl", "l", "мл", "л"]:
+        return {"unit": "мл", "certainty": "package_unit"}
+    if unit in ["g", "kg", "г", "кг"]:
+        return {"unit": "г", "certainty": "package_unit"}
+    var quantity = str(product.get("quantity", "")).strip_edges().to_lower()
+    # Only match a complete unit after a numerical quantity. Do not search
+    # generic words (e.g. "milk") for the character "l".
+    var match_units = RegEx.new()
+    match_units.compile("(?:^|\\s)(?:[0-9]+[.,]?[0-9]*)\\s*(ml|cl|l|мл|л|g|kg|г|кг)(?:$|\\s|[,;])")
+    var found = match_units.search(quantity)
+    if found != null:
+        var match_unit = found.get_string(1)
+        if match_unit in ["ml", "cl", "l", "мл", "л"]:
+            return {"unit": "мл", "certainty": "quantity"}
+        return {"unit": "г", "certainty": "quantity"}
+    var serving = str(product.get("serving_size", "")).strip_edges().to_lower()
+    var found_serving = match_units.search(serving)
+    if found_serving != null:
+        var serving_unit = found_serving.get_string(1)
+        if serving_unit in ["ml", "cl", "l", "мл", "л"]:
+            return {"unit": "мл", "certainty": "serving"}
+        return {"unit": "г", "certainty": "serving"}
+    return {"unit": "г", "certainty": "unknown"}
+
+
 static func parse_product(payload: Variant, barcode: String) -> Dictionary:
     if not (payload is Dictionary):
         return {"error": "Сервис прислал некорректный ответ."}
@@ -114,11 +146,13 @@ static func parse_product(payload: Variant, barcode: String) -> Dictionary:
     var brand = str(product.get("brands", "")).strip_edges()
     if not brand.is_empty() and not name.to_lower().contains(brand.to_lower()):
         name += " (" + brand.substr(0, 60) + ")"
+    var basis = detect_basis(product)
     return {
         "barcode": barcode, "name": name.substr(0, 160),
         "kcal": snappedf(kcal, 0.1), "p": snappedf(protein, 0.1),
         "f": snappedf(fat, 0.1), "c": snappedf(carbs, 0.1),
         "source": "Open Food Facts", "quantity": str(product.get("quantity", "")),
+        "nutrition_unit": str(basis["unit"]), "unit_certainty": str(basis["certainty"])
     }
 
 static func _valid_number(value: Variant) -> bool:
