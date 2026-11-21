@@ -58,8 +58,11 @@ func _run() -> void:
         return
     var bad = payload.duplicate(true)
     bad["product"]["nutriments"].erase("proteins_100g")
-    if not Lookup.parse_product(bad, "3017624010701").has("error"):
-        _fail("incomplete macros silently accepted")
+    var partial = Lookup.parse_product(bad, "3017624010701")
+    if partial.has("error") or not "p" in partial.get("missing_fields", []) or \
+            float(partial.get("p", 0)) != -1.0 or \
+            not Lookup.needs_nutrition_review(partial):
+        _fail("missing proteins must remain an explicit, reviewable blank")
         return
     var missing = {"status": 0}
     if not Lookup.parse_product(missing, "3017624010701").has("error"):
