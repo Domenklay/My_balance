@@ -31,7 +31,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.39"
+const APP_VERSION = "0.7.40"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -117,6 +117,7 @@ var rewards_expanded: bool = false
 var frames_expanded: bool = false
 var profile_more_expanded: bool = false
 var day_more_expanded: bool = false
+var day_tools_expanded: bool = false
 var home_widget_editor_open: bool = false
 var home_progress_view: String = "week"
 var stats_detail_tab: String = "nutrition"
@@ -2463,6 +2464,28 @@ func _show_day() -> void:
     _compact_macro(macros, "Белки", store.day_macro(date, "p"), PROTEIN_BG, MACRO_PROTEIN)
     _compact_macro(macros, "Жиры", store.day_macro(date, "f"), FAT_BG, MACRO_FAT)
     _compact_macro(macros, "Углеводы", store.day_macro(date, "c"), CARBS_BG, MACRO_CARBS)
+    var day_tools_toggle = _button(hero, "⋯ Быстрые действия с днём" +
+        (" ▴" if day_tools_expanded else " ▾"), func():
+            day_tools_expanded = not day_tools_expanded
+            _render()
+    , true)
+    day_tools_toggle.name = "DayToolsToggle"
+    day_tools_toggle.custom_minimum_size.y = 36
+    day_tools_toggle.add_theme_font_size_override("font_size", 12)
+    if day_tools_expanded:
+        var day_tool_buttons = _row(hero)
+        day_tool_buttons.name = "DayToolsActions"
+        day_tool_buttons.add_theme_constant_override("separation", 5)
+        var copy_button = _button(day_tool_buttons, "↻ Копировать день",
+            func(): _copy_day_sheet(), true)
+        copy_button.name = "DayCopyOpen"
+        copy_button.custom_minimum_size.y = 39
+        copy_button.add_theme_font_size_override("font_size", 12)
+        var templates_button = _button(day_tool_buttons, "☆ Мои наборы",
+            func(): _meal_templates_sheet(), true)
+        templates_button.name = "DayTemplatesOpen"
+        templates_button.custom_minimum_size.y = 39
+        templates_button.add_theme_font_size_override("font_size", 12)
 
     # Compact sections are always present. Only the selected meal unfolds.
     # Expansion state is in-memory, keyed by date: diary records are untouched.
@@ -3273,6 +3296,165 @@ func _request_catalog_update() -> void:
         _message("Не удалось начать обновление. Проверь интернет.")
     else:
         _message("Загрузка проверенного каталога из GitHub запущена.")
+
+
+# Summary uses the historical nutrient snapshot; editing a catalog food or
+# deleting an original recipe must never affect copied or saved diary entries.
+func _day_food_summary(chosen_date: String) -> Dictionary:
+    var result: Dictionary = {"count": 0, "kcal": 0.0, "p": 0.0, "f": 0.0, "c": 0.0}
+    for entry in store.day_entries(chosen_date):
+        result["count"] += 1
+        var snapshot: Dictionary = store.entry_food(entry)
+        var ratio: float = float(entry.get("grams", 0.0)) / 100.0
+        for nutrient in ["kcal", "p", "f", "c"]:
+            result[nutrient] = float(result[nutrient]) + float(snapshot.get(nutrient, 0.0)) * ratio
+    return result
+
+
+func _copy_day_sheet() -> void:
+    var destination: String = date
+    var source_default: String = store.change_date(destination, -1)
+    var sheet = _mobile_sheet("Скопировать день",
+        "Переносится только питание с сохранёнными порциями и КБЖУ. Спорт, вес и заметки не изменятся.",
+        "Продолжить", 490.0)
+    var fields: VBoxContainer = sheet["fields"]
+    _label(fields, "Откуда скопировать (ГГГГ-ММ-ДД)", 13, MUTED)
+    var source = _text_input(fields, "Например, 2026-11-20", source_default)
+    source.name = "DayCopySource"
+    source.max_length = 10
+    var dates = _row(fields)
+    for preset in [["Вчера", -1], ["Позавчера", -2]]:
+        var offset: int = int(preset[1])
+        _button(dates, str(preset[0]), func():
+            source.text = store.change_date(destination, offset)
+            source.text_changed.emit(source.text)
+        , true)
+    _label(fields, "Что делать с питанием выбранного дня", 13, MUTED)
+    var mode = _choice(fields, ["Добавить к существующим", "Заменить питание"])
+    mode.name = "DayCopyMode"
+    var preview = _label(fields, "", 13, TEXT_ACCENT)
+    preview.name = "DayCopyPreview"
+    var refresh = func():
+        var from_date: String = source.text.strip_edges()
+        if not StoreScript.valid_diary_date(from_date) or from_date == destination:
+            preview.text = "Укажи другую существующую календарную дату."
+            return
+        var summary: Dictionary = _day_food_summary(from_date)
+        var count: int = int(summary["count"])
+        if count == 0:
+            preview.text = "На выбранную дату нет записей питания."
+            return
+        var existing_count: int = store.day_entries(destination).size()
+        preview.text = (str(count) + " продуктов · " +
+            str(roundi(float(summary["kcal"]))) + " ккал" +
+            "\nБ " + str(snappedf(float(summary["p"]), 0.1)) +
+            " · Ж " + str(snappedf(float(summary["f"]), 0.1)) +
+            " · У " + str(snappedf(float(summary["c"]), 0.1)) +
+            "\nНа " + destination + ": " + str(existing_count) + " записей. " +
+            ("Они будут заменены." if mode.selected == 1 else "Новые записи добавятся."))
+    source.text_changed.connect(func(_txt: String): refresh.call())
+    mode.item_selected.connect(func(_index: int): refresh.call())
+    refresh.call()
+    var confirm: Button = sheet["confirm"]
+    confirm.pressed.connect(func():
+        var from_date: String = source.text.strip_edges()
+        if not StoreScript.valid_diary_date(from_date) or from_date == destination:
+            _sheet_error(sheet, "Выбери корректную дату, отличную от текущей.")
+            return
+        var source_count: int = store.day_entries(from_date).size()
+        if source_count == 0:
+            _sheet_error(sheet, "В выбранный день нет записей питания.")
+            return
+        var replace_existing: bool = mode.selected == 1
+        var old_count: int = store.day_entries(destination).size()
+        var explanation: String = ("Добавить " + str(source_count) +
+            " записей из " + from_date + " в " + destination + "?"
+            if not replace_existing else
+            "Заменить " + str(old_count) + " существующих записей питания " +
+            "на " + str(source_count) + " из " + from_date + "?")
+        _confirm_day_copy(explanation, replace_existing, func():
+            var copied: int = store.copy_day(from_date, destination, replace_existing)
+            if copied > 0:
+                sheet["root"].queue_free()
+                _render()
+                _notify_saved("Скопировано продуктов: " + str(copied))
+            else:
+                _sheet_error(sheet, "Не удалось скопировать день. Старые данные сохранены.")
+        )
+    )
+
+
+func _confirm_day_copy(explanation: String, replacing: bool, action: Callable) -> void:
+    var dialog = ConfirmationDialog.new()
+    dialog.name = "DayCopyConfirmation"
+    dialog.title = "Заменить питание?" if replacing else "Добавить питание?"
+    dialog.dialog_text = explanation
+    dialog.ok_button_text = "Заменить" if replacing else "Добавить"
+    add_child(dialog)
+    dialog.confirmed.connect(func():
+        action.call()
+        dialog.queue_free()
+    )
+    dialog.canceled.connect(func(): dialog.queue_free())
+    dialog.popup_centered(Vector2i(360, 220))
+
+
+func _meal_templates_sheet() -> void:
+    var templates: Array = store.data.get("meal_templates", [])
+    var sheet = _mobile_sheet("Мои наборы питания",
+        "Повторяй сохранённые завтраки, обеды и ужины целиком. Изменения рецептов не затрагивают шаблоны.",
+        "Закрыть", 560.0)
+    var fields: VBoxContainer = sheet["fields"]
+    if templates.is_empty():
+        _label(fields, "Наборов пока нет. Открой приём пищи, добавь продукты и нажми «☆ Сохранить набор».",
+            13, MUTED)
+    else:
+        for template in templates:
+            if not (template is Dictionary) or template.get("items", []).is_empty():
+                continue
+            var items: Array = template["items"]
+            var template_id: String = str(template.get("id", ""))
+            var meal_name: String = str(items[0].get("meal", ""))
+            var kcal_total: float = 0.0
+            for item in items:
+                kcal_total += float(item.get("grams", 0.0)) / 100.0 * \
+                    float(item.get("nutrition", {}).get("kcal", 0.0))
+            var panel = _soft_list_row(fields)
+            var info = VBoxContainer.new()
+            info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            panel.add_child(info)
+            var title = _label(info, str(template["name"]), 13, INK)
+            title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+            _label(info, meal_name + " · " + str(items.size()) + " продуктов · " +
+                str(roundi(kcal_total)) + " ккал", 11, MUTED)
+            var add_button = _button(panel, "+", func():
+                _confirm_action("Добавить набор «" + str(template["name"]) + "»?",
+                    "Добавить " + str(items.size()) + " записей в " + date +
+                    "? Если они уже есть, появятся дубликаты.", func():
+                        var number: int = store.apply_meal_template(template_id, date)
+                        if number > 0:
+                            sheet["root"].queue_free()
+                            _render()
+                            _notify_saved("Набор добавлен: " + str(number) + " продуктов")
+                        else:
+                            _sheet_error(sheet, "Набор не добавлен. Проверь память.")
+                    )
+            )
+            add_button.name = "TemplateQuickAdd_" + template_id
+            add_button.custom_minimum_size = Vector2(43, 41)
+            var remove = _button(panel, "×", func():
+                _confirm_delete("Удалить набор «" + str(template["name"]) + "»?", func():
+                    if store.delete_meal_template(template_id):
+                        sheet["root"].queue_free()
+                        _render()
+                        _notify_saved("Набор удалён")
+                    else:
+                        _sheet_error(sheet, "Не удалось удалить набор.")
+                )
+            , true)
+            remove.custom_minimum_size = Vector2(43, 41)
+    var close: Button = sheet["confirm"]
+    close.pressed.connect(func(): sheet["root"].queue_free())
 
 
 func _name_meal_template_sheet(meal_name: String) -> void:

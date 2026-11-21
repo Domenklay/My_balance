@@ -1032,12 +1032,13 @@ func repeat_entry(entry: Dictionary, destination_date: String) -> bool:
 
 # Duplicate a complete meal in one atomic save, preserving nutrition snapshots.
 func repeat_meal(source_date: String, meal: String, destination_date: String) -> int:
-    if source_date == destination_date or meal not in ["Завтрак", "Обед", "Перекус", "Ужин"]:
+    if source_date == destination_date or meal not in ["Завтрак", "Обед", "Перекус", "Ужин"] or \
+            not valid_diary_date(source_date) or not valid_diary_date(destination_date):
         return 0
     var source: Array = day_entries(source_date).filter(
         func(e): return str(e.get("meal", "")) == meal
     )
-    if source.is_empty():
+    if source.is_empty() or data["entries"].size() + source.size() > 50000:
         return 0
     var duplicates: Array = []
     for i in range(source.size()):
@@ -1052,6 +1053,47 @@ func repeat_meal(source_date: String, meal: String, destination_date: String) ->
         data["entries"].erase(entry)
     return 0
 
+# Copies only food records; activity, body weight and notes never get erased.
+# Returns the number of copied items, or 0 when no change was committed.
+# Saving once after the complete mutation makes the operation atomic.
+static func valid_diary_date(day: String) -> bool:
+    if day.length() != 10 or day.substr(4, 1) != "-" or day.substr(7, 1) != "-":
+        return false
+    if not day.substr(0, 4).is_valid_int() or not day.substr(5, 2).is_valid_int() or \
+            not day.substr(8, 2).is_valid_int():
+        return false
+    var stamp: int = int(Time.get_unix_time_from_datetime_string(day + "T12:00:00"))
+    return Time.get_date_string_from_unix_time(stamp) == day
+
+
+func copy_day(source_date: String, destination_date: String,
+        replace_destination: bool = false) -> int:
+    if not valid_diary_date(source_date) or not valid_diary_date(destination_date) or \
+            source_date == destination_date:
+        return 0
+    var sources: Array = day_entries(source_date)
+    if sources.is_empty():
+        return 0
+    var destination_size: int = day_entries(destination_date).size()
+    var after_size: int = data["entries"].size() - (destination_size if replace_destination else 0) + sources.size()
+    if after_size > 50000:
+        return 0
+    var before: Array = data["entries"].duplicate(true)
+    if replace_destination:
+        data["entries"] = data["entries"].filter(func(e):
+            return str(e.get("date", "")) != destination_date)
+    var serial: String = str(Time.get_ticks_usec())
+    for i in range(sources.size()):
+        var snapshot: Dictionary = sources[i].duplicate(true)
+        snapshot["id"] = "day_copy_" + serial + "_" + str(i)
+        snapshot["date"] = destination_date
+        data["entries"].append(snapshot)
+    if save():
+        return sources.size()
+    data["entries"] = before
+    return 0
+
+
 # Meal templates store a snapshot of each item's nutrition, independent of
 # later edits or deletion of source foods and recipes.
 func save_meal_template(source_date: String, meal: String, title: String) -> bool:
@@ -1063,7 +1105,7 @@ func save_meal_template(source_date: String, meal: String, title: String) -> boo
     var source: Array = day_entries(source_date).filter(
         func(e): return str(e.get("meal", "")) == meal
     )
-    if source.is_empty() or source.size() > 30:
+    if source.is_empty() or source.size() > 30 or not valid_diary_date(source_date):
         return false
     var items: Array = []
     for entry in source:
@@ -1094,6 +1136,9 @@ func apply_meal_template(template_id: String, destination_date: String) -> int:
         if str(template.get("id", "")) != template_id:
             continue
         var created: Array = []
+        if not valid_diary_date(destination_date) or \
+                data["entries"].size() + template["items"].size() > 50000:
+            return 0
         for item in template["items"]:
             created.append({
                 "id": "template_entry_" + str(Time.get_ticks_usec()) + "_" + str(data["entries"].size() + created.size()),
