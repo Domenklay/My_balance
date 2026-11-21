@@ -2,6 +2,8 @@ extends Control
 
 const StoreScript = preload("res://src/store.gd")
 const GraphScript = preload("res://src/weight_graph.gd")
+const StatsMathScript = preload("res://src/stats_math.gd")
+const StatsChartScript = preload("res://src/stats_chart.gd")
 const RingScript = preload("res://src/calorie_ring.gd")
 const RecipeMath = preload("res://src/recipe_math.gd")
 const PortionMath = preload("res://src/portion_math.gd")
@@ -90,6 +92,8 @@ var _meal_entry_locked: bool = false
 var _meal_entry_date: String = ""
 var _expanded_meals: Dictionary = {}
 var tab: String = "day"
+var stats_period: String = "week"
+var stats_anchor: String = ""
 var month_shown: String = ""
 var shell: VBoxContainer
 var body: VBoxContainer
@@ -3395,49 +3399,132 @@ func _show_weight() -> void:
                 _message("Не удалось удалить запись веса.")
         ), true)
 
+func _set_stats_period(mode: String) -> void:
+    if mode not in ["week", "month"]:
+        return
+    if stats_anchor.is_empty():
+        stats_anchor = date
+    stats_period = mode
+    _render(true)
+
+
+func _shift_stats_period(amount: int) -> void:
+    if stats_anchor.is_empty():
+        stats_anchor = date
+    if stats_period == "month":
+        stats_anchor = _month_offset(stats_anchor.substr(0, 7), amount) + "-01"
+    else:
+        stats_anchor = store.change_date(stats_anchor, amount * 7)
+    _render(true)
+
+
 func _show_stats() -> void:
-    var card = _card("Итоги недели")
-    _date_nav(card)
-    var days = store.week_dates(date)
-    var recorded = 0
-    var total = 0.0
-    var walking = 0
-    var workouts = 0
-    for d in days:
-        if not store.day_entries(d).is_empty():
-            recorded += 1
-            total += store.day_calories(d)
-        for a in store.day_activities(d):
-            if a.get("type", "") == "walk":
-                walking += int(a.get("minutes", 0))
-            elif a.get("type", "") == "strength":
-                workouts += 1
-    var avg = "—" if recorded == 0 else str(roundi(total / recorded)) + " ккал"
-    _label(card, "Среднее за записанные дни: " + avg, 19, TEXT_ACCENT)
-    _label(card, "Дней с питанием: " + str(recorded) + " из 7", 15)
-    _label(card, "Прогулки: " + str(walking) + " мин    Силовые: " + str(workouts), 15)
-    _label(card, "Калории по дням", 16)
-    for d in days:
-        var line = _row(card)
-        var l = _nowrap(line, d.substr(8, 2) + "." + d.substr(5, 2), 13)
-        l.custom_minimum_size.x = 54
-        var bar = ProgressBar.new()
-        bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        bar.min_value = 0
-        bar.max_value = float(store.data["settings"]["kcal"]) * 1.5
-        bar.value = store.day_calories(d)
-        _style_progress(bar)
-        bar.custom_minimum_size.y = 11
-        line.add_child(bar)
-        var daily_value = _nowrap(line, str(roundi(store.day_calories(d))) if not store.day_entries(d).is_empty() else "—", 13)
-        daily_value.custom_minimum_size.x = 35
-        daily_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-    _label(card, "Пустые дни не входят в среднее. Оценивай тенденцию, а не один день.", 13, MUTED)
-    var chart = _card("Вес")
-    var g = GraphScript.new()
-    g.custom_minimum_size.y = 210
-    g.set_points(store.data["weights"], float(store.data["settings"]["goal"]))
-    chart.add_child(g)
+    if stats_anchor.is_empty():
+        stats_anchor = date
+    var report: Dictionary = StatsMathScript.summarize(store, stats_anchor, stats_period)
+    var card = _card("", "overview")
+    card.get_parent().name = "StatsPeriodCard"
+    _compact_card(card, 12, 8)
+    _label(card, "Мои итоги", 19, INK)
+    var period_buttons = _row(card)
+    period_buttons.name = "StatsPeriodSelector"
+    period_buttons.add_theme_constant_override("separation", 6)
+    for option in [["Неделя", "week"], ["Месяц", "month"]]:
+        var selected_mode: String = str(option[1])
+        var button = _button(period_buttons, str(option[0]),
+            func(): _set_stats_period(selected_mode), true)
+        button.name = "StatsPeriod_" + selected_mode
+        button.custom_minimum_size.y = 38
+        button.add_theme_font_size_override("font_size", 13)
+        if selected_mode == stats_period:
+            var selected_style = StyleBoxFlat.new()
+            selected_style.bg_color = NAV_ACTIVE
+            selected_style.set_corner_radius_all(11)
+            for style_name in ["normal", "hover", "pressed"]:
+                button.add_theme_stylebox_override(style_name, selected_style)
+            button.add_theme_color_override("font_color", WHITE)
+    var navigator = _row(card)
+    navigator.name = "StatsDateNavigation"
+    navigator.add_theme_constant_override("separation", 6)
+    var previous = _button(navigator, "◀", func(): _shift_stats_period(-1), true)
+    previous.name = "StatsPreviousPeriod"
+    previous.custom_minimum_size = Vector2(42, 38)
+    var period_label = _label(navigator,
+        StatsMathScript.label_for(report["dates"], stats_period), 14, TEXT_ACCENT)
+    period_label.name = "StatsPeriodDates"
+    period_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    period_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    period_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    var following = _button(navigator, "▶", func(): _shift_stats_period(1), true)
+    following.name = "StatsNextPeriod"
+    following.custom_minimum_size = Vector2(42, 38)
+    var metrics = _row(card)
+    metrics.add_theme_constant_override("separation", 5)
+    var average = "—" if int(report["recorded"]) == 0 else (
+        str(roundi(float(report["avg_kcal"]))) + " ккал"
+    )
+    _metric_tile(metrics, average, "Среднее по заполненным дням")
+    _metric_tile(metrics, str(int(report["recorded"])) + " / " +
+        str(int(report["total_days"])), "Дней с питанием")
+    var activity_metrics = _row(card)
+    activity_metrics.add_theme_constant_override("separation", 5)
+    _metric_tile(activity_metrics, str(int(report["walking"])) + " мин", "Прогулки")
+    _metric_tile(activity_metrics, str(int(report["exercise"])) + " мин", "Тренировки")
+    _label(card, "Пустые дни не считаются нулём и не снижают среднее.", 12, MUTED)
+
+    var calories = _card("Калории", "tint")
+    calories.get_parent().name = "StatsCalorieCard"
+    _compact_card(calories, 12, 8)
+    _label(calories, "По дням" if stats_period == "week" else
+        "Среднее за записанные дни каждой календарной недели", 12, MUTED)
+    var kcal_chart = StatsChartScript.new()
+    kcal_chart.name = "StatsCalorieChart"
+    kcal_chart.custom_minimum_size.y = 160
+    calories.add_child(kcal_chart)
+    kcal_chart.setup(report["columns"], "calories",
+        float(store.data["settings"]["kcal"]), TEXT_ACCENT, ACCENT, MUTED, CHART_GRID)
+    _label(calories, "Пунктир — установленная норма калорий в сутки.", 11, MUTED)
+
+    var macros = _card("Средние БЖУ")
+    macros.get_parent().name = "StatsMacrosCard"
+    _compact_card(macros, 12, 7)
+    _label(macros, "На день с записями питания", 12, MUTED)
+    if int(report["recorded"]) == 0:
+        _label(macros, "Добавь продукты в дневник, чтобы увидеть средние БЖУ.", 13, MUTED)
+    else:
+        var macro_row = _row(macros)
+        macro_row.add_theme_constant_override("separation", 5)
+        _compact_macro(macro_row, "Белки", float(report["avg_p"]), PROTEIN_BG, INK)
+        _compact_macro(macro_row, "Жиры", float(report["avg_f"]), FAT_BG, INK)
+        _compact_macro(macro_row, "Углеводы", float(report["avg_c"]), CARBS_BG, INK)
+
+    var movement = _card("Движение", "activity")
+    movement.get_parent().name = "StatsActivityCard"
+    _compact_card(movement, 12, 8)
+    var contrast_text = WHITE if current_theme == "botanical" else INK
+    _label(movement, "Прогулки: " + str(int(report["walking"])) +
+        " мин · Тренировки: " + str(int(report["exercise"])) + " мин", 12, contrast_text)
+    var activity_chart = StatsChartScript.new()
+    activity_chart.name = "StatsActivityChart"
+    activity_chart.custom_minimum_size.y = 140
+    movement.add_child(activity_chart)
+    activity_chart.setup(report["columns"], "activity", 0.0,
+        GREEN, ACCENT, MUTED, CHART_GRID)
+    _label(movement, "Зелёный — ходьба · Оранжевый — тренировки · Сеансов: " +
+        str(int(report["workouts"])), 11, contrast_text)
+
+    var weight = _card("Динамика веса")
+    weight.get_parent().name = "StatsWeightCard"
+    _compact_card(weight, 12, 8)
+    _label(weight, "Взвешиваний за период: " +
+        str(report["weights"].size()), 12, MUTED)
+    var weight_graph = GraphScript.new()
+    weight_graph.name = "StatsWeightGraph"
+    weight_graph.custom_minimum_size.y = 185
+    weight_graph.set_palette(TEXT_ACCENT, CHART_GRID, MUTED, ACCENT, CHART_AREA, SECONDARY)
+    weight_graph.set_points(report["weights"], float(store.data["settings"]["goal"]))
+    weight.add_child(weight_graph)
+
 
 func _show_settings() -> void:
     if settings_page == "foods":
@@ -3449,7 +3536,7 @@ func _show_settings() -> void:
         _show_my_foods()
         return
     var back_to_profile = _card("Настройки приложения")
-    _label(back_to_profile, "Версия 0.7.27 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
+    _label(back_to_profile, "Версия 0.7.28 · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
     _button(back_to_profile, "← К личной странице", func(): _navigate_to_tab("profile"), true)
     var card = _card("Личные настройки")
     _button(card, "Моя анкета · пересчитать норму", func(): _begin_onboarding(true), true)
