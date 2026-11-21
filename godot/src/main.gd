@@ -1137,6 +1137,41 @@ func _show_onboarding() -> void:
         )
         _label(choices, "Это ориентировочная оценка для взрослых, не медицинское назначение. При беременности, грудном вскармливании или заболеваниях нужна индивидуальная консультация.", 12, MUTED)
 
+func _show_calorie_goal_editor() -> void:
+    var sheet = _mobile_sheet(
+        "Изменить норму калорий",
+        "Введи свой ориентир на день. Анкету повторять не нужно — записи питания и вес сохраняются.",
+        "Сохранить", 330.0)
+    var fields: VBoxContainer = sheet["fields"]
+    _label(fields, "Калории в сутки", 14, INK)
+    var current = int(store.data["settings"]["kcal"])
+    var input = _text_input(fields, "Например, 1800", str(current))
+    input.name = "CalorieGoalEditorInput"
+    input.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+    input.max_length = 4
+    var hint = _label(fields, "Допустимый диапазон: 1000–5000 ккал. Это индивидуальный ориентир, который можно менять.", 12, MUTED)
+    input.text_changed.connect(func(_value: String):
+        var value = StoreScript.parse_calorie_target(input.text)
+        hint.text = "Будет сохранено: " + str(value) + " ккал" if value > 0 else (
+            "Введи целое число от 1000 до 5000 ккал."
+        )
+    )
+    var confirm: Button = sheet["confirm"]
+    confirm.pressed.connect(func():
+        var value = StoreScript.parse_calorie_target(input.text)
+        if value < 0:
+            _sheet_error(sheet, "Укажи число от 1000 до 5000 ккал, например 1800.")
+            return
+        if not store.set_daily_calorie_goal(value):
+            _sheet_error(sheet, "Не удалось сохранить норму. Проверь свободное место.")
+            return
+        _hide_keyboard_and_focus()
+        sheet["root"].queue_free()
+        _render()
+        _notify_saved("Норма изменена: " + str(value) + " ккал")
+    )
+
+
 func _show_profile() -> void:
     var profile: Dictionary = store.data.get("profile", {})
     var hero = _card("", "hero")
@@ -1197,6 +1232,7 @@ func _show_profile() -> void:
         " ккал в сутки · Изменение веса: " +
         ("+" if latest > float(settings["start"]) else "") +
         str(snappedf(latest - float(settings["start"]), 0.1)) + " кг", 13, MUTED)
+    _button(overview, "✎ Изменить норму калорий", func(): _show_calorie_goal_editor(), true)
 
     var summary: Dictionary = store.reward_summary()
     var awards = _card("Звёзды и награды", "tint")
@@ -1698,7 +1734,12 @@ func _show_day() -> void:
     numbers.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     numbers.add_theme_constant_override("separation", 2)
     hero_content.add_child(numbers)
-    _label(numbers, "Энергия дня", 16, WHITE)
+    var calorie_heading = _row(numbers)
+    _label(calorie_heading, "Энергия дня", 16, WHITE)
+    var edit_goal = _button(calorie_heading, "✎ Норма", func(): _show_calorie_goal_editor(), true)
+    edit_goal.name = "EditDailyCalorieGoal"
+    edit_goal.custom_minimum_size.y = 34
+    edit_goal.add_theme_font_size_override("font_size", 12)
     _label(numbers, str(roundi(total)) + " из " + str(roundi(target)) + " ккал", 21, WHITE)
     var remaining: float = target - total
     _label(numbers,
