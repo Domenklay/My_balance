@@ -160,8 +160,8 @@ func _run() -> void:
     app.tab = "profile"
     app._render()
     await process_frame
-    if app.tab_buttons.size() != 6 or _find_button(app, "✎ Изменить имя и значок") == null:
-        _fail("personal page missing controls or sixth tab")
+    if app.tab_buttons.size() != 5 or _find_button(app, "✎ Изменить имя и значок") == null:
+        _fail("personal page missing controls or five-tab navigation")
         return
     var edit_button = _find_button(app, "✎ Изменить имя и значок")
     edit_button.pressed.emit()
