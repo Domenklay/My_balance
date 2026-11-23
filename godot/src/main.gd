@@ -2407,7 +2407,7 @@ func _show_online_search_results(records: Array) -> void:
         var quality_issues: Array = BarcodeScript.quality_flags(product)
         if not quality_issues.is_empty() and product.get("missing_fields", []).is_empty():
             _label(info, "⚠ " + str(quality_issues[0]), 11, ACCENT)
-        var choose = _button(row, "Порция" if not saved.is_empty() else "Выбрать", func():
+        var choose = _button(row, "Выбрать", func():
             _open_online_product(product)
         , true)
         choose.name = "OnlineFoodChoose_" + str(product.get("barcode", ""))
