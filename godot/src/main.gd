@@ -3848,6 +3848,26 @@ func _quick_food_sheet(food: Dictionary, from_barcode: bool = false,
     _label(fields, str(roundi(float(food.get("kcal", 0)))) + " ккал / 100 " + unit +
         " · Б " + str(food.get("p", 0)) + " Ж " + str(food.get("f", 0)) +
         " У " + str(food.get("c", 0)), 12, MUTED)
+    var quality: Array = BarcodeScript.quality_flags(food)
+    if not quality.is_empty():
+        var note = _label(fields, "⚠ " + str(quality[0]) +
+            " Сверь с упаковкой перед добавлением.", 12, ACCENT)
+        note.name = "QuickFoodQualityWarning"
+    var food_id: String = str(food.get("id", ""))
+    if not food_id.is_empty() and not store.food_by_id(food_id).is_empty():
+        var favorite = _button(fields,
+            "★ В избранном" if store.is_favorite(food_id) else
+            "☆ Добавить в избранное", Callable(), true)
+        favorite.name = "QuickFavoriteToggle"
+        favorite.custom_minimum_size.y = 35
+        favorite.add_theme_font_size_override("font_size", 12)
+        favorite.pressed.connect(func():
+            if store.toggle_favorite(food_id):
+                favorite.text = ("★ В избранном" if store.is_favorite(food_id) else
+                    "☆ Добавить в избранное")
+            else:
+                _sheet_error(sheet, "Не удалось изменить избранное.")
+        )
 
     var options: Array = store.portion_options(food)
     var last: Dictionary = store.last_food_portion(food)
