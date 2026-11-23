@@ -323,13 +323,23 @@ func _capture() -> void:
     await process_frame
     var drawing = app.find_child("BodyMeasurementMap", true, false)
     if drawing != null:
-        app.scroll.ensure_control_visible(drawing)
+        # Focus the diagram itself, not the measurement form above it.
+        # Restoring tab scroll happens a frame after render, so wait for it.
+        await process_frame
+        await process_frame
+        var scroll_top = app.scroll.get_global_rect().position.y
+        var diagram_top = drawing.get_global_rect().position.y
+        app.scroll.scroll_vertical = maxi(0,
+            roundi(diagram_top - scroll_top + app.scroll.scroll_vertical - 34.0))
         await _snapshot(app, "20-body-map-botanical")
         var hips_button = drawing.find_child("BodyMap_hips", true, false) as Button
         hips_button.pressed.emit()
         await process_frame
+        await process_frame
         drawing = app.find_child("BodyMeasurementMap", true, false)
-        app.scroll.ensure_control_visible(drawing)
+        app.scroll.scroll_vertical = maxi(0,
+            roundi(drawing.get_global_rect().position.y -
+            app.scroll.get_global_rect().position.y + app.scroll.scroll_vertical - 34.0))
         await _snapshot(app, "21-body-map-hips-selected")
     app.store.data["settings"]["theme"] = "dark"
     app._refresh_appearance()
@@ -337,7 +347,11 @@ func _capture() -> void:
     await process_frame
     drawing = app.find_child("BodyMeasurementMap", true, false)
     if drawing != null:
-        app.scroll.ensure_control_visible(drawing)
+        await process_frame
+        await process_frame
+        app.scroll.scroll_vertical = maxi(0,
+            roundi(drawing.get_global_rect().position.y -
+            app.scroll.get_global_rect().position.y + app.scroll.scroll_vertical - 34.0))
         await _snapshot(app, "22-body-map-dark")
     app.queue_free()
     quit(0)
