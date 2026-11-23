@@ -32,7 +32,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.43"
+const APP_VERSION = "0.7.43.1"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
