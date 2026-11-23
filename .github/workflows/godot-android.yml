@@ -147,6 +147,8 @@ jobs:
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/food_sort_frequency_test.gd
       - name: Test catalog search pagination beyond first twelve products
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/food_search_pagination_test.gd
+      - name: Test 0.7.45 body measurements, graphs, editing, migration and UI
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/body_measurements_0745_test.gd
       - name: Test 0.7.44 five-tab layout, direct meal search and combined progress
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/simple_ui_0744_test.gd
       - name: Test 0.7.43 activity, manual steps, estimated energy, week totals and migration

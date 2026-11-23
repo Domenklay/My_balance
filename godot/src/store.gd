@@ -12,6 +12,7 @@ const RewardsScript = preload("res://src/rewards.gd")
 const ProfilePhotoScript = preload("res://src/profile_photo.gd")
 const OnboardingMath = preload("res://src/onboarding_math.gd")
 const ActivityMath = preload("res://src/activity_math.gd")
+const BodyMeasurements = preload("res://src/body_measurements.gd")
 
 const MEAL_NAMES = ["Завтрак", "Обед", "Ужин", "Перекус"]
 const DEFAULT_MEAL_SHARES = [25, 35, 30, 10]
@@ -133,7 +134,7 @@ func default_data() -> Dictionary:
         "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true, "high_contrast": false,
             "meal_shares": DEFAULT_MEAL_SHARES.duplicate(), "home_widgets": DEFAULT_HOME_WIDGETS.duplicate(), "onboarding_complete": false,
             "personal": {}},
-        "foods": [], "entries": [], "activities": [], "steps": {}, "weights": [], "notes": {}, "favorites": [],
+        "foods": [], "entries": [], "activities": [], "steps": {}, "weights": [], "body_measurements": [], "notes": {}, "favorites": [],
         "recipes": [], "meal_templates": [], "day_copy_undo": {}, "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
             "photo": "", "frame": "plain"}
     }
@@ -461,6 +462,20 @@ func import_json(raw: String, persist: bool = true) -> bool:
                 obj[key] = {}
             else:
                 return false
+    # Optional body circumferences arrived in 0.7.45. Legacy JSON backups
+    # migrate with an empty collection and keep all existing data.
+    if not obj.has("body_measurements"):
+        obj["body_measurements"] = []
+    if not (obj["body_measurements"] is Array) or obj["body_measurements"].size() > 5000:
+        return false
+    var measurement_dates: Dictionary = {}
+    for measurement in obj["body_measurements"]:
+        if not BodyMeasurements.valid_record(measurement):
+            return false
+        var measurement_day: String = str(measurement["date"])
+        if measurement_dates.has(measurement_day):
+            return false
+        measurement_dates[measurement_day] = true
     # Favorites were introduced in 0.5.3; older exports have no such field.
     if not obj.has("recipes"):
         obj["recipes"] = []
@@ -1478,6 +1493,50 @@ func save_weight_entry(day: String, value: float) -> bool:
     if save():
         return true
     data["weights"] = previous
+    return false
+
+
+func body_measurements_on(day: String) -> Dictionary:
+    for record in data.get("body_measurements", []):
+        if record is Dictionary and str(record.get("date", "")) == day:
+            return record.get("values", {}).duplicate(true)
+    return {}
+
+
+func body_metric_summary(key: String, max_date: String = "9999-12-31") -> Dictionary:
+    return BodyMeasurements.metric_summary(data.get("body_measurements", []), key, max_date)
+
+
+func body_metric_history(key: String, max_date: String = "9999-12-31") -> Array:
+    return BodyMeasurements.metric_history(data.get("body_measurements", []), key, max_date)
+
+
+func save_body_measurements(day: String, values: Dictionary) -> bool:
+    var record: Dictionary = {"date": day, "values": values.duplicate(true)}
+    if not BodyMeasurements.valid_record(record):
+        return false
+    var previous: Array = data["body_measurements"].duplicate(true)
+    data["body_measurements"] = data["body_measurements"].filter(func(item):
+        return str(item.get("date", "")) != day)
+    data["body_measurements"].append(record)
+    if save():
+        return true
+    data["body_measurements"] = previous
+    return false
+
+
+func delete_body_measurements(day: String) -> bool:
+    if not BodyMeasurements.valid_date(day):
+        return false
+    var previous: Array = data["body_measurements"].duplicate(true)
+    var kept: Array = data["body_measurements"].filter(func(item):
+        return str(item.get("date", "")) != day)
+    if kept.size() == previous.size():
+        return false
+    data["body_measurements"] = kept
+    if save():
+        return true
+    data["body_measurements"] = previous
     return false
 
 

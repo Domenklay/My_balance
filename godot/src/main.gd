@@ -17,6 +17,7 @@ const FoodSearchScript = preload("res://src/food_search.gd")
 const AppearanceScript = preload("res://src/appearance.gd")
 const PatternScript = preload("res://src/theme_pattern.gd")
 const ActivityMath = preload("res://src/activity_math.gd")
+const BodyMeasurements = preload("res://src/body_measurements.gd")
 const MEAL_TEXTURES = [
     preload("res://assets/meals/breakfast.svg"),
     preload("res://assets/meals/lunch.svg"),
@@ -34,7 +35,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.44"
+const APP_VERSION = "0.7.45"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -101,6 +102,8 @@ var _expanded_meals: Dictionary = {}
 var tab: String = "day"
 # The combined Progress page retains separate weight and report views.
 var progress_section: String = "weight"
+var selected_body_metric: String = "waist"
+var body_history_expanded: bool = false
 var stats_period: String = "week"
 var stats_anchor: String = ""
 var month_shown: String = ""
@@ -1410,6 +1413,10 @@ func _show_profile() -> void:
     quick_weight.name = "ProfileAddWeight"
     quick_weight.custom_minimum_size.y = 39
     quick_weight.add_theme_font_size_override("font_size", 13)
+    var measure_link = _button(hero, "📏 Замеры тела", func(): _set_progress_section("body"), true)
+    measure_link.name = "ProfileBodyMeasurements"
+    measure_link.custom_minimum_size.y = 39
+    measure_link.add_theme_font_size_override("font_size", 13)
     var overview = _card("Мои ориентиры")
     _compact_card(overview, 12, 7)
     var change: float = float(progress["change"])
@@ -4758,7 +4765,7 @@ func _edit_activity(activity: Dictionary) -> void:
 
 
 func _set_progress_section(section: String) -> void:
-    if section not in ["weight", "stats"]:
+    if section not in ["weight", "stats", "body"]:
         return
     progress_section = section
     tab = "progress"
@@ -4768,10 +4775,10 @@ func _set_progress_section(section: String) -> void:
 func _show_progress() -> void:
     var card = _card("Мой прогресс")
     _compact_card(card, 10, 7)
-    _label(card, "Вес, питание и активность в одном разделе.", 12, MUTED)
+    _label(card, "Вес, замеры тела, питание и активность в одном разделе.", 12, MUTED)
     var choices = _row(card)
     choices.name = "ProgressSectionChoices"
-    for item in [["weight", "Вес и цель"], ["stats", "Статистика"]]:
+    for item in [["weight", "Вес"], ["body", "Замеры"], ["stats", "Итоги"]]:
         var section: String = str(item[0])
         var action = _button(choices, str(item[1]),
             func(): _set_progress_section(section), true)
@@ -4787,8 +4794,162 @@ func _show_progress() -> void:
             action.add_theme_color_override("font_color", WHITE)
     if progress_section == "stats":
         _show_stats()
+    elif progress_section == "body":
+        _show_body_measurements()
     else:
         _show_weight()
+
+
+func _body_metric_picker_changed(index: int) -> void:
+    if index < 0 or index >= BodyMeasurements.FIELDS.size():
+        return
+    selected_body_metric = str(BodyMeasurements.FIELDS[index][0])
+    _render()
+
+
+func _show_body_measurements() -> void:
+    var edit_card = _card("Замеры тела")
+    _compact_card(edit_card, 10, 7)
+    _date_nav(edit_card)
+    _label(edit_card, "Указывай только то, что измерила. Пустые поля не заполняются автоматически.", 12, MUTED)
+    var current: Dictionary = store.body_measurements_on(date)
+    var fields: Dictionary = {}
+    var grid = GridContainer.new()
+    grid.name = "BodyMeasurementsGrid"
+    grid.columns = 2
+    grid.add_theme_constant_override("h_separation", 8)
+    grid.add_theme_constant_override("v_separation", 7)
+    edit_card.add_child(grid)
+    for definition in BodyMeasurements.FIELDS:
+        var key: String = str(definition[0])
+        var caption: String = str(definition[1])
+        var holder = VBoxContainer.new()
+        holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        holder.add_theme_constant_override("separation", 3)
+        grid.add_child(holder)
+        _label(holder, caption + ", см", 12, INK)
+        var entry = _text_input(holder, "Не указано")
+        entry.name = "BodyField_" + key
+        entry.max_length = 8
+        entry.custom_minimum_size = Vector2(85, 44)
+        if current.has(key):
+            entry.text = str(snappedf(float(current[key]), 0.1))
+        else:
+            var earlier: Dictionary = store.body_metric_summary(key, date)
+            if not earlier.is_empty():
+                entry.placeholder_text = "Было " + str(snappedf(float(earlier["latest"]), 0.1))
+        fields[key] = entry
+    var save_button = _button(edit_card, "Сохранить замеры", func():
+        var values: Dictionary = {}
+        for definition in BodyMeasurements.FIELDS:
+            var key: String = str(definition[0])
+            var raw: String = str(fields[key].text).strip_edges().replace(",", ".")
+            if raw.is_empty():
+                continue
+            if not raw.is_valid_float() or not BodyMeasurements.valid_value(float(raw)):
+                _message("Проверь «" + str(definition[1]) + "». Введи число от 10 до 300 см.")
+                return
+            values[key] = snappedf(float(raw), 0.1)
+        if values.is_empty():
+            _message("Укажи хотя бы один параметр тела.")
+            return
+        if store.save_body_measurements(date, values):
+            _render()
+            _notify_saved("Замеры сохранены")
+        else:
+            _message("Не удалось сохранить замеры.")
+    )
+    save_button.name = "BodyMeasurementsSave"
+
+    var summary_card = _card("Изменения по параметрам")
+    _compact_card(summary_card, 10, 6)
+    var any_data = false
+    for definition in BodyMeasurements.FIELDS:
+        var key: String = str(definition[0])
+        var details: Dictionary = store.body_metric_summary(key, date)
+        if details.is_empty():
+            continue
+        any_data = true
+        var line = _soft_list_row(summary_card)
+        var delta: float = float(details["change"])
+        var delta_text = ("+" if delta > 0.0 else "") + str(snappedf(delta, 0.1)) + " см"
+        var caption = _label(line, str(definition[1]) + "  " +
+            str(snappedf(float(details["latest"]), 0.1)) +
+            " см  ·  " + delta_text, 13, INK)
+        caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    if not any_data:
+        _label(summary_card, "Запиши первый замер, чтобы увидеть изменения.", 13, MUTED)
+    else:
+        _label(summary_card, "Изменение указано относительно первого замера каждого параметра.", 11, MUTED)
+
+    var graph_card = _card("График замеров")
+    _compact_card(graph_card, 10, 7)
+    var picker = _choice(graph_card, [])
+    picker.name = "BodyMeasurementMetricPicker"
+    var selected_index = 0
+    for i in range(BodyMeasurements.FIELDS.size()):
+        var definition: Array = BodyMeasurements.FIELDS[i]
+        picker.add_item(str(definition[1]))
+        if str(definition[0]) == selected_body_metric:
+            selected_index = i
+    picker.select(selected_index)
+    picker.item_selected.connect(_body_metric_picker_changed)
+    var points: Array = store.body_metric_history(selected_body_metric, date)
+    if points.is_empty():
+        _label(graph_card, "Для этого параметра пока нет измерений.", 13, MUTED)
+    else:
+        var plot = GraphScript.new()
+        plot.name = "BodyMeasurementsGraph"
+        plot.custom_minimum_size = Vector2(0, 200)
+        plot.set_palette(TEXT_ACCENT, CHART_GRID, MUTED, ACCENT, CHART_AREA, SECONDARY)
+        plot.set_points(points, -1.0, 120)
+        graph_card.add_child(plot)
+        var recent: Dictionary = store.body_metric_summary(selected_body_metric, date)
+        _label(graph_card, "Первый: " + str(snappedf(float(recent["first"]), 0.1)) +
+            " см · Последний: " + str(snappedf(float(recent["latest"]), 0.1)) +
+            " см · Изменение: " +
+            ("+" if float(recent["change"]) > 0.0 else "") +
+            str(snappedf(float(recent["change"]), 0.1)) + " см", 12, MUTED)
+
+    var history_card = _card("История замеров")
+    _compact_card(history_card, 10, 6)
+    var history: Array = store.data.get("body_measurements", []).filter(
+        func(item): return str(item.get("date", "")) <= date)
+    history.sort_custom(func(a, b): return str(a.get("date", "")) > str(b.get("date", "")))
+    var max_visible = history.size() if body_history_expanded else mini(history.size(), 8)
+    for i in range(max_visible):
+        var item: Dictionary = history[i]
+        var day: String = str(item["date"])
+        var vals: Dictionary = item["values"]
+        var summary = []
+        for def in BodyMeasurements.FIELDS:
+            if vals.has(def[0]):
+                summary.append(str(def[1]) + " " + str(snappedf(float(vals[def[0]]), 0.1)))
+        var line = _soft_list_row(history_card)
+        var label = _label(line, day + "\n" + " · ".join(summary) + " см", 12)
+        label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        var edit = _button(line, "✎", func():
+            date = day
+            month_shown = date.substr(0, 7)
+            _render(true)
+        , true)
+        edit.tooltip_text = "Изменить замеры за " + day
+        _button(line, "×", func(): _confirm_delete("Удалить замеры за " + day + "?", func():
+            if store.delete_body_measurements(day):
+                _render()
+                _notify_saved("Замеры удалены")
+            else:
+                _message("Не удалось удалить замеры.")
+        ), true)
+    if history.size() > 8:
+        _button(history_card, "Скрыть старые записи" if body_history_expanded else
+            "Показать всю историю (" + str(history.size()) + ")",
+            func():
+                body_history_expanded = not body_history_expanded
+                _render()
+        , true)
 
 
 func _show_weight() -> void:
