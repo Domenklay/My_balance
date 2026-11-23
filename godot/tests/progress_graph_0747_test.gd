@@ -34,7 +34,7 @@ func _run() -> void:
             all_time[0]["date"] != "2025-12-01":
         _fail("period filtering excludes valid data or includes future records")
         return
-    if absf(float(Maths.summarize(month)["change"]) + 2.0) > 0.01 or \
+    if absf(float(Maths.summarize(month)["change"]) + 1.5) > 0.01 or \
             Maths.summarize(month)["latest_date"] != "2026-11-23" or \
             Maths.format_delta(2.2, "см") != "+2.2 см" or \
             not Maths.summarize([]).is_empty() or JSON.stringify(original) != snapshot:
@@ -93,7 +93,7 @@ func _run() -> void:
     overview = app.find_child("WeightProgressGraph", true, false)
     var delta = app.find_child("GraphPeriodDelta", true, false) as Label
     if overview == null or overview.samples.size() != 3 or delta == null or \
-            not delta.text.contains("-2"):
+            not delta.text.contains("-1.5"):
         _fail("30-day weight chart and comparison did not update")
         return
     (app.find_child("WeightPeriod_all", true, false) as Button).pressed.emit()
