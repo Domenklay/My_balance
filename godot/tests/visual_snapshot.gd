@@ -306,5 +306,38 @@ func _capture() -> void:
     app.tab = "recipes"
     app._render()
     await _snapshot(app, "17-dark-recipes")
+    # 0.7.48: capture the actual clickable diagram in both light and dark.
+    app.store.data["body_measurements"] = [
+        {"date": "2026-10-25", "values": {
+            "waist": 94.0, "chest": 104.0, "hips": 113.0, "upper_arm": 33.0}},
+        {"date": "2026-11-23", "values": {
+            "waist": 88.0, "chest": 100.0, "hips": 109.0, "upper_arm": 32.0}}
+    ]
+    app.date = "2026-11-23"
+    app.tab = "progress"
+    app.progress_section = "body"
+    app.store.data["settings"]["theme"] = "botanical"
+    app.store.data["settings"]["patterns"] = true
+    app._refresh_appearance()
+    app._render()
+    await process_frame
+    var drawing = app.find_child("BodyMeasurementMap", true, false)
+    if drawing != null:
+        app.scroll.ensure_control_visible(drawing)
+        await _snapshot(app, "20-body-map-botanical")
+        var hips_button = drawing.find_child("BodyMap_hips", true, false) as Button
+        hips_button.pressed.emit()
+        await process_frame
+        drawing = app.find_child("BodyMeasurementMap", true, false)
+        app.scroll.ensure_control_visible(drawing)
+        await _snapshot(app, "21-body-map-hips-selected")
+    app.store.data["settings"]["theme"] = "dark"
+    app._refresh_appearance()
+    app._render()
+    await process_frame
+    drawing = app.find_child("BodyMeasurementMap", true, false)
+    if drawing != null:
+        app.scroll.ensure_control_visible(drawing)
+        await _snapshot(app, "22-body-map-dark")
     app.queue_free()
     quit(0)

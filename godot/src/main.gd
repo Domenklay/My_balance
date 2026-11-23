@@ -19,6 +19,7 @@ const AppearanceScript = preload("res://src/appearance.gd")
 const PatternScript = preload("res://src/theme_pattern.gd")
 const ActivityMath = preload("res://src/activity_math.gd")
 const BodyMeasurements = preload("res://src/body_measurements.gd")
+const BodyMapScript = preload("res://src/body_map.gd")
 const MEAL_TEXTURES = [
     preload("res://assets/meals/breakfast.svg"),
     preload("res://assets/meals/lunch.svg"),
@@ -36,7 +37,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.47"
+const APP_VERSION = "0.7.48"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -4820,6 +4821,8 @@ func _set_graph_period(kind: String, period: String) -> void:
         weight_chart_period = period
     elif kind == "body":
         body_chart_period = period
+        _refresh_body_diagram_preserving_draft()
+        return
     else:
         return
     _render()
@@ -4870,11 +4873,32 @@ func _graph_period_info(parent: Node, points: Array, unit: String) -> void:
     _label(parent, "Разница между первым и последним замером выбранного периода.", 11, MUTED)
 
 
+func _refresh_body_diagram_preserving_draft() -> void:
+    # Changing a graph metric or time range must never discard unsubmitted
+    # measurements in the editing form.
+    var draft: Dictionary = {}
+    for definition in BodyMeasurements.FIELDS:
+        var field = find_child("BodyField_" + str(definition[0]), true, false) as LineEdit
+        if field != null:
+            draft[str(definition[0])] = field.text
+    _render()
+    for key in draft:
+        var field = find_child("BodyField_" + str(key), true, false) as LineEdit
+        if field != null:
+            field.text = str(draft[key])
+
+
+func _body_map_select(metric: String) -> void:
+    if not BodyMeasurements.is_metric(metric) or metric == selected_body_metric:
+        return
+    selected_body_metric = metric
+    _refresh_body_diagram_preserving_draft()
+
+
 func _body_metric_picker_changed(index: int) -> void:
     if index < 0 or index >= BodyMeasurements.FIELDS.size():
         return
-    selected_body_metric = str(BodyMeasurements.FIELDS[index][0])
-    _render()
+    _body_map_select(str(BodyMeasurements.FIELDS[index][0]))
 
 
 func _show_body_measurements() -> void:
@@ -4931,30 +4955,24 @@ func _show_body_measurements() -> void:
     )
     save_button.name = "BodyMeasurementsSave"
 
-    var summary_card = _card("Изменения по параметрам")
-    _compact_card(summary_card, 10, 6)
-    var any_data = false
+    var graph_card = _card("Карта тела и график")
+    _compact_card(graph_card, 10, 7)
+    _label(graph_card,
+        "Нажми на область тела, чтобы выбрать параметр и посмотреть его изменения.",
+        12, MUTED)
+    var silhouette = BodyMapScript.new()
+    silhouette.name = "BodyMeasurementMap"
+    silhouette.custom_minimum_size = Vector2(0, 338)
+    graph_card.add_child(silhouette)
+    var latest: Dictionary = {}
     for definition in BodyMeasurements.FIELDS:
         var key: String = str(definition[0])
-        var details: Dictionary = store.body_metric_summary(key, date)
-        if details.is_empty():
-            continue
-        any_data = true
-        var line = _soft_list_row(summary_card)
-        var delta: float = float(details["change"])
-        var delta_text = ("+" if delta > 0.0 else "") + str(snappedf(delta, 0.1)) + " см"
-        var caption = _label(line, str(definition[1]) + "  " +
-            str(snappedf(float(details["latest"]), 0.1)) +
-            " см  ·  " + delta_text, 13, INK)
-        caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    if not any_data:
-        _label(summary_card, "Запиши первый замер, чтобы увидеть изменения.", 13, MUTED)
-    else:
-        _label(summary_card, "Изменение указано относительно первого замера каждого параметра.", 11, MUTED)
-
-    var graph_card = _card("График замеров")
-    _compact_card(graph_card, 10, 7)
+        var result: Dictionary = store.body_metric_summary(key, date)
+        if not result.is_empty():
+            latest[key] = float(result["latest"])
+    silhouette.configure(selected_body_metric, latest, INK,
+        SECONDARY, BORDER, NAV_ACTIVE, DARK_MODE, HIGH_CONTRAST)
+    silhouette.metric_selected.connect(_body_map_select)
     var picker = _choice(graph_card, [])
     picker.name = "BodyMeasurementMetricPicker"
     var selected_index = 0
@@ -4976,6 +4994,28 @@ func _show_body_measurements() -> void:
     plot.set_unit("см")
     plot.set_overview_points(points, -1.0)
     graph_card.add_child(plot)
+
+    var summary_card = _card("Изменения по параметрам")
+    _compact_card(summary_card, 10, 6)
+    var any_data = false
+    for definition in BodyMeasurements.FIELDS:
+        var key: String = str(definition[0])
+        var details: Dictionary = store.body_metric_summary(key, date)
+        if details.is_empty():
+            continue
+        any_data = true
+        var line = _soft_list_row(summary_card)
+        var delta: float = float(details["change"])
+        var delta_text = ("+" if delta > 0.0 else "") + str(snappedf(delta, 0.1)) + " см"
+        var caption = _label(line, str(definition[1]) + "  " +
+            str(snappedf(float(details["latest"]), 0.1)) +
+            " см  ·  " + delta_text, 13, INK)
+        caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    if not any_data:
+        _label(summary_card, "Запиши первый замер, чтобы увидеть изменения.", 13, MUTED)
+    else:
+        _label(summary_card, "Изменение указано относительно первого замера каждого параметра.", 11, MUTED)
 
     var history_card = _card("История замеров")
     _compact_card(history_card, 10, 6)

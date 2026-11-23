@@ -147,6 +147,8 @@ jobs:
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/food_sort_frequency_test.gd
       - name: Test catalog search pagination beyond first twelve products
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/food_search_pagination_test.gd
+      - name: Test 0.7.48 interactive body diagram, metric selection and unsaved draft safety
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/body_map_0748_test.gd
       - name: Test 0.7.47 graph period filters, history sampling and weight/body UI
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/progress_graph_0747_test.gd
       - name: Test 0.7.46 design system, botanical contrast and preserved controls
