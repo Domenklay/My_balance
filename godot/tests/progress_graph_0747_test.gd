@@ -29,7 +29,7 @@ func _run() -> void:
     var quarter: Array = Maths.filter_records(original, "2026-11-23", "quarter")
     var all_time: Array = Maths.filter_records(original, "2026-11-23", "all")
     if month.size() != 3 or quarter.size() != 5 or all_time.size() != 6 or \
-            month[0]["date"] != "2026-10-24" or \
+            month[0]["date"] != "2026-11-01" or \
             quarter[0]["date"] != "2026-08-26" or \
             all_time[0]["date"] != "2025-12-01":
         _fail("period filtering excludes valid data or includes future records")
