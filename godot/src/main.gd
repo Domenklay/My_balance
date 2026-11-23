@@ -4997,6 +4997,27 @@ func _show_body_measurements() -> void:
     plot.set_unit("см")
     plot.set_overview_points(points, -1.0)
     graph_card.add_child(plot)
+    # Show the recent dates for the *selected* body parameter, while the
+    # complete mixed-parameter journal remains intact below the chart.
+    var selected_history = VBoxContainer.new()
+    selected_history.name = "BodySelectedMetricHistory"
+    selected_history.add_theme_constant_override("separation", 5)
+    graph_card.add_child(selected_history)
+    var recorded: Array = store.body_metric_history(selected_body_metric, date)
+    _label(selected_history, "История: " +
+        BodyMeasurements.display_name(selected_body_metric) +
+        " (" + str(recorded.size()) + ")", 14, INK)
+    if recorded.is_empty():
+        _label(selected_history, "Пока нет записей для этого параметра.", 12, MUTED)
+    else:
+        for offset in range(mini(4, recorded.size())):
+            var item: Dictionary = recorded[recorded.size() - 1 - offset]
+            var row = _soft_list_row(selected_history)
+            _label(row, str(item["date"]) + "  ·  " +
+                str(snappedf(float(item["value"]), 0.1)) + " см", 12, MUTED)
+        if recorded.size() > 4:
+            _label(selected_history, "Остальные записи доступны в общей истории ниже.",
+                11, MUTED)
 
     var summary_card = _card("Изменения по параметрам")
     _compact_card(summary_card, 10, 6)

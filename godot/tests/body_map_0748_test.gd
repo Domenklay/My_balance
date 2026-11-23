@@ -53,9 +53,11 @@ func _run() -> void:
     var picker = app.find_child("BodyMeasurementMetricPicker", true, false) as OptionButton
     var chart = app.find_child("BodyMeasurementsGraph", true, false)
     draft = app.find_child("BodyField_calf", true, false) as LineEdit
+    var selected_history = app.find_child("BodySelectedMetricHistory", true, false)
     if app.selected_body_metric != "hips" or map.selected_metric != "hips" or \
-            picker.selected != 3 or chart.samples.size() != 2 or draft.text != "37,5":
-        _fail("tap did not switch graph and preserve unsaved calf value")
+            picker.selected != 3 or chart.samples.size() != 2 or draft.text != "37,5" or \
+            selected_history == null or selected_history.get_child_count() < 3:
+        _fail("tap did not switch graph/history or preserve unsaved calf value")
         return
     (app.find_child("BodyPeriod_month", true, false) as Button).pressed.emit()
     await process_frame
