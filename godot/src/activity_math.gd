@@ -29,9 +29,13 @@ static func valid_activity(record: Variant) -> bool:
     if not (record is Dictionary):
         return false
     var item: Dictionary = record
-    if not (item.get("id") is String and item.get("date") is String and item.get("type") is String):
+    # Entries from pre-0.7.43 journals could omit the optional id.
+    # Keep them readable, editable and eligible for estimates on import.
+    if not (item.get("date") is String and item.get("type") is String):
         return false
-    if str(item["id"]).is_empty() or str(item["id"]).length() > 100 or not valid_date(str(item["date"])):
+    if item.has("id") and (not (item["id"] is String) or str(item["id"]).length() > 100):
+        return false
+    if not valid_date(str(item["date"])):
         return false
     if not MET_VALUES.has(item["type"]):
         return false
