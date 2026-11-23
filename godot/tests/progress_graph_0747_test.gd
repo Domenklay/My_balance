@@ -70,7 +70,7 @@ func _run() -> void:
     app.date = "2026-11-23"
     app.store.data["weights"] = original.duplicate(true)
     app.store.data["body_measurements"] = [
-        {"date":"2026-10-24", "values":{"waist":94.0, "hips":110.0}},
+        {"date":"2026-11-01", "values":{"waist":94.0, "hips":110.0}},
         {"date":"2026-11-23", "values":{"waist":90.0, "hips":108.0}}
     ]
     var pristine: String = JSON.stringify(app.store.data)
