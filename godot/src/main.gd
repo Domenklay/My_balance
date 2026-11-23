@@ -486,6 +486,14 @@ func _ensure_field_visible(field: Control) -> void:
 func _bind_field_focus(field: Control) -> void:
     field.focus_entered.connect(func(): _ensure_field_visible(field))
 
+func _navigate_to_products() -> void:
+    # The bottom Products button opens a general catalog, not the last
+    # locked meal. Diary meal headings still lock meal/date explicitly.
+    _meal_entry_locked = false
+    _meal_entry_date = ""
+    _navigate_to_tab("search")
+
+
 func _navigate_to_tab(target: String) -> void:
     _hide_keyboard_and_focus()
     if target == "settings" and tab == "settings" and settings_page == "foods":
@@ -863,7 +871,12 @@ func _make_tabs() -> void:
     for item in tabs:
         var target: String = item[1]
         var title: String = item[0]
-        var button = _button(row, "", func(): _navigate_to_tab(target), true)
+        var button = _button(row, "", func():
+            if target == "search":
+                _navigate_to_products()
+            else:
+                _navigate_to_tab(target)
+        , true)
         button.name = "NavTab_" + target
         button.tooltip_text = title
         button.custom_minimum_size = Vector2(0, 66)

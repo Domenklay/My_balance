@@ -74,8 +74,10 @@ func _run() -> void:
         return
     (app.find_child("MealHeader_1", true, false) as Button).pressed.emit()
     await process_frame
-    if app.get_node_or_null("ProductSheet") == null or app.selected_meal != "Обед":
-        _fail("lunch title lost its add-product action")
+    if app.tab != "search" or app.get_node_or_null("ProductSheet") != null or \
+            app.selected_meal != "Обед" or not app._meal_entry_locked or \
+            app.find_child("FoodNameSearch", true, false) == null:
+        _fail("lunch title did not open direct meal-locked search")
         return
     print("PASS MEAL VISUAL STYLE: vector icons, five themes, pastel cards, subdued shadows, contrast and meal actions")
     app.queue_free()

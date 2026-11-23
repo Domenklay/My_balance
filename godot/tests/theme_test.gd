@@ -76,7 +76,7 @@ func _run() -> void:
         if app.NAV_ACTIVE != Color(str(palette["nav_active"])):
             _fail("bottom navigation accent was not updated: " + id)
             return
-        if app.tab_buttons.size() != 6:
+        if app.tab_buttons.size() != 5:
             _fail("theme broke bottom navigation: " + id)
             return
         var navigation = app.shell.get_node("BottomNavigation") as PanelContainer
