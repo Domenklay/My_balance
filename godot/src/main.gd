@@ -2394,20 +2394,32 @@ func _show_online_search_results(records: Array) -> void:
             details += (" · " if not details.is_empty() else "") + package_text
         if not details.is_empty():
             _label(info, details, 11, MUTED)
-        var review: String = BarcodeScript.nutrition_review_label(product)
+        var saved: Dictionary = store.food_by_barcode(str(product.get("barcode", "")))
+        if not saved.is_empty():
+            _label(info, "✓ Уже в каталоге · доступен офлайн", 11, TEXT_ACCENT)
         if not product.get("missing_fields", []).is_empty():
-            _label(info, review, 11, ACCENT)
+            _label(info, BarcodeScript.nutrition_review_label(product), 11, ACCENT)
         else:
             _label(info, str(roundi(float(product.get("kcal", 0)))) +
                 " ккал / 100 " + PortionMath.base_unit(product) + " · Б " +
                 str(product.get("p", 0)) + " Ж " + str(product.get("f", 0)) +
                 " У " + str(product.get("c", 0)), 11, MUTED)
-        var choose = _button(row, "Выбрать", func():
-            _confirm_barcode_product(product)
+        var quality_issues: Array = BarcodeScript.quality_flags(product)
+        if not quality_issues.is_empty():
+            _label(info, "⚠ " + str(quality_issues[0]), 11, ACCENT)
+        var choose = _button(row, "Порция" if not saved.is_empty() else "Проверить", func():
+            _open_online_product(product)
         , true)
+        choose.name = "OnlineFoodChoose_" + str(product.get("barcode", ""))
         choose.custom_minimum_size.y = 40
         choose.size_flags_horizontal = Control.SIZE_SHRINK_END
         choose.add_theme_font_size_override("font_size", 12)
+        if not saved.is_empty():
+            var update = _button(info, "Сверить с этикеткой и обновить", func():
+                _confirm_barcode_product(product)
+            , true)
+            update.custom_minimum_size.y = 34
+            update.add_theme_font_size_override("font_size", 11)
 
 
 func _show_food_search() -> void:
@@ -4024,7 +4036,7 @@ func _food_form(parent: VBoxContainer) -> void:
     parent.add_child(barcode_divider)
     var search_heading = _label(parent, "Поиск продуктов по названию", 16, TEXT_ACCENT)
     var filtered: Array = []
-    var search = _text_input(parent, "Поиск продукта по названию")
+    var search = _text_input(parent, "Название, бренд или штрихкод")
     search.name = "FoodNameSearch"
     online_search_field = search
     if not selected_barcode_food.is_empty():
@@ -4034,7 +4046,10 @@ func _food_form(parent: VBoxContainer) -> void:
     var online_actions = _row(parent)
     online_actions.name = "OnlineFoodSearchActions"
     var online_button = _button(online_actions, "Найти в интернете", func():
-        _lookup_online_products(search.text)
+        if not BarcodeScript.normalize_code(search.text).is_empty():
+            _lookup_barcode_from_search(search)
+        else:
+            _lookup_online_products(search.text)
     , true)
     online_button.name = "OnlineFoodSearchButton"
     online_button.custom_minimum_size.y = 40
@@ -4122,9 +4137,24 @@ func _food_form(parent: VBoxContainer) -> void:
             online_results_box.visible = false
             for old in online_results_box.get_children():
                 old.queue_free()
+        var code: String = BarcodeScript.normalize_code(search.text)
+        online_button.text = "Найти штрихкод" if not code.is_empty() else "Найти в интернете"
         if is_instance_valid(online_search_label):
-            online_search_label.text = "Поиск по всем брендам: нажми «Найти в интернете»."
+            if not code.is_empty():
+                var local: Dictionary = store.food_by_barcode(code)
+                online_search_label.text = ("✓ Сохранён офлайн: " +
+                    str(local.get("name", "Продукт")) + ". Нажми «Найти штрихкод»."
+                    if not local.is_empty() else
+                    "Код проверен. Нажми «Найти штрихкод» для поиска онлайн.")
+            else:
+                online_search_label.text = "Поиск по названию и бренду; для EAN/UPC введи полный код."
         _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star, category, results_box, meal, added_count)
+    )
+    search.text_submitted.connect(func(_value: String):
+        if not BarcodeScript.normalize_code(search.text).is_empty():
+            _lookup_barcode_from_search(search)
+        else:
+            _lookup_online_products(search.text)
     )
     favorite_only.toggled.connect(func(_value: bool):
         _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star, category, results_box, meal, added_count)
@@ -4140,11 +4170,17 @@ func _food_form(parent: VBoxContainer) -> void:
     )
     # Make search immediately visible. The previous layout buried it under
     # barcode controls and a long catalog form.
-    var quick_tabs = _row(parent)
+    # Six concise chips in two rows: show own saved products without
+    # burying them inside the legacy advanced filter.
+    var quick_tabs = GridContainer.new()
     quick_tabs.name = "FoodQuickFilters"
-    quick_tabs.add_theme_constant_override("separation", 4)
+    quick_tabs.columns = 3
+    quick_tabs.add_theme_constant_override("h_separation", 4)
+    quick_tabs.add_theme_constant_override("v_separation", 4)
+    parent.add_child(quick_tabs)
     for option in [
-        ["Недавние", 5], ["Частые", 6], ["★ Избранное", 4], ["Все", 0]
+        ["Недавние", 5], ["Мои", 3], ["★ Избранное", 4],
+        ["Частые", 6], ["Брендовые", 2], ["Все", 0]
     ]:
         var target_index: int = int(option[1])
         var filter_button = _button(quick_tabs, str(option[0]), func():
@@ -4152,8 +4188,9 @@ func _food_form(parent: VBoxContainer) -> void:
             _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star,
                 category, results_box, meal, added_count)
         , true)
-        filter_button.add_theme_font_size_override("font_size", 12)
-        filter_button.custom_minimum_size.y = 38
+        filter_button.name = "FoodFilter_" + str(target_index)
+        filter_button.add_theme_font_size_override("font_size", 11)
+        filter_button.custom_minimum_size.y = 36
         filter_button.clip_text = true
 
     var quick_lists = VBoxContainer.new()
@@ -4369,6 +4406,23 @@ func _rebuild_food_results(results_box: VBoxContainer, filtered: Array,
             " · Б " + str(snappedf(float(item.get("p", 0)), 0.1)) +
             " Ж " + str(snappedf(float(item.get("f", 0)), 0.1)) +
             " У " + str(snappedf(float(item.get("c", 0)), 0.1)), 11, MUTED)
+        var warnings: Array = BarcodeScript.quality_flags(item)
+        if not warnings.is_empty():
+            var alert = _label(info, "⚠ " + str(warnings[0]), 11, ACCENT)
+            alert.name = "FoodQualityWarning_" + str(index)
+        var last: Dictionary = store.last_food_portion(item)
+        if not last.is_empty() and \
+                str(last.get("unit", "г")) == PortionMath.base_unit(item):
+            var repeat = _button(info,
+                "↻ Последняя порция · " +
+                str(snappedf(float(last.get("grams", 0)), 0.1)) +
+                " " + str(last.get("unit", "г")), func():
+                    _repeat_search_food(item, last, added_count)
+            , true)
+            repeat.name = "FoodRepeatLast_" + str(index)
+            repeat.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+            repeat.custom_minimum_size.y = 34
+            repeat.add_theme_font_size_override("font_size", 11)
         _button(row, "＋ Порция", func(): _quick_food_sheet(item))
     if shown < filtered.size():
         var next_count: int = mini(12, filtered.size() - shown)
