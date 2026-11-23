@@ -99,6 +99,14 @@ func _run() -> void:
     if app.store.day_steps(date) != 4200:
         _fail("activity steps button did not save")
         return
+    # Saving steps rebuilds the page. Obtain fresh controls: previous buttons
+    # belong to the queued-for-deletion view and must not receive events.
+    kind_box = app.find_child("ActivityKind", true, false) as OptionButton
+    duration_box = app.find_child("ActivityMinutes", true, false) as SpinBox
+    save_button = app.find_child("ActivitySaveWorkout", true, false) as Button
+    if kind_box == null or duration_box == null or save_button == null:
+        _fail("workout controls missing after saving steps")
+        return
     kind_box.select(1)
     duration_box.value = 25
     save_button.pressed.emit()
