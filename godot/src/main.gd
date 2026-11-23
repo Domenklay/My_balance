@@ -31,7 +31,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.41"
+const APP_VERSION = "0.7.42"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -2271,6 +2271,53 @@ func _show_meal_add_actions(meal_name: String) -> void:
         sheet["root"].queue_free()
         _open_meal_catalog(meal_name)
     )
+
+
+# Use the very same search field for names, brands or a complete EAN/UPC.
+# Known barcodes always open the local saved portion; no network round-trip.
+func _lookup_barcode_from_search(search: LineEdit) -> void:
+    var code: String = BarcodeScript.normalize_code(search.text.strip_edges())
+    if code.is_empty():
+        if is_instance_valid(online_search_label):
+            online_search_label.text = "Для поиска штрихкода введи полный EAN/UPC с контрольной цифрой."
+        return
+    var saved: Dictionary = store.food_by_barcode(code)
+    if not saved.is_empty():
+        _show_barcode_portion(saved)
+        return
+    _lookup_barcode(code)
+    if is_instance_valid(online_search_label):
+        online_search_label.text = "Проверяем штрихкод " + code + " в Open Food Facts…"
+
+
+func _open_online_product(record: Dictionary) -> void:
+    var code: String = str(record.get("barcode", ""))
+    var saved: Dictionary = store.food_by_barcode(code)
+    if not saved.is_empty():
+        _show_barcode_portion(saved)
+    else:
+        _confirm_barcode_product(record)
+
+
+# One explicit tap repeats the last actual amount and measure of a product,
+# not an assumed 100 g. The meal/date remains the one selected in the diary.
+func _repeat_search_food(food: Dictionary, last: Dictionary,
+        added_label: Label) -> void:
+    var grams: float = float(last.get("grams", 0))
+    if grams <= 0.0 or grams > 5000.0 or \
+            str(last.get("unit", "г")) != PortionMath.base_unit(food):
+        _message("Сохранённая порция недоступна. Выбери вес вручную.")
+        return
+    if store.add_food_entry(food, grams, selected_meal, _selected_food_date(),
+            str(last.get("portion_label", "")),
+            float(last.get("portion_count", 0)), str(last.get("portion_id", ""))):
+        if is_instance_valid(added_label):
+            added_label.set_meta("count", int(added_label.get_meta("count", 0)) + 1)
+            added_label.text = "Добавлено за сеанс: " + str(added_label.get_meta("count"))
+        _notify_saved("Повторена порция: " + str(snappedf(grams, 0.1)) +
+            " " + str(last.get("unit", "г")))
+    else:
+        _message("Не удалось добавить порцию. Проверь свободное место.")
 
 
 func _lookup_online_products(raw_terms: String) -> void:
