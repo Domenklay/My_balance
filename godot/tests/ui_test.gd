@@ -198,13 +198,12 @@ func _run() -> void:
         return
     catalog_button.pressed.emit()
     await process_frame
-    var lunch_search = _find_button(app, "⌕ Найти продукт")
-    if lunch_search == null:
-        push_error("FAILED: lunch heading has no product search option")
+    # The heading now opens the catalog directly, without an intermediate sheet.
+    if app.get_node_or_null("ProductSheet") != null or \
+            app.find_child("FoodNameSearch", true, false) == null:
+        push_error("FAILED: lunch heading did not open direct product search")
         quit(1)
         return
-    lunch_search.pressed.emit()
-    await process_frame
     if app.selected_meal != "Обед" or not app._meal_entry_locked:
         push_error("FAILED: tapping lunch heading did not select lunch")
         quit(1)
