@@ -4087,9 +4087,9 @@ func _food_form(parent: VBoxContainer) -> void:
     var barcode_divider = HSeparator.new()
     barcode_divider.name = "FoodBarcodeDivider"
     parent.add_child(barcode_divider)
-    var search_heading = _label(parent, "Поиск продуктов по названию", 16, TEXT_ACCENT)
+    var search_heading = _label(parent, "Поиск: название, бренд или штрихкод", 16, TEXT_ACCENT)
     var filtered: Array = []
-    var search = _text_input(parent, "Название, бренд или штрихкод")
+    var search = _text_input(parent, "Поиск продукта по названию")
     search.name = "FoodNameSearch"
     online_search_field = search
     if not selected_barcode_food.is_empty():
