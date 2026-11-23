@@ -8,6 +8,7 @@ var MUTED: Color = Color("#678376")
 var GOLD: Color = Color("#bf7e43")
 var AREA: Color = Color("#dcefe4")
 var HALO: Color = Color("#e0f0e4")
+var display_unit: String = "кг"
 
 func set_palette(line: Color, grid: Color, text: Color, accent: Color, area: Color, halo: Color) -> void:
     GREEN = line
@@ -18,13 +19,38 @@ func set_palette(line: Color, grid: Color, text: Color, accent: Color, area: Col
     HALO = halo
     queue_redraw()
 
+func set_unit(unit: String) -> void:
+    display_unit = "см" if unit == "см" else "кг"
+    queue_redraw()
+
+
+func set_overview_points(entries: Array, target: float) -> void:
+    # Overview mode samples *throughout* a long history rather than silently
+    # hiding older entries. The 30-point legacy API remains unchanged.
+    var sorted: Array = []
+    for item in entries:
+        if item is Dictionary and item.has("date") and item.has("value"):
+            var amount: float = float(item["value"])
+            if is_finite(amount) and amount >= 10.0 and amount <= 400.0:
+                sorted.append({"date": str(item["date"]), "value": amount})
+    sorted.sort_custom(func(a, b): return str(a["date"]) < str(b["date"]))
+    if sorted.size() <= 120:
+        set_points(sorted, target, 120)
+        return
+    var selected: Array = []
+    for i in range(120):
+        var index: int = roundi(float(i) * float(sorted.size() - 1) / 119.0)
+        selected.append(sorted[index])
+    set_points(selected, target, 120)
+
+
 func set_points(weight_entries: Array, target: float, max_points: int = 30) -> void:
     goal = target
     samples = []
     for item in weight_entries:
         if item is Dictionary and item.has("date") and item.has("value"):
             var val = float(item["value"])
-            if val >= 20.0 and val <= 400.0:
+            if is_finite(val) and val >= 10.0 and val <= 400.0:
                 samples.append({"date": str(item["date"]), "value": val})
     samples.sort_custom(func(a, b): return str(a["date"]) < str(b["date"]))
     var limit: int = clampi(max_points, 1, 120)
@@ -63,8 +89,8 @@ func _draw() -> void:
         minimum = minf(minimum, goal - 0.25)
         maximum = maxf(maximum, goal + 0.25)
     var range_y = maxf(0.1, maximum - minimum)
-    for i in range(3):
-        var fraction = float(i) / 2.0
+    for i in range(4):
+        var fraction = float(i) / 3.0
         var line_y = lerpf(bottom, top, fraction)
         draw_line(Vector2(left, line_y), Vector2(right, line_y), GRID, 1.0)
         var value = minimum + range_y * fraction
@@ -98,10 +124,21 @@ func _draw() -> void:
         fill_area.append(Vector2(positions[positions.size() - 1].x, bottom))
         draw_colored_polygon(fill_area, AREA)
         draw_polyline(positions, GREEN, 3.5, true)
-    for point in positions:
-        draw_circle(point, 7.0, HALO)
-        draw_circle(point, 4.2, Color.WHITE)
-        draw_arc(point, 4.2, 0, TAU, 16, GREEN, 2.0, true)
+    # Avoid overcrowding a dense 90-day or all-time chart with dot markers.
+    if positions.size() <= 28:
+        for point in positions:
+            draw_circle(point, 5.3, HALO)
+            draw_circle(point, 2.9, GREEN)
+    var last_point: Vector2 = positions[positions.size() - 1]
+    draw_circle(last_point, 8.0, HALO)
+    draw_circle(last_point, 5.1, GREEN)
+    draw_arc(last_point, 5.1, 0, TAU, 20, Color.WHITE, 2.0, true)
+    # The latest value is labelled inside the graph and never clipped by
+    # the right edge. This is not a projection or a target value.
+    var last_text: String = str(snappedf(float(samples[count - 1]["value"]), 0.1)) + " " + display_unit
+    var tag_y: float = maxf(top + 10.0, last_point.y - 13.0)
+    draw_string(font, Vector2(maxf(left, right - 80.0), tag_y),
+        last_text, HORIZONTAL_ALIGNMENT_RIGHT, 77.0, 12, GREEN)
     draw_string(font, Vector2(left, h - 11), _date_label(str(samples[0]["date"])),
         HORIZONTAL_ALIGNMENT_LEFT, 52, 12, MUTED)
     if count > 1:

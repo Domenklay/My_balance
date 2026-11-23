@@ -2,6 +2,7 @@ extends Control
 
 const StoreScript = preload("res://src/store.gd")
 const GraphScript = preload("res://src/weight_graph.gd")
+const ProgressGraph = preload("res://src/progress_graph_math.gd")
 const StatsMathScript = preload("res://src/stats_math.gd")
 const StatsChartScript = preload("res://src/stats_chart.gd")
 const RingScript = preload("res://src/calorie_ring.gd")
@@ -35,7 +36,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.46"
+const APP_VERSION = "0.7.47"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -103,6 +104,9 @@ var tab: String = "day"
 # The combined Progress page retains separate weight and report views.
 var progress_section: String = "weight"
 var selected_body_metric: String = "waist"
+var body_chart_period: String = "quarter"
+var weight_chart_period: String = "quarter"
+var weight_history_expanded: bool = false
 var body_history_expanded: bool = false
 var stats_period: String = "week"
 var stats_anchor: String = ""
@@ -4809,6 +4813,63 @@ func _show_progress() -> void:
         _show_weight()
 
 
+func _set_graph_period(kind: String, period: String) -> void:
+    if not ProgressGraph.valid_period(period):
+        return
+    if kind == "weight":
+        weight_chart_period = period
+    elif kind == "body":
+        body_chart_period = period
+    else:
+        return
+    _render()
+
+
+func _graph_period_buttons(parent: Node, kind: String) -> void:
+    var controls = _row(parent)
+    controls.name = "GraphPeriodButtons_" + kind
+    controls.add_theme_constant_override("separation", 5)
+    var selected: String = weight_chart_period if kind == "weight" else body_chart_period
+    for period in ["month", "quarter", "all"]:
+        var captured: String = period
+        var btn = _button(controls, ProgressGraph.period_label(period),
+            func(): _set_graph_period(kind, captured), true)
+        btn.name = ("WeightPeriod_" if kind == "weight" else "BodyPeriod_") + period
+        btn.custom_minimum_size.y = 39
+        btn.add_theme_font_size_override("font_size", 12)
+        if captured == selected:
+            var selected_style = StyleBoxFlat.new()
+            selected_style.bg_color = NAV_ACTIVE
+            selected_style.set_corner_radius_all(12)
+            for state in ["normal", "hover", "pressed"]:
+                btn.add_theme_stylebox_override(state, selected_style)
+            btn.add_theme_color_override("font_color", WHITE)
+            btn.add_theme_color_override("font_hover_color", WHITE)
+            btn.add_theme_color_override("font_pressed_color", WHITE)
+
+
+func _graph_period_info(parent: Node, points: Array, unit: String) -> void:
+    var stats: Dictionary = ProgressGraph.summarize(points)
+    if stats.is_empty():
+        _label(parent, "За выбранный период измерений пока нет.", 13, MUTED)
+        return
+    var line = _row(parent)
+    line.name = "GraphMetricOverview"
+    var recent = _label(line, str(snappedf(float(stats["latest"]), 0.1)) +
+        " " + unit, 21, TEXT_ACCENT)
+    recent.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    var change: float = float(stats["change"])
+    var change_text = _label(line,
+        ProgressGraph.format_delta(change, unit), 17,
+        TEXT_ACCENT if change <= 0.0 else ACCENT)
+    change_text.name = "GraphPeriodDelta"
+    change_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+    _label(parent, str(stats["first_date"]) + " — " +
+        str(stats["latest_date"]) + " · " +
+        str(stats["count"]) + " измерений", 12, MUTED)
+    _label(parent, "Разница между первым и последним замером выбранного периода.", 11, MUTED)
+
+
 func _body_metric_picker_changed(index: int) -> void:
     if index < 0 or index >= BodyMeasurements.FIELDS.size():
         return
@@ -4904,22 +4965,17 @@ func _show_body_measurements() -> void:
             selected_index = i
     picker.select(selected_index)
     picker.item_selected.connect(_body_metric_picker_changed)
-    var points: Array = store.body_metric_history(selected_body_metric, date)
-    if points.is_empty():
-        _label(graph_card, "Для этого параметра пока нет измерений.", 13, MUTED)
-    else:
-        var plot = GraphScript.new()
-        plot.name = "BodyMeasurementsGraph"
-        plot.custom_minimum_size = Vector2(0, 200)
-        plot.set_palette(TEXT_ACCENT, CHART_GRID, MUTED, ACCENT, CHART_AREA, SECONDARY)
-        plot.set_points(points, -1.0, 120)
-        graph_card.add_child(plot)
-        var recent: Dictionary = store.body_metric_summary(selected_body_metric, date)
-        _label(graph_card, "Первый: " + str(snappedf(float(recent["first"]), 0.1)) +
-            " см · Последний: " + str(snappedf(float(recent["latest"]), 0.1)) +
-            " см · Изменение: " +
-            ("+" if float(recent["change"]) > 0.0 else "") +
-            str(snappedf(float(recent["change"]), 0.1)) + " см", 12, MUTED)
+    _graph_period_buttons(graph_card, "body")
+    var points: Array = ProgressGraph.filter_records(
+        store.body_metric_history(selected_body_metric, date), date, body_chart_period)
+    _graph_period_info(graph_card, points, "см")
+    var plot = GraphScript.new()
+    plot.name = "BodyMeasurementsGraph"
+    plot.custom_minimum_size = Vector2(0, 205)
+    plot.set_palette(TEXT_ACCENT, CHART_GRID, MUTED, ACCENT, CHART_AREA, SECONDARY)
+    plot.set_unit("см")
+    plot.set_overview_points(points, -1.0)
+    graph_card.add_child(plot)
 
     var history_card = _card("История замеров")
     _compact_card(history_card, 10, 6)
@@ -4977,14 +5033,26 @@ func _show_weight() -> void:
             _message("Не удалось сохранить вес. Предыдущие данные сохранены.")
     )
     var chart = _card("Как меняется вес")
+    _compact_card(chart, 11, 7)
+    _graph_period_buttons(chart, "weight")
+    var window: Array = ProgressGraph.filter_records(
+        store.data["weights"], date, weight_chart_period)
+    _graph_period_info(chart, window, "кг")
     var g = GraphScript.new()
+    g.name = "WeightProgressGraph"
     g.custom_minimum_size = Vector2(0, 210)
     g.set_palette(TEXT_ACCENT, CHART_GRID, MUTED, ACCENT, CHART_AREA, SECONDARY)
-    g.set_points(store.data["weights"], float(settings["goal"]))
+    g.set_unit("кг")
+    g.set_overview_points(window, float(settings["goal"]))
     chart.add_child(g)
     var history = store.data["weights"].duplicate()
     history.sort_custom(func(a,b): return str(a.get("date", "")) > str(b.get("date", "")))
-    for w in history:
+    var total_history: int = history.size()
+    var visible_count: int = total_history if weight_history_expanded else mini(total_history, 8)
+    var history_label = _label(chart, "История записей (" + str(total_history) + ")", 15, INK)
+    history_label.name = "WeightHistoryTitle"
+    for index in range(visible_count):
+        var w: Dictionary = history[index]
         var r = _soft_list_row(chart)
         var l = _label(r, str(w.get("date", "")) + " · " + str(w.get("value", 0)) + " кг", 14)
         l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -4996,6 +5064,14 @@ func _show_weight() -> void:
             else:
                 _message("Не удалось удалить запись веса.")
         ), true)
+    if total_history > 8:
+        var more = _button(chart, "Скрыть историю" if weight_history_expanded
+            else "Показать все записи (" + str(total_history) + ")", func():
+                weight_history_expanded = not weight_history_expanded
+                _render()
+        , true)
+        more.name = "WeightHistoryToggle"
+
 
 func _edit_weight_entry(weight_record: Dictionary) -> void:
     var day: String = str(weight_record.get("date", ""))
