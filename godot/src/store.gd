@@ -11,6 +11,7 @@ const PortionMath = preload("res://src/portion_math.gd")
 const RewardsScript = preload("res://src/rewards.gd")
 const ProfilePhotoScript = preload("res://src/profile_photo.gd")
 const OnboardingMath = preload("res://src/onboarding_math.gd")
+const ActivityMath = preload("res://src/activity_math.gd")
 
 const MEAL_NAMES = ["Завтрак", "Обед", "Ужин", "Перекус"]
 const DEFAULT_MEAL_SHARES = [25, 35, 30, 10]
@@ -132,7 +133,7 @@ func default_data() -> Dictionary:
         "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true, "high_contrast": false,
             "meal_shares": DEFAULT_MEAL_SHARES.duplicate(), "home_widgets": DEFAULT_HOME_WIDGETS.duplicate(), "onboarding_complete": false,
             "personal": {}},
-        "foods": [], "entries": [], "activities": [], "weights": [], "notes": {}, "favorites": [],
+        "foods": [], "entries": [], "activities": [], "steps": {}, "weights": [], "notes": {}, "favorites": [],
         "recipes": [], "meal_templates": [], "day_copy_undo": {}, "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
             "photo": "", "frame": "plain"}
     }
@@ -472,6 +473,14 @@ func import_json(raw: String, persist: bool = true) -> bool:
             previous_profile["photo"] = ""
         if not previous_profile.has("frame"):
             previous_profile["frame"] = "plain"
+    # v0.7.43 daily step counts are optional for legacy backups.
+    if not obj.has("steps"):
+        obj["steps"] = {}
+    if not (obj["steps"] is Dictionary) or obj["steps"].size() > 10000:
+        return false
+    for day in obj["steps"]:
+        if not (day is String) or not ActivityMath.valid_date(day) or not ActivityMath.valid_steps(obj["steps"][day]):
+            return false
     if not obj.has("favorites"):
         obj["favorites"] = []
     if not obj.has("food_portions"):
@@ -612,6 +621,11 @@ func import_json(raw: String, persist: bool = true) -> bool:
         return false
     if obj["foods"].size() > 10000 or obj["entries"].size() > 50000 or obj["weights"].size() > 5000 or obj["activities"].size() > 50000:
         return false
+    # Old activity entries use the same core fields; reject malformed exports
+    # before replacing the live journal.
+    for activity in obj["activities"]:
+        if not ActivityMath.valid_activity(activity):
+            return false
     for entry in obj["entries"]:
         if not (entry is Dictionary):
             return false
@@ -1472,6 +1486,65 @@ func day_entries(date: String) -> Array:
 
 func day_activities(date: String) -> Array:
     return data["activities"].filter(func(e): return e is Dictionary and str(e.get("date", "")) == date)
+
+func day_steps(day: String) -> int:
+    return roundi(float(data.get("steps", {}).get(day, 0)))
+
+func set_day_steps(day: String, count: int) -> bool:
+    if not ActivityMath.valid_date(day) or not ActivityMath.valid_steps(count):
+        return false
+    var before: Dictionary = data.get("steps", {}).duplicate(true)
+    if count == 0:
+        data["steps"].erase(day)
+    else:
+        data["steps"][day] = count
+    if save():
+        return true
+    data["steps"] = before
+    return false
+
+func add_activity(day: String, kind: String, minutes: float,
+        distance: float = 0.0, detail: String = "") -> bool:
+    var record: Dictionary = {
+        "id": "a" + str(Time.get_ticks_usec()) + "_" + str(data["activities"].size()),
+        "date": day, "type": kind, "minutes": minutes,
+        "distance": distance, "detail": detail.strip_edges()
+    }
+    if not ActivityMath.valid_activity(record):
+        return false
+    data["activities"].append(record)
+    if save():
+        return true
+    data["activities"].erase(record)
+    return false
+
+func update_activity(record: Dictionary, changes: Dictionary) -> bool:
+    if not data["activities"].has(record):
+        return false
+    var previous: Dictionary = record.duplicate(true)
+    for key in ["type", "minutes", "distance", "detail"]:
+        if changes.has(key):
+            record[key] = changes[key]
+    if not ActivityMath.valid_activity(record):
+        record.clear()
+        record.merge(previous, true)
+        return false
+    if save():
+        return true
+    record.clear()
+    record.merge(previous, true)
+    return false
+
+func day_activity_summary(day: String) -> Dictionary:
+    return ActivityMath.summarize(day_activities(day), weight_prefill(day), day_steps(day))
+
+func week_activity_summary(day: String) -> Dictionary:
+    var combined: Dictionary = {"count": 0, "minutes": 0, "estimated_kcal": 0, "steps": 0, "distance": 0.0}
+    for item in week_dates(day):
+        var daily: Dictionary = day_activity_summary(str(item))
+        for key in combined:
+            combined[key] = combined[key] + daily[key]
+    return combined
 
 func day_calories(date: String) -> float:
     var total = 0.0

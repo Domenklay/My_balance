@@ -16,6 +16,7 @@ const PRODUCT_PLACEHOLDER = preload("res://assets/products/package.svg")
 const FoodSearchScript = preload("res://src/food_search.gd")
 const AppearanceScript = preload("res://src/appearance.gd")
 const PatternScript = preload("res://src/theme_pattern.gd")
+const ActivityMath = preload("res://src/activity_math.gd")
 const MEAL_TEXTURES = [
     preload("res://assets/meals/breakfast.svg"),
     preload("res://assets/meals/lunch.svg"),
@@ -31,7 +32,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.42"
+const APP_VERSION = "0.7.43"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -2523,6 +2524,15 @@ func _show_day() -> void:
     _compact_macro(macros, "Белки", store.day_macro(date, "p"), PROTEIN_BG, MACRO_PROTEIN)
     _compact_macro(macros, "Жиры", store.day_macro(date, "f"), FAT_BG, MACRO_FAT)
     _compact_macro(macros, "Углеводы", store.day_macro(date, "c"), CARBS_BG, MACRO_CARBS)
+    # Show movement beside the journal without altering its calorie target.
+    var movement: Dictionary = store.day_activity_summary(date)
+    if int(movement["steps"]) > 0 or int(movement["count"]) > 0:
+        var hint = _label(hero, "Движение: " + str(movement["steps"]) +
+            " шагов · " + str(movement["minutes"]) + " мин · ≈" +
+            str(movement["estimated_kcal"]) + " ккал (не вычитаются)", 11, HERO_MUTED)
+        hint.name = "DayActivitySummary"
+        hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+
     var day_tools_toggle = _button(hero, "⋯ Действия с днём" +
         (" ▴" if day_tools_expanded else " ▾"), func():
             day_tools_expanded = not day_tools_expanded
@@ -4568,42 +4578,84 @@ func _edit_entry(entry: Dictionary) -> void:
     )
 
 func _show_activity() -> void:
-    var card = _card("Прогулки и домашние тренировки")
-    _date_nav(card)
-    _label(card, "Занятия записываются по датам. Калории тренировок не вычитаются автоматически из питания.", 13, MUTED)
-    var kind = _choice(card, ["Ходьба", "Гантели", "Другая активность"])
-    _label(card, "Минуты")
-    var minutes = _number(card, 30, 1, 1440)
-    _label(card, "Километры (для ходьбы, необязательно)")
-    var distance = _number(card, 0, 0, 100, 0.1)
-    var detail = _text_input(card, "Упражнения, подходы и вес гантелей")
-    _button(card, "Сохранить активность", func():
-        var activity_kind = ["walk", "strength", "other"][kind.selected]
-        var activity = {
-            "id": str(Time.get_ticks_usec()), "date": date, "type": activity_kind,
-            "minutes": minutes.value, "distance": distance.value, "detail": detail.text
-        }
-        store.data["activities"].append(activity)
-        if store.save():
+    var overview = _card("Движение за день")
+    _compact_card(overview, 10, 7)
+    _date_nav(overview)
+    var summary: Dictionary = store.day_activity_summary(date)
+    var metrics = _row(overview)
+    metrics.name = "ActivityOverview"
+    for item in [
+        ["Шаги", str(summary["steps"])],
+        ["Занятия", str(summary["minutes"]) + " мин"],
+        ["Энергия", "≈" + str(summary["estimated_kcal"]) + " ккал"]
+    ]:
+        var stat = _label(metrics, str(item[0]) + "\n" + str(item[1]), 12, INK)
+        stat.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        stat.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        stat.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    var step_row = _row(overview)
+    _label(step_row, "Шаги", 13, MUTED)
+    var steps_input = _number(step_row, float(store.day_steps(date)), 0, 100000, 100)
+    steps_input.name = "ActivitySteps"
+    steps_input.custom_minimum_size = Vector2(90, 42)
+    var save_steps = _button(step_row, "Сохранить", func():
+        if store.set_day_steps(date, roundi(steps_input.value)):
             _render()
-            _notify_saved("Активность сохранена")
+            _notify_saved("Шаги сохранены")
         else:
-            store.data["activities"].erase(activity)
-            _message("Не удалось сохранить активность. Проверь память устройства.")
+            _message("Не удалось сохранить шаги.")
+    , true)
+    save_steps.name = "ActivitySaveSteps"
+    _label(overview, "Шаги вводятся вручную. Оценка ккал относится только к записанным тренировкам; норма питания не меняется.", 12, MUTED)
+
+    var card = _card("Добавить тренировку")
+    _compact_card(card, 10, 7)
+    _label(card, "Вид активности", 13, MUTED)
+    var kinds = ["Ходьба", "Бег", "Велосипед", "Силовая", "Йога", "Плавание", "Другое"]
+    var types = ["walk", "run", "cycling", "strength", "yoga", "swim", "other"]
+    var kind = _choice(card, kinds)
+    kind.name = "ActivityKind"
+    var duration_row = _row(card)
+    var minutes_box = VBoxContainer.new()
+    minutes_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    duration_row.add_child(minutes_box)
+    _label(minutes_box, "Минуты", 12, MUTED)
+    var minutes = _number(minutes_box, 30, 1, 1440)
+    minutes.name = "ActivityMinutes"
+    var distance_box = VBoxContainer.new()
+    distance_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    duration_row.add_child(distance_box)
+    _label(distance_box, "Километры (необязательно)", 12, MUTED)
+    var distance = _number(distance_box, 0, 0, 100, 0.1)
+    distance.name = "ActivityDistance"
+    var detail = _text_input(card, "Комментарий: упражнения, подходы, темп…")
+    detail.name = "ActivityDetail"
+    var save_activity = _button(card, "Сохранить активность", func():
+        if store.add_activity(date, types[kind.selected], minutes.value, distance.value, detail.text):
+            _render()
+            _notify_saved("Тренировка сохранена")
+        else:
+            _message("Не удалось сохранить тренировку. Проверь данные и память устройства.")
     )
-    var saved = _card("Активность за день")
-    var items = store.day_activities(date)
+    save_activity.name = "ActivitySaveWorkout"
+
+    var saved = _card("Тренировки за день")
+    _compact_card(saved, 10, 6)
+    var items: Array = store.day_activities(date)
     if items.is_empty():
-        _label(saved, "Пока не было записей.", 14, MUTED)
+        _label(saved, "Записей пока нет.", 13, MUTED)
     for a in items:
         var r = _soft_list_row(saved)
-        var type_name = {"walk":"🚶 Ходьба", "strength":"🏋 Гантели", "other":"Активность"}.get(a.get("type", ""), "Активность")
-        var text = str(type_name) + " · " + str(a.get("minutes", 0)) + " мин"
+        var kind_title = ActivityMath.type_name(str(a.get("type", "other")))
+        var record_text = kind_title + " · " + str(roundi(float(a.get("minutes", 0)))) + " мин"
+        var estimate = ActivityMath.estimate_kcal(a, store.weight_prefill(date))
+        record_text += " · ≈" + str(estimate) + " ккал"
+        if float(a.get("distance", 0.0)) > 0.0:
+            record_text += "\n" + str(a["distance"]) + " км"
         if str(a.get("detail", "")) != "":
-            text += "\n" + str(a.get("detail", ""))
-        if str(a.get("type", "")) == "walk" and float(a.get("distance", 0)) > 0:
-            text += " · " + str(a.get("distance", 0)) + " км"
-        var l = _label(r, text, 14)
+            record_text += "\n" + str(a["detail"])
+        var l = _label(r, record_text, 13)
+        l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
         l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         _button(r, "✎", func(): _edit_activity(a), true)
         _button(r, "×", func(): _confirm_delete("Удалить активность?", func():
@@ -4614,14 +4666,24 @@ func _show_activity() -> void:
                 _message("Не удалось удалить активность.")
         ), true)
 
+    var weekly: Dictionary = store.week_activity_summary(date)
+    var week_card = _card("Итоги недели")
+    _compact_card(week_card, 10, 6)
+    _label(week_card, str(weekly["count"]) + " тренировок · " +
+        str(weekly["minutes"]) + " мин · " + str(weekly["steps"]) + " шагов", 14, INK)
+    _label(week_card, "Оценочный расход на тренировках: ≈" +
+        str(weekly["estimated_kcal"]) + " ккал", 12, MUTED)
+    _label(week_card, "Расход рассчитан по интенсивности (MET) и последнему весу на дату тренировки. Возможна значительная погрешность.", 12, MUTED)
+
+
 func _edit_activity(activity: Dictionary) -> void:
     var dialog = ConfirmationDialog.new()
-    dialog.title = "Изменить активность"
+    dialog.title = "Изменить тренировку"
     add_child(dialog)
     var fields = VBoxContainer.new()
     dialog.add_child(fields)
-    var kinds = ["Ходьба", "Гантели", "Другая активность"]
-    var types = ["walk", "strength", "other"]
+    var kinds = ["Ходьба", "Бег", "Велосипед", "Силовая", "Йога", "Плавание", "Другое"]
+    var types = ["walk", "run", "cycling", "strength", "yoga", "swim", "other"]
     _label(fields, "Вид активности")
     var kind = _choice(fields, kinds)
     var old_kind = types.find(str(activity.get("type", "other")))
@@ -4634,23 +4696,20 @@ func _edit_activity(activity: Dictionary) -> void:
     _label(fields, "Заметки")
     var detail = _text_input(fields, "Упражнения и нагрузка", str(activity.get("detail", "")))
     dialog.confirmed.connect(func():
-        var previous_activity = activity.duplicate(true)
-        activity["type"] = types[kind.selected]
-        activity["minutes"] = minutes.value
-        activity["distance"] = distance.value
-        activity["detail"] = detail.text
-        if store.save():
+        if store.update_activity(activity, {
+            "type": types[kind.selected],
+            "minutes": minutes.value, "distance": distance.value, "detail": detail.text
+        }):
             dialog.queue_free()
             _render()
-            _notify_saved("Активность изменена")
+            _notify_saved("Тренировка изменена")
         else:
-            activity.clear()
-            activity.merge(previous_activity, true)
             dialog.queue_free()
-            _message("Не удалось сохранить изменения активности.")
+            _message("Не удалось сохранить изменения тренировки.")
     )
     dialog.canceled.connect(func(): dialog.queue_free())
     dialog.popup_centered(Vector2i(390, 440))
+
 
 func _show_weight() -> void:
     var card = _card("История веса")
