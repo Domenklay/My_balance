@@ -35,7 +35,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.45"
+const APP_VERSION = "0.7.46"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -347,10 +347,10 @@ func _ready() -> void:
     header_panel.name = "AppHeader"
     var head_style = StyleBoxFlat.new()
     head_style.bg_color = HEADER_BG
-    head_style.content_margin_left = 16
-    head_style.content_margin_right = 16
-    head_style.content_margin_top = 6
-    head_style.content_margin_bottom = 6
+    head_style.content_margin_left = 17
+    head_style.content_margin_right = 17
+    head_style.content_margin_top = 8
+    head_style.content_margin_bottom = 8
     header_panel.add_theme_stylebox_override("panel", head_style)
     shell.add_child(header_panel)
     header_pattern = PatternScript.new()
@@ -364,7 +364,7 @@ func _ready() -> void:
     brand.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     brand.add_theme_constant_override("separation", 3)
     heading.add_child(brand)
-    header_title = _label(brand, "Мой баланс", 20, WHITE)
+    header_title = _label(brand, "Мой баланс", 21, WHITE)
     header_subtitle = _label(brand, "Забота о себе каждый день", 10, HEADER_MUTED)
     emblem_panel = PanelContainer.new()
     emblem_panel.custom_minimum_size = Vector2(42, 42)
@@ -599,19 +599,19 @@ func _input_style() -> StyleBoxFlat:
     st.bg_color = INPUT_BG
     st.border_color = BORDER
     st.set_border_width_all(2 if HIGH_CONTRAST else 1)
-    st.set_corner_radius_all(13)
+    st.set_corner_radius_all(12)
     st.content_margin_left = 12
     st.content_margin_right = 12
-    st.content_margin_top = 11
-    st.content_margin_bottom = 11
+    st.content_margin_top = 10
+    st.content_margin_bottom = 10
     return st
 
 func _input_focus_style() -> StyleBoxFlat:
     var st = StyleBoxFlat.new()
     st.bg_color = Color(0, 0, 0, 0)
-    st.border_color = GREEN
+    st.border_color = TEXT_ACCENT if DARK_MODE else GREEN
     st.set_border_width_all(3 if HIGH_CONTRAST else 2)
-    st.set_corner_radius_all(11)
+    st.set_corner_radius_all(12)
     return st
 
 func _style_field(control: Control) -> void:
@@ -633,17 +633,21 @@ func _button(parent: Node, s: String, call: Callable, secondary: bool = false) -
     b.custom_minimum_size = Vector2(46 if compact else 0, 47)
     b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER if compact else Control.SIZE_EXPAND_FILL
     b.add_theme_font_size_override("font_size", 14)
+    # Primary and secondary actions are visually distinct in all themes.
     for mode in ["normal", "hover", "pressed"]:
         var st = StyleBoxFlat.new()
-        st.bg_color = (SECONDARY if secondary else GREEN)
+        st.bg_color = SECONDARY if secondary else GREEN
         if mode == "hover":
-            st.bg_color = SECONDARY.lightened(0.06) if secondary else GREEN.lightened(0.09)
+            st.bg_color = SECONDARY.lightened(0.045) if secondary else GREEN.lightened(0.07)
         elif mode == "pressed":
-            st.bg_color = SECONDARY.darkened(0.05) if secondary else GREEN.darkened(0.07)
-        if HIGH_CONTRAST:
-            st.border_color = BORDER if secondary else GREEN.darkened(0.16)
+            st.bg_color = SECONDARY.darkened(0.045) if secondary else GREEN.darkened(0.07)
+        if secondary:
+            st.border_color = BORDER if HIGH_CONTRAST else BORDER.lightened(0.12)
             st.set_border_width_all(1)
-        st.set_corner_radius_all(13)
+        elif HIGH_CONTRAST:
+            st.border_color = GREEN.darkened(0.18)
+            st.set_border_width_all(1)
+        st.set_corner_radius_all(12)
         st.content_margin_left = 10
         st.content_margin_right = 10
         st.content_margin_top = 7
@@ -677,19 +681,19 @@ func _card(title: String, variant: String = "plain") -> VBoxContainer:
             style.bg_color = ACTIVITY_BG
         _:
             style.bg_color = CARD_BG
-    style.set_corner_radius_all(22)
+    style.set_corner_radius_all(18)
     style.border_color = BORDER if variant == "plain" or HIGH_CONTRAST else style.bg_color
     if current_theme == "botanical":
-        style.border_color = Color("#D9BF8C") if variant == "hero" else BORDER
+        style.border_color = Color("#BDD4C2") if variant == "hero" else BORDER
     style.set_border_width_all(2 if HIGH_CONTRAST else 1)
-    # Pastel cards rely on their colored stripe, not a heavy border/shadow.
-    style.shadow_color = Color(0.0, 0.0, 0.0, 0.11 if DARK_MODE else 0.065)
-    style.shadow_size = 4 if variant == "hero" else (3 if current_theme == "botanical" else 2)
-    style.shadow_offset = Vector2(0, 2)
-    style.content_margin_left = 17
-    style.content_margin_right = 17
-    style.content_margin_top = 17
-    style.content_margin_bottom = 17
+    # Quiet elevation: the calorie card has visual priority.
+    style.shadow_color = Color(0.0, 0.0, 0.0, 0.12 if DARK_MODE else 0.048)
+    style.shadow_size = 3 if variant == "hero" else 1
+    style.shadow_offset = Vector2(0, 1)
+    style.content_margin_left = 15
+    style.content_margin_right = 15
+    style.content_margin_top = 15
+    style.content_margin_bottom = 15
     panel.add_theme_stylebox_override("panel", style)
     body.add_child(panel)
     # Do not place foliage behind calorie totals or macro labels on the day tab.
@@ -710,7 +714,7 @@ func _card(title: String, variant: String = "plain") -> VBoxContainer:
     content.add_theme_constant_override("separation", 11)
     panel.add_child(content)
     if not title.is_empty():
-        _label(content, title, 18, WHITE if variant == "hero" or (variant == "activity" and current_theme == "botanical") else INK)
+        _label(content, title, 18, WHITE if variant == "hero" else INK)
     return content
 
 # Per-day compact cards retain the same colors and contrast but reduce
@@ -725,7 +729,7 @@ func _compact_card(content: VBoxContainer, margin: int = 9, spacing: int = 5) ->
             style.content_margin_right = margin
             style.content_margin_top = margin
             style.content_margin_bottom = margin
-            style.shadow_size = 2 if current_theme == "botanical" else 1
+            style.shadow_size = 1
             style.shadow_offset = Vector2(0, 1)
     content.add_theme_constant_override("separation", spacing)
 
@@ -737,11 +741,11 @@ func _compact_macro(parent: Node, name: String, value: float,
     panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
     var style = StyleBoxFlat.new()
     style.bg_color = background
-    style.set_corner_radius_all(9)
+    style.set_corner_radius_all(10)
     style.content_margin_left = 5
     style.content_margin_right = 5
-    style.content_margin_top = 5
-    style.content_margin_bottom = 5
+    style.content_margin_top = 6
+    style.content_margin_bottom = 6
     panel.add_theme_stylebox_override("panel", style)
     parent.add_child(panel)
     var label = _label(panel, name + " " + str(roundi(value)) + " г", 11, foreground)
@@ -784,10 +788,9 @@ func _soft_list_row(parent: Node) -> HBoxContainer:
     panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     var st = StyleBoxFlat.new()
     st.bg_color = ROW_BG
-    if HIGH_CONTRAST:
-        st.border_color = BORDER
-        st.set_border_width_all(1)
-    st.set_corner_radius_all(13)
+    st.border_color = BORDER if HIGH_CONTRAST else BORDER.lightened(0.20)
+    st.set_border_width_all(1)
+    st.set_corner_radius_all(12)
     st.content_margin_left = 10
     st.content_margin_right = 8
     st.content_margin_top = 8
@@ -860,8 +863,8 @@ func _make_tabs() -> void:
     st.border_width_top = 1
     st.content_margin_left = 5
     st.content_margin_right = 5
-    st.content_margin_top = 6
-    st.content_margin_bottom = 6
+    st.content_margin_top = 7
+    st.content_margin_bottom = 7
     bar.add_theme_stylebox_override("panel", st)
     shell.add_child(bar)
     var row = HBoxContainer.new()
@@ -928,7 +931,10 @@ func _update_tabs() -> void:
         if HIGH_CONTRAST and active:
             style.border_color = SOFT_GOLD
             style.set_border_width_all(2)
-        style.set_corner_radius_all(14)
+        style.set_corner_radius_all(12)
+        if active:
+            style.border_color = SOFT_GOLD if HIGH_CONTRAST else NAV_ACTIVE.lightened(0.14)
+            style.set_border_width_all(1)
         for state in ["normal", "hover", "pressed"]:
             button.add_theme_stylebox_override(state, style)
         var color = WHITE if active else (MUTED.lightened(0.12) if DARK_MODE else MUTED.darkened(0.12))
@@ -2545,13 +2551,16 @@ func _show_day() -> void:
     var target: float = float(store.data["settings"]["kcal"])
     var hero = _card("", "hero")
     _compact_card(hero, 11, 6)
+    hero.name = "DailyEnergyCard"
     var hero_content = _row(hero)
     var numbers = VBoxContainer.new()
     numbers.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     numbers.add_theme_constant_override("separation", 2)
     hero_content.add_child(numbers)
-    _label(numbers, "Энергия дня", 16, WHITE)
-    _label(numbers, str(roundi(total)) + " из " + str(roundi(target)) + " ккал", 21, WHITE)
+    _label(numbers, "Энергия дня", 14, HERO_MUTED)
+    var calorie_value = _label(numbers, str(roundi(total)) + " из " +
+        str(roundi(target)) + " ккал", 23, WHITE)
+    calorie_value.name = "DailyEnergyValue"
     var remaining: float = target - total
     _label(numbers,
         "Осталось " + str(roundi(remaining)) + " ккал" if remaining >= 0.0 else
@@ -2559,7 +2568,7 @@ func _show_day() -> void:
         12, HERO_MUTED if remaining >= 0.0 else SOFT_GOLD)
     var ring = RingScript.new()
     ring.name = "DailyCalorieRing"
-    ring.custom_minimum_size = Vector2(58, 58)
+    ring.custom_minimum_size = Vector2(60, 60)
     ring.size_flags_vertical = Control.SIZE_SHRINK_CENTER
     ring.size_flags_horizontal = Control.SIZE_SHRINK_END
     ring.set_palette(HERO_TRACK, HERO_FILL, WHITE)

@@ -72,78 +72,78 @@ const HIGH_OVERRIDES = {
 # and distinctly colored nutrition tiles. Kept separate from contrast settings.
 const COLOR_VARIANTS = {
     "botanical": {
-        "background":"#F0F4ED", "surface":"#FFFEFA", "row":"#F4F5EA",
-        "header":"#063E31", "hero":"#073F33", "hero_muted":"#E3F4E9",
-        "overview":"#FFF9EC", "activity":"#104F3D", "tile":"#EAF3E9",
-        "tint":"#E7F5EA", "secondary":"#E5F1E6", "border":"#A7C4B0",
-        "chip":"#185740", "track":"#4E8874", "fill":"#E9F2A6",
-        "nav_active":"#0A5743", "activity_text":"#F0F8EA",
+        "background":"#FAF8F3", "surface":"#FFFEFA", "row":"#F2F6F0",
+        "header":"#123F35", "hero":"#123F35", "hero_muted":"#DAEDE0",
+        "overview":"#F7F4EC", "activity":"#E5F0E8", "tile":"#EDF4EC",
+        "tint":"#EDF5ED", "secondary":"#E4F0E7", "border":"#C7D9C8",
+        "chip":"#1D614A", "track":"#477D6B", "fill":"#E3F3BB",
+        "nav_active":"#125842", "activity_text":"#275B49",
         "protein_bg":"#D8F2DD", "fat_bg":"#FFE5B5",
         "carbs_bg":"#E1DFFB", "protein_text":"#175E39",
         "fat_text":"#805322", "carbs_text":"#493F88",
-        "accent":"#E29B42", "pattern":"botanical",
-        "pattern_color":"#6B9E64", "nav_bg":"#F9F6EC"
+        "accent":"#D59A52", "pattern":"botanical",
+        "pattern_color":"#7EAA8D", "nav_bg":"#FAF8F3"
     },
     "forest": {
-        "background":"#edf1ee", "surface":"#ffffff", "row":"#f2f3f7",
-        "header":"#173b35", "hero":"#263e62", "hero_muted":"#e0eaff",
-        "overview":"#fffaf0", "activity":"#e9effc", "tile":"#f2f5fc",
-        "tint":"#eef7f1", "secondary":"#e2eaf4", "border":"#bac6cc",
-        "chip":"#304770", "track":"#516589", "fill":"#ffd38a",
-        "nav_active":"#42628a", "activity_text":"#344a87",
+        "background":"#F5F8F4", "surface":"#FFFFFF", "row":"#EEF5EF",
+        "header":"#153F33", "hero":"#19513F", "hero_muted":"#D8EBDD",
+        "overview":"#F5F7EF", "activity":"#E5F1E9", "tile":"#EDF5EE",
+        "tint":"#E9F4EC", "secondary":"#E2F0E5", "border":"#CADACC",
+        "chip":"#246049", "track":"#4D8067", "fill":"#D8EFAE",
+        "nav_active":"#185840", "activity_text":"#2B644B",
         "protein_bg":"#d9f0e5", "fat_bg":"#ffead0",
         "carbs_bg":"#e5e1fc", "protein_text":"#225944",
         "fat_text":"#77501e", "carbs_text":"#484180",
-        "accent":"#d48959", "pattern_color":"#88ad9f"
+        "accent":"#C99354", "pattern_color":"#91B49B"
     },
     "mint": {
-        "background":"#eef4f6", "surface":"#ffffff", "row":"#f0f2fa",
-        "header":"#174b50", "hero":"#374e78", "hero_muted":"#e3edff",
-        "overview":"#fff8e9", "activity":"#ede9fa", "tile":"#f1eefa",
-        "tint":"#e5f6f0", "secondary":"#e1e8fb", "border":"#b8cbd2",
-        "chip":"#435985", "track":"#677a9b", "fill":"#ffd392",
-        "nav_active":"#65599b", "activity_text":"#564a8b",
+        "background":"#F2FAF7", "surface":"#FFFFFF", "row":"#EAF5F1",
+        "header":"#15574E", "hero":"#20665B", "hero_muted":"#E0F4E8",
+        "overview":"#F4F9F3", "activity":"#E3F3EE", "tile":"#EBF8F3",
+        "tint":"#E7F7F0", "secondary":"#DDF1E9", "border":"#BED9D0",
+        "chip":"#277263", "track":"#4F9682", "fill":"#C9EFCB",
+        "nav_active":"#246C5D", "activity_text":"#226254",
         "protein_bg":"#d9f3e8", "fat_bg":"#ffe5c9",
         "carbs_bg":"#e0e5ff", "protein_text":"#20604f",
         "fat_text":"#80511d", "carbs_text":"#414a8b",
-        "accent":"#cf7c64", "pattern_color":"#80a9b7"
+        "accent":"#D7A16F", "pattern_color":"#7FB29F"
     },
     "sand": {
-        "background":"#f3ece6", "surface":"#fffdf9", "row":"#f7f0f6",
-        "header":"#514054", "hero":"#694762", "hero_muted":"#fff0e9",
-        "overview":"#fffaed", "activity":"#f0e9fa", "tile":"#f9eff5",
-        "tint":"#f8e7d9", "secondary":"#efe0f2", "border":"#cdbabe",
-        "chip":"#785468", "track":"#a6788e", "fill":"#ffdc93",
-        "nav_active":"#885171", "activity_text":"#784d83",
+        "background":"#FAF4EA", "surface":"#FFFCF6", "row":"#F6EEDF",
+        "header":"#514A32", "hero":"#61553A", "hero_muted":"#F8ECDC",
+        "overview":"#FFF8E9", "activity":"#F1E9DA", "tile":"#F8F0E3",
+        "tint":"#F7EEDD", "secondary":"#F1E6D1", "border":"#DBCCB3",
+        "chip":"#766546", "track":"#998363", "fill":"#F5DE9E",
+        "nav_active":"#6C5C3B", "activity_text":"#66583D",
         "protein_bg":"#e2f2df", "fat_bg":"#ffe7c7",
         "carbs_bg":"#e8def5", "protein_text":"#3e6034",
         "fat_text":"#87501d", "carbs_text":"#624481",
-        "accent":"#b9765e", "pattern_color":"#b69ea5"
+        "accent":"#B98557", "pattern_color":"#B8AA8A"
     },
     "dark": {
-        "background":"#11151f", "surface":"#222838", "row":"#293147",
-        "header":"#131a25", "hero":"#302b55", "hero_muted":"#e2dffc",
-        "overview":"#222d3d", "activity":"#2a283d", "tile":"#333349",
-        "tint":"#203a3d", "secondary":"#323951", "border":"#5c6880",
-        "chip":"#3d375f", "track":"#5b568a", "fill":"#ffc77a",
-        "nav_active":"#665eaa", "activity_text":"#d7b9ff",
+        "background":"#101B17", "surface":"#1B3027", "row":"#294237",
+        "header":"#0E221B", "hero":"#204333", "hero_muted":"#E0EEDF",
+        "overview":"#253B30", "activity":"#294A39", "tile":"#2B483A",
+        "tint":"#233D31", "secondary":"#315040", "border":"#587865",
+        "chip":"#315744", "track":"#4F8068", "fill":"#D4EDAD",
+        "nav_active":"#387E60", "activity_text":"#E6F3E7",
         "protein_bg":"#234c4c", "fat_bg":"#5d413c",
         "carbs_bg":"#403e69", "protein_text":"#b1f4df",
         "fat_text":"#ffdcac", "carbs_text":"#d3ccff",
-        "accent":"#f5a987", "pattern_color":"#797aaf",
-        "muted":"#c8d1e2", "head_muted":"#d5ddef",
-        "ink":"#f5f7ff", "input":"#293347",
-        "green":"#367c76", "text_accent":"#b8d8ff"
+        "accent":"#E9B77D", "pattern_color":"#759989",
+        "muted":"#C6DCCB", "head_muted":"#DCEBDF",
+        "ink":"#EFF7F0", "input":"#264134",
+        "green":"#397D60", "text_accent":"#C1EACB"
     }
 }
 
 const COLOR_HIGH_ADJUSTMENTS = {
-    "botanical": {"border":"#769C81", "background":"#E9F0E5",
-        "tint":"#D6EEDF", "activity":"#0A4435", "nav_active":"#064834"},
-    "forest": {"border":"#8e9eae", "background":"#e4ebeb", "activity":"#dce5f9", "nav_active":"#304f7d"},
-    "mint": {"border":"#889baa", "background":"#e3eeee", "activity":"#e5def5", "nav_active":"#51478e"},
-    "sand": {"border":"#ab969f", "background":"#eee2dc", "activity":"#e9def5", "nav_active":"#72405e"},
-    "dark": {"border":"#94a6c4", "background":"#0c111a", "overview":"#26354a", "activity":"#342e4c", "nav_active":"#7d6cce"}
+    "botanical": {"border":"#729E84", "background":"#F0F4ED",
+        "tint":"#DDEFE2", "activity":"#D6EBDD", "nav_active":"#075039"},
+    "forest": {"border":"#88A994", "background":"#ECF3EC", "activity":"#D7EBDD", "nav_active":"#104A36"},
+    "mint": {"border":"#84AEA0", "background":"#E8F4EF", "activity":"#D4EFE2", "nav_active":"#185747"},
+    "sand": {"border":"#BDA98B", "background":"#F4EBDC", "activity":"#E9DCC7", "nav_active":"#5A4C31"},
+    "dark": {"border":"#83A393", "background":"#0C1712", "overview":"#2A4535", "activity":"#315442", "nav_active":"#43896D"}
 }
 
 static func palette(id: String, high_contrast: bool = false) -> Dictionary:
