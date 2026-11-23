@@ -24,8 +24,10 @@ func _test() -> void:
     app.tab = "day"
     app._render()
     await process_frame
-    if app.APP_VERSION != "0.7.44":
-        _fail("wrong build version")
+    # This regression covers the five-tab navigation from 0.7.44 onward.
+    # Later releases may add features without changing this layout.
+    if str(app.APP_VERSION).is_empty():
+        _fail("application version missing")
         return
     if app.tab_buttons.size() != 5 or app.tab_buttons.has("weight") or \
             app.tab_buttons.has("stats") or app.tab_buttons.has("recipes"):
