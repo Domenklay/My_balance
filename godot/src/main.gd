@@ -3279,15 +3279,44 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
     meal.item_selected.connect(func(index: int): selected_meal = meal.get_item_text(index))
     var needs_confirmation: bool = not manual and \
         BarcodeScript.needs_nutrition_review(product)
-    var confirmed: CheckBox = null
-    if needs_confirmation:
-        confirmed = CheckBox.new()
-        confirmed.name = "BarcodeLabelConfirmed"
-        confirmed.text = "Я проверила КБЖУ и единицу по этикетке"
-        confirmed.add_theme_font_size_override("font_size", 13)
-        confirmed.add_theme_color_override("font_color", INK)
-        fields.add_child(confirmed)
-    _label(fields, "Фото и данные базы справочные. Товар останется доступным офлайн.", 12, MUTED)
+    var confirmed = CheckBox.new()
+    confirmed.name = "BarcodeLabelConfirmed"
+    confirmed.text = "КБЖУ и единицы проверены по этикетке"
+    confirmed.add_theme_font_size_override("font_size", 13)
+    confirmed.add_theme_color_override("font_color", INK)
+    confirmed.visible = needs_confirmation
+    fields.add_child(confirmed)
+    var quality_notice = _label(fields, "", 12, ACCENT)
+    quality_notice.name = "BarcodeLiveQuality"
+    quality_notice.visible = false
+    # Validate the current edited values, not just the original OFF response.
+    # The checkbox becomes visible when editing introduces a new warning.
+    var refresh_quality = func():
+        var probe: Dictionary = {
+            "nutrition_unit": "мл" if basis.selected == 1 else "г"
+        }
+        for field in ["kcal", "p", "f", "c"]:
+            var editable: LineEdit = nutrient_inputs[field]
+            probe[field] = _barcode_nutrition_value(
+                editable.text, 1000.0 if field == "kcal" else 100.0)
+        var complete: bool = true
+        for field in ["kcal", "p", "f", "c"]:
+            if float(probe[field]) < 0.0:
+                complete = false
+        var advisory: String = BarcodeScript.quality_message(probe) if complete else ""
+        quality_notice.text = "⚠ " + advisory
+        quality_notice.visible = not advisory.is_empty()
+        confirmed.visible = needs_confirmation or not advisory.is_empty()
+    for key in ["kcal", "p", "f", "c"]:
+        var field_input: LineEdit = nutrient_inputs[key]
+        field_input.text_changed.connect(func(_v: String):
+            refresh_quality.call()
+        )
+    basis.item_selected.connect(func(_index: int):
+        refresh_quality.call()
+    )
+    refresh_quality.call()
+    _label(fields, "Данные открытой базы справочные. Сохранённый товар доступен офлайн.", 12, MUTED)
     var commit_record = func(add_to_diary: bool):
         var record: Dictionary = product.duplicate(true)
         record["name"] = name.text.strip_edges()
@@ -3310,8 +3339,12 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
                 (float(record["p"]) > 1.0 or float(record["f"]) > 1.0 or float(record["c"]) > 1.0):
             _sheet_error(sheet, "Нулевые калории противоречат БЖУ. Проверь этикетку.")
             return
-        if needs_confirmation and not confirmed.button_pressed:
-            _sheet_error(sheet, "Подтверди проверку данных по этикетке.")
+        # A corrected product can still have suspicious energy-to-macro
+        # ratios. A warning requires an explicit acknowledgement, never a
+        # silent correction or a fabricated zero for missing nutrients.
+        if (needs_confirmation or not BarcodeScript.quality_flags(record).is_empty()) and \
+                not confirmed.button_pressed:
+            _sheet_error(sheet, "Проверь предупреждения и подтверди КБЖУ по этикетке.")
             return
         # Missing remote fields were explicitly filled and reviewed locally.
         record.erase("missing_fields")
