@@ -45,8 +45,9 @@ func _run() -> void:
         push_error("FAILED: mobile layout overflows 420px: " + str(app.shell.size.x))
         quit(1)
         return
-    if app.tab_buttons.size() != 6 or not app.tab_buttons.has("recipes") or not app.tab_buttons.has("profile"):
-        push_error("FAILED: mobile navigation missing Recipes or Profile")
+    if app.tab_buttons.size() != 5 or not app.tab_buttons.has("search") or \
+            not app.tab_buttons.has("progress") or not app.tab_buttons.has("profile"):
+        push_error("FAILED: new five-tab mobile navigation missing Products, Progress or Profile")
         quit(1)
         return
     var expand_button: Button = app.find_child("MealQuickAdd_0", true, false) as Button

@@ -1,6 +1,6 @@
 extends SceneTree
 
-# Regression for the illustrated six-tab mobile navigation introduced in 0.7.24.
+# Regression for compact five-tab mobile navigation in 0.7.44.
 func _initialize() -> void:
     call_deferred("_run")
 
@@ -17,12 +17,12 @@ func _run() -> void:
     app.tab = "day"
     app._render()
     await process_frame
-    var titles = {"day":"День", "recipes":"Рецепты", "activity":"Спорт",
-        "weight":"Вес", "stats":"Итоги", "profile":"Профиль"}
+    var titles = {"day":"День", "search":"Продукты", "activity":"Спорт",
+        "progress":"Прогресс", "profile":"Профиль"}
     var navigation = app.shell.get_node_or_null("BottomNavigation")
-    if navigation == null or app.nav_icons.size() != 6 or \
-            app.nav_labels.size() != 6 or app.tab_buttons.size() != 6:
-        _fail("missing any of the six complete tab buttons")
+    if navigation == null or app.nav_icons.size() != 5 or \
+            app.nav_labels.size() != 5 or app.tab_buttons.size() != 5:
+        _fail("missing any of the five complete tab buttons")
         return
     for key in titles:
         var icon: TextureRect = app.nav_icons[key]
@@ -50,20 +50,32 @@ func _run() -> void:
         if app.nav_icons["day"].modulate != app.WHITE:
             _fail("active tab icon is not bright in " + mode)
             return
-        if app.nav_icons["weight"].modulate == app.WHITE:
+        if app.nav_icons["progress"].modulate == app.WHITE:
             _fail("inactive icon is not subdued in " + mode)
             return
-    for target in ["recipes", "activity", "weight", "stats", "profile", "day"]:
+    for target in ["search", "activity", "progress", "profile", "day"]:
         app.tab_buttons[target].pressed.emit()
         await process_frame
         if app.tab != target or app.nav_icons[target].modulate != app.WHITE:
             _fail("press or active icon broken: " + target)
             return
+    # Legacy internal destinations remain reachable via old profile and day links.
+    for target in ["weight", "stats"]:
+        app.tab = target
+        app._update_tabs()
+        if app.nav_icons["progress"].modulate != app.WHITE:
+            _fail("legacy progress view lost active navigation: " + target)
+            return
+    app.tab = "recipes"
+    app._update_tabs()
+    if app.nav_icons["search"].modulate != app.WHITE:
+        _fail("recipe screen no longer marks Products active")
+        return
     app.tab = "settings"
     app._update_tabs()
     if app.nav_icons["profile"].modulate != app.WHITE:
         _fail("profile icon should stay selected on the settings page")
         return
-    print("PASS NAVIGATION ICONS: vector assets, six buttons, theme colors, taps and settings")
+    print("PASS NAVIGATION ICONS 0.7.44: five tabs, vector assets, colors, taps and legacy routes")
     app.queue_free()
     quit(0)

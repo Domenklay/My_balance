@@ -26,13 +26,15 @@ const MEAL_TEXTURES = [
 const NAV_TEXTURES = {
     "day": preload("res://assets/nav/day.svg"),
     "recipes": preload("res://assets/nav/recipes.svg"),
+    "search": preload("res://assets/nav/search.svg"),
+    "progress": preload("res://assets/nav/stats.svg"),
     "activity": preload("res://assets/nav/activity.svg"),
     "weight": preload("res://assets/nav/weight.svg"),
     "stats": preload("res://assets/nav/stats.svg"),
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.43.1"
+const APP_VERSION = "0.7.44"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -97,6 +99,8 @@ var _meal_entry_locked: bool = false
 var _meal_entry_date: String = ""
 var _expanded_meals: Dictionary = {}
 var tab: String = "day"
+# The combined Progress page retains separate weight and report views.
+var progress_section: String = "weight"
 var stats_period: String = "week"
 var stats_anchor: String = ""
 var month_shown: String = ""
@@ -853,8 +857,8 @@ func _make_tabs() -> void:
     row.add_theme_constant_override("separation", 2)
     bar.add_child(row)
     var tabs = [
-        ["День", "day"], ["Рецепты", "recipes"], ["Спорт", "activity"],
-        ["Вес", "weight"], ["Итоги", "stats"], ["Профиль", "profile"]
+        ["День", "day"], ["Продукты", "search"], ["Спорт", "activity"],
+        ["Прогресс", "progress"], ["Профиль", "profile"]
     ]
     for item in tabs:
         var target: String = item[1]
@@ -900,7 +904,9 @@ func _make_tabs() -> void:
 func _update_tabs() -> void:
     for key in tab_buttons:
         var button: Button = tab_buttons[key]
-        var active = key == tab or (key == "profile" and tab == "settings")
+        var active = key == tab or (key == "profile" and tab == "settings") or \
+            (key == "search" and tab == "recipes") or \
+            (key == "progress" and tab in ["weight", "stats"])
         var style = StyleBoxFlat.new()
         style.bg_color = NAV_ACTIVE if active else CARD_BG
         if HIGH_CONTRAST and active:
@@ -1008,6 +1014,7 @@ func _render(reset_position: bool = false) -> void:
         "activity": _show_activity()
         "weight": _show_weight()
         "stats": _show_stats()
+        "progress": _show_progress()
         "settings": _show_settings()
     scroll.scroll_vertical = desired
     call_deferred("_restore_scroll_position", new_key, current_serial, desired)
@@ -1979,6 +1986,8 @@ func _show_recipes() -> void:
             _navigate_to_tab("day")
         , true)
     _button(intro, "+ Создать рецепт", func(): _begin_recipe_editor(), true)
+    if not _meal_entry_locked:
+        _button(intro, "⌕ Поиск продуктов", func(): _navigate_to_tab("search"), true)
     var recipes: Array = store.data.get("recipes", []).duplicate()
     recipes.sort_custom(func(a, b):
         var a_favorite: bool = bool(a.get("favorite", false))
@@ -2423,12 +2432,36 @@ func _show_online_search_results(records: Array) -> void:
             update.add_theme_font_size_override("font_size", 11)
 
 
+func _open_recipes_from_products() -> void:
+    # Keep the selected meal and date when opening saved dishes from catalog.
+    recipe_list_filter = "all"
+    tab = "recipes"
+    _render(true)
+
+
 func _show_food_search() -> void:
-    var intro = _card("Каталог продуктов", "hero")
-    _label(intro, "Локальные продукты и онлайн-база Open Food Facts.", 14, HERO_MUTED)
-    _label(intro, "Дата: " + _selected_food_date() + " · Приём пищи: " + selected_meal, 13, HERO_MUTED)
-    _button(intro, "← Вернуться в дневник", func(): _navigate_to_tab("day"), true)
-    var catalog = _card("Найти и добавить продукты")
+    var intro = _card("Продукты", "hero")
+    _compact_card(intro, 10, 6)
+    if _meal_entry_locked:
+        _label(intro, "Добавление в «" + selected_meal + "» · " +
+            _selected_food_date(), 13, HERO_MUTED)
+        _button(intro, "← Назад к дневнику", func(): _navigate_to_tab("day"), true)
+    else:
+        _label(intro, "Поиск продуктов и быстрый доступ к домашним блюдам.", 13, HERO_MUTED)
+    var shortcuts = _row(intro)
+    shortcuts.name = "ProductShortcuts"
+    var recipes_link = _button(shortcuts, "▤ Мои рецепты",
+        func(): _open_recipes_from_products(), true)
+    recipes_link.name = "ProductsOpenRecipes"
+    recipes_link.custom_minimum_size.y = 40
+    var my_foods_link = _button(shortcuts, "Мои продукты", func():
+        settings_page = "foods"
+        _navigate_to_tab("settings")
+    , true)
+    my_foods_link.name = "ProductsOpenMyFoods"
+    my_foods_link.custom_minimum_size.y = 40
+    var catalog = _card("Найти и добавить продукт")
+    _compact_card(catalog, 10, 7)
     _food_form(catalog)
 
 
@@ -2650,7 +2683,7 @@ func _show_day() -> void:
         meal_title.add_theme_font_size_override("font_size", 15)
         for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
             meal_title.add_theme_color_override(state, INK)
-        meal_title.pressed.connect(func(): _show_meal_add_actions(meal_name))
+        meal_title.pressed.connect(func(): _open_meal_catalog(meal_name))
         title_row.add_child(meal_title)
         var count_caption = (
             str(roundi(meal_kcal)) + " / " + str(roundi(meal_target)) + " ккал"
@@ -4709,6 +4742,40 @@ func _edit_activity(activity: Dictionary) -> void:
     )
     dialog.canceled.connect(func(): dialog.queue_free())
     dialog.popup_centered(Vector2i(390, 440))
+
+
+func _set_progress_section(section: String) -> void:
+    if section not in ["weight", "stats"]:
+        return
+    progress_section = section
+    tab = "progress"
+    _render(true)
+
+
+func _show_progress() -> void:
+    var card = _card("Мой прогресс")
+    _compact_card(card, 10, 7)
+    _label(card, "Вес, питание и активность в одном разделе.", 12, MUTED)
+    var choices = _row(card)
+    choices.name = "ProgressSectionChoices"
+    for item in [["weight", "Вес и цель"], ["stats", "Статистика"]]:
+        var section: String = str(item[0])
+        var action = _button(choices, str(item[1]),
+            func(): _set_progress_section(section), true)
+        action.name = "ProgressSection_" + section
+        action.custom_minimum_size.y = 41
+        action.add_theme_font_size_override("font_size", 13)
+        if section == progress_section:
+            var selected = StyleBoxFlat.new()
+            selected.bg_color = NAV_ACTIVE
+            selected.set_corner_radius_all(12)
+            for state in ["normal", "hover", "pressed"]:
+                action.add_theme_stylebox_override(state, selected)
+            action.add_theme_color_override("font_color", WHITE)
+    if progress_section == "stats":
+        _show_stats()
+    else:
+        _show_weight()
 
 
 func _show_weight() -> void:
