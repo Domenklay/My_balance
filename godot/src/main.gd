@@ -2405,9 +2405,9 @@ func _show_online_search_results(records: Array) -> void:
                 str(product.get("p", 0)) + " Ж " + str(product.get("f", 0)) +
                 " У " + str(product.get("c", 0)), 11, MUTED)
         var quality_issues: Array = BarcodeScript.quality_flags(product)
-        if not quality_issues.is_empty():
+        if not quality_issues.is_empty() and product.get("missing_fields", []).is_empty():
             _label(info, "⚠ " + str(quality_issues[0]), 11, ACCENT)
-        var choose = _button(row, "Порция" if not saved.is_empty() else "Проверить", func():
+        var choose = _button(row, "Порция" if not saved.is_empty() else "Выбрать", func():
             _open_online_product(product)
         , true)
         choose.name = "OnlineFoodChoose_" + str(product.get("barcode", ""))
@@ -4305,11 +4305,14 @@ func _food_form(parent: VBoxContainer) -> void:
     # its own result ordering and label-review workflow.
     var sort_row = _row(parent)
     sort_row.name = "FoodSorting"
+    sort_row.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+    sort_row.custom_minimum_size.y = 42
     sort_row.add_theme_constant_override("separation", 6)
     _label(sort_row, "Сортировка", 12, MUTED)
     var sort_order = _choice(sort_row, ["Подходящие", "Частые", "Название А–Я", "Ккал ↑", "Ккал ↓"])
     sort_order.name = "FoodSortOrder"
-    sort_order.custom_minimum_size.x = 182
+    sort_order.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+    sort_order.custom_minimum_size = Vector2(150, 42)
     sort_row.visible = false
     sort_order.item_selected.connect(func(index: int):
         results_box.set_meta("sort_mode", index)

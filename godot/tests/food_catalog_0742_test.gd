@@ -119,7 +119,7 @@ func _test() -> void:
     var saved_label: Button = app.find_child("OnlineFoodChoose_3017624010701", true, false) as Button
     var choose = app.find_child("OnlineFoodChoose_4006381333931", true, false) as Button
     if saved_label == null or saved_label.text != "Порция" or \
-            choose == null or choose.text != "Проверить":
+            choose == null or choose.text != "Выбрать":
         _fail("online results failed to distinguish offline and new products")
         return
     choose.pressed.emit()
