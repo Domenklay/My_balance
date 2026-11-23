@@ -4858,14 +4858,17 @@ func _graph_period_info(parent: Node, points: Array, unit: String) -> void:
         return
     var line = _row(parent)
     line.name = "GraphMetricOverview"
-    var recent = _label(line, str(snappedf(float(stats["latest"]), 0.1)) +
+    var recent = _nowrap(line, str(snappedf(float(stats["latest"]), 0.1)) +
         " " + unit, 21, TEXT_ACCENT)
     recent.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     var change: float = float(stats["change"])
-    var change_text = _label(line,
+    var change_text = _nowrap(line,
         ProgressGraph.format_delta(change, unit), 17,
         TEXT_ACCENT if change <= 0.0 else ACCENT)
     change_text.name = "GraphPeriodDelta"
+    # Fix narrow-screen flex layout: never render "-6.0 см" vertically.
+    change_text.custom_minimum_size.x = 96
+    change_text.size_flags_horizontal = Control.SIZE_SHRINK_END
     change_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
     _label(parent, str(stats["first_date"]) + " — " +
         str(stats["latest_date"]) + " · " +

@@ -26,6 +26,11 @@ func _run() -> void:
     app._render()
     await process_frame
     var map = app.find_child("BodyMeasurementMap", true, false) as BodyMap
+    var first_delta = app.find_child("GraphPeriodDelta", true, false) as Label
+    if first_delta == null or first_delta.autowrap_mode != TextServer.AUTOWRAP_OFF or \
+            first_delta.custom_minimum_size.x < 90 or first_delta.size.y > 42:
+        _fail("small-screen progress delta wraps vertically")
+        return
     if map == null or map.metric_buttons.size() != 8 or map.selected_metric != "waist":
         _fail("eight interactive areas or initial metric missing")
         return
