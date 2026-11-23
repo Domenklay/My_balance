@@ -197,6 +197,41 @@ func _capture() -> void:
     app.settings_page = "foods"
     app._render()
     await _snapshot(app, "08-own-products")
+    # 0.7.42: real phone-width references for the improved product search
+    # and previously recorded exact servings.
+    var pantry = {
+        "id":"barcode_3017624010701", "barcode":"3017624010701",
+        "name":"Творог фермерский", "brand":"Тестовая ферма",
+        "nutrition_unit":"г", "source":"Пользователь",
+        "kcal":120.0, "p":14.0, "f":6.0, "c":3.0
+    }
+    app.store.data["foods"].append(pantry)
+    app.store.data["entries"].append({
+        "id":"visual_last_food", "date":"2026-11-20",
+        "food":str(pantry["id"]), "nutrition":pantry.duplicate(true),
+        "grams":160.0, "unit":"г", "meal":"Завтрак"
+    })
+    app.tab = "search"
+    app._render()
+    await _snapshot(app, "08-catalog-filters")
+    var my_products = app.find_child("FoodFilter_3", true, false) as Button
+    my_products.pressed.emit()
+    await _snapshot(app, "08-catalog-my-products")
+    var catalog_search = app.find_child("FoodNameSearch", true, false) as LineEdit
+    catalog_search.text = "творог"
+    catalog_search.text_changed.emit(catalog_search.text)
+    await _snapshot(app, "08-catalog-last-portion")
+    catalog_search.text = "3017624010701"
+    catalog_search.text_changed.emit(catalog_search.text)
+    await _snapshot(app, "08-catalog-unified-barcode")
+    app._show_online_search_results([{
+        "barcode":"4006381333931", "name":"Шоколадный йогурт",
+        "brand":"Демонстрационная марка", "quantity":"200 мл",
+        "nutrition_unit":"мл", "unit_certainty":"quantity",
+        "source":"Open Food Facts", "kcal":140.0, "p":-1.0,
+        "f":7.0, "c":16.0, "missing_fields":["p"]
+    }])
+    await _snapshot(app, "08-catalog-online-review")
     # Test the new Recipes and personal Profile screens with fictional data.
     app.store.data["recipes"].append({
         "id": "visual_recipe",
