@@ -4299,7 +4299,7 @@ func _food_form(parent: VBoxContainer) -> void:
         fav_button.custom_minimum_size.y = 38
         favorite_count += 1
     search.text_changed.connect(func(_value: String):
-        quick_lists.visible = search.text.strip_edges().is_empty()
+        quick_lists.visible = search.text.strip_edges().is_empty() and category.selected == 0
     )
     # One compact sorter for local results; online Open Food Facts search keeps
     # its own result ordering and label-review workflow.
@@ -4308,7 +4308,10 @@ func _food_form(parent: VBoxContainer) -> void:
     sort_row.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
     sort_row.custom_minimum_size.y = 42
     sort_row.add_theme_constant_override("separation", 6)
-    _label(sort_row, "Сортировка", 12, MUTED)
+    var sort_caption = _label(sort_row, "Сортировка", 12, MUTED)
+    sort_caption.custom_minimum_size.x = 88
+    sort_caption.autowrap_mode = TextServer.AUTOWRAP_OFF
+    sort_caption.size_flags_vertical = Control.SIZE_SHRINK_CENTER
     var sort_order = _choice(sort_row, ["Подходящие", "Частые", "Название А–Я", "Ккал ↑", "Ккал ↓"])
     sort_order.name = "FoodSortOrder"
     sort_order.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -4361,6 +4364,9 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
     var all = store.all_foods()
     var query = search.text.strip_edges().to_lower()
     if results_box != null:
+        var quick_area = results_box.get_parent().get_node_or_null("FoodRecentFavorites") as VBoxContainer
+        if quick_area != null:
+            quick_area.visible = query.is_empty() and (category == null or category.selected == 0)
         results_box.visible = not query.is_empty() or (category != null and category.selected != 0)
         var sorting = results_box.get_parent().get_node_or_null("FoodSorting") as HBoxContainer
         if sorting != null:
