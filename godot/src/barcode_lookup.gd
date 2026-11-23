@@ -76,6 +76,41 @@ static func nutrition_warning(product: Dictionary) -> String:
 
 # Display remote product photos only from the OFF image CDN. Never let
 # arbitrary response URLs make network requests from the app.
+# Advisory checks for user-edited or remote food labels. A warning never
+# changes the nutrient values automatically: alcohol, fibre, polyols and
+# country-specific rounding can make the usual 4/9/4 equation inaccurate.
+# Only clearly implausible amounts are flagged, not prevented from saving.
+static func quality_flags(product: Dictionary) -> Array:
+    var warnings: Array = []
+    for key in ["kcal", "p", "f", "c"]:
+        var value: Variant = product.get(key, null)
+        var ceiling: float = 1000.0 if key == "kcal" else 100.0
+        if not (value is int or value is float) or not is_finite(float(value)) or \
+                float(value) < 0.0 or float(value) > ceiling:
+            warnings.append("Неполные или недопустимые значения КБЖУ.")
+            return warnings
+    var kcal: float = float(product["kcal"])
+    var p: float = float(product["p"])
+    var f: float = float(product["f"])
+    var c: float = float(product["c"])
+    var unit: String = str(product.get("nutrition_unit", "г"))
+    if unit == "г" and p + f + c > 105.0:
+        warnings.append("Сумма белков, жиров и углеводов больше 100 г на 100 г.")
+    if (unit == "г" and kcal > 920.0) or (unit == "мл" and kcal > 850.0):
+        warnings.append("Необычно высокая калорийность на 100 " + unit + ".")
+    if kcal > 60.0 and p + f + c < 0.3:
+        warnings.append("При ненулевых калориях почти отсутствуют все БЖУ.")
+    var existing_warning: String = nutrition_warning(product)
+    if not existing_warning.is_empty() and not warnings.has(existing_warning):
+        warnings.append(existing_warning)
+    return warnings
+
+
+static func quality_message(product: Dictionary) -> String:
+    var warnings: Array = quality_flags(product)
+    return " ".join(warnings) if not warnings.is_empty() else ""
+
+
 static func safe_image_url(raw: String) -> String:
     var url = raw.strip_edges()
     if url.length() > 512 or not url.begins_with(
