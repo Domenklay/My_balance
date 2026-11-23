@@ -74,7 +74,8 @@ func _draw() -> void:
     var top = 30.0
     var bottom = h - 34.0
     if samples.is_empty():
-        draw_string(font, Vector2(left, h * 0.52), "Пока нет взвешиваний",
+        draw_string(font, Vector2(left, h * 0.52),
+            "Пока нет замеров" if display_unit == "см" else "Пока нет взвешиваний",
             HORIZONTAL_ALIGNMENT_LEFT, w - left - 12, 15, MUTED)
         return
     var minimum = float(samples[0]["value"])
