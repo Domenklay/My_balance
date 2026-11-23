@@ -62,15 +62,23 @@ func _run() -> void:
             add.pressed.emit()
         await process_frame
         var sheet = app.get_node_or_null("ProductSheet")
-        if sheet == null or app.selected_meal != names[i] or \
-                _button(sheet, "▣ Сканировать штрихкод") == null or \
-                _button(sheet, "Ввести штрихкод вручную") == null or \
-                _button(sheet, "⌕ Найти продукт") == null:
-            _fail("meal chooser missing or wrong context: " + names[i])
-            return
+        if i % 2 == 0:
+            # Meal headings jump straight to search, without a chooser.
+            if sheet != null or not _check_locked(app, names[i], "2026-11-20"):
+                _fail("meal heading did not open direct search: " + names[i])
+                return
+        else:
+            # Plus retains the extra scan/quick-repeat actions.
+            if sheet == null or app.selected_meal != names[i] or \
+                    _button(sheet, "▣ Сканировать штрихкод") == null or \
+                    _button(sheet, "Ввести штрихкод вручную") == null or \
+                    _button(sheet, "⌕ Найти продукт") == null:
+                _fail("quick-add chooser missing: " + names[i])
+                return
         if i == 0 or i == 3:
-            _button(sheet, "⌕ Найти продукт").pressed.emit()
-            await process_frame
+            if sheet != null:
+                _button(sheet, "⌕ Найти продукт").pressed.emit()
+                await process_frame
             if not _check_locked(app, names[i], "2026-11-20"):
                 _fail("search did not preserve meal/date: " + names[i])
                 return
@@ -106,7 +114,9 @@ func _run() -> void:
             _button(product, "Добавить").pressed.emit()
             await process_frame
         else:
-            _button(sheet, "Ввести штрихкод вручную").pressed.emit()
+            # Dinner was opened by its title: the direct catalog still
+            # exposes manual EAN in the optional barcode panel.
+            app._reveal_barcode_section()
             await process_frame
             if not _check_locked(app, names[i], "2026-11-20") or \
                     not is_instance_valid(app.barcode_input):
@@ -129,7 +139,7 @@ func _run() -> void:
     if saved.size() != 4 or app.store.day_entries("2026-11-19").size() != 0:
         _fail("meal-specific actions contaminated another date")
         return
-    print("PASS MEAL ADD: no duplicate panel; four meal headers; search, barcode and manual code keep date/meal")
+    print("PASS MEAL ADD 0.7.44: direct meal search, quick-add extras, camera and manual EAN preserve date/meal")
     app.queue_free()
     quit(0)
 
