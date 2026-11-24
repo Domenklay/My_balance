@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.51"
+const APP_VERSION = "0.7.52"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -119,6 +119,7 @@ var google_connected: bool = false
 var google_checked: bool = false
 var google_exists: bool = false
 var google_checksum: String = ""
+var google_file_id: String = ""
 var google_modified: String = ""
 var google_busy: bool = false
 var planner_day: String = ""
@@ -5866,15 +5867,17 @@ func _on_google_disconnected() -> void:
     google_checked = false
     google_exists = false
     google_checksum = ""
+    google_file_id = ""
     google_modified = ""
     google_busy = false
     _google_refresh_settings()
 
 
-func _on_google_status(has_backup: bool, updated: String, checksum: String) -> void:
+func _on_google_status(has_backup: bool, updated: String, checksum: String, file_id: String) -> void:
     google_checked = true
     google_exists = has_backup
     google_checksum = checksum
+    google_file_id = file_id
     google_modified = updated
     google_busy = false
     _google_refresh_settings()
@@ -5891,6 +5894,7 @@ func _on_google_backup_deleted() -> void:
     google_checked = false
     google_exists = false
     google_checksum = ""
+    google_file_id = ""
     google_modified = ""
     _notify_saved("Облачная копия удалена")
     _google_refresh_settings()
@@ -5898,6 +5902,8 @@ func _on_google_backup_deleted() -> void:
 
 func _on_google_error(message: String) -> void:
     google_busy = false
+    if message.contains("изменилась"):
+        google_checked = false
     _google_refresh_settings()
     _message("Google Диск: " + message)
 
@@ -5925,6 +5931,7 @@ func _google_upload() -> void:
         _message("Сначала проверь, есть ли резервная копия на Google Диске.")
         return
     var expected: String = google_checksum
+    var expected_id: String = google_file_id
     var serialized: String = store.export_json()
     if serialized.to_utf8_buffer().size() > 5000000:
         _message("Резервная копия больше 5 МБ. Сделай локальный экспорт.")
@@ -5934,7 +5941,7 @@ func _google_upload() -> void:
         "При изменении копии другим устройством загрузка будет остановлена.",
         func():
             google_busy = true
-            google_plugin.uploadBackup(serialized, expected)
+            google_plugin.uploadBackup(serialized, expected, expected_id)
             _google_refresh_settings()
     , "Сохранить")
 
@@ -5944,17 +5951,19 @@ func _google_download() -> void:
             not google_exists or google_busy:
         return
     google_busy = true
-    google_plugin.downloadBackup()
+    google_plugin.downloadBackup(google_file_id, google_checksum)
     _google_refresh_settings()
 
 
 func _google_delete() -> void:
     if google_plugin == null or not google_connected or not google_exists or google_busy:
         return
+    var expected_id: String = google_file_id
+    var expected_md5: String = google_checksum
     _confirm_delete("Удалить облачную копию на Google Диске? " +
         "Данные на этом телефоне останутся без изменений.", func():
             google_busy = true
-            google_plugin.deleteBackup()
+            google_plugin.deleteBackup(expected_id, expected_md5)
             _google_refresh_settings()
     )
 
@@ -6008,6 +6017,7 @@ func _show_google_backup_settings() -> void:
     restore.name = "GoogleCloudRestore"
     restore.disabled = not google_checked or not google_exists or google_busy
     _label(card, "Восстановление запрашивает подтверждение и не объединяет записи автоматически. " +
+        "При изменении копии другим устройством операция будет остановлена. " +
         "Перед заменой сохрани локальную JSON-копию.", 12, MUTED)
     if google_exists:
         var remove = _button(card, "Удалить облачную копию", func(): _google_delete(), true)

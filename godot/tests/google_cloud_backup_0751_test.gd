@@ -4,7 +4,7 @@ func _initialize() -> void:
     call_deferred("_run")
 
 func _fail(s: String) -> void:
-    push_error("FAILED GOOGLE CLOUD BACKUP 0.7.51: " + s)
+    push_error("FAILED GOOGLE CLOUD BACKUP 0.7.52: " + s)
     quit(1)
 
 func _run() -> void:
@@ -21,7 +21,7 @@ func _run() -> void:
     app.settings_section_open = "google"
     app._render()
     await process_frame
-    if app.APP_VERSION != "0.7.51" or app.find_child("SettingsSection_google", true, false) == null:
+    if app.APP_VERSION != "0.7.52" or app.find_child("SettingsSection_google", true, false) == null:
         _fail("cloud settings missing")
         return
     if app.google_plugin != null:
@@ -30,6 +30,16 @@ func _run() -> void:
     if app.find_child("GoogleCloudUnavailable", true, false) == null or \
             app.find_child("GoogleCloudUpload", true, false) != null:
         _fail("cloud actions must not be accessible without native plugin")
+        return
+    app._on_google_status(true, "2026-11-24T16:00:00", "md5-expected", "drive-file-42")
+    if not app.google_checked or app.google_file_id != "drive-file-42" or \
+            app.google_checksum != "md5-expected":
+        _fail("remote file id/checksum not stored together")
+        return
+    app._on_google_disconnected()
+    if app.google_checked or not app.google_file_id.is_empty() or \
+            not app.google_checksum.is_empty():
+        _fail("disconnect left stale remote revision")
         return
     app._google_connect()
     await process_frame
@@ -51,5 +61,5 @@ func _run() -> void:
         _fail("Google setting added a new primary tab")
         return
     app.queue_free()
-    print("PASS GOOGLE BACKUP 0.7.51: no cloud operations without Android, local data unchanged, existing JSON and tabs intact")
+    print("PASS GOOGLE BACKUP 0.7.52: no cloud operations without Android, local data unchanged, existing JSON and tabs intact")
     quit(0)

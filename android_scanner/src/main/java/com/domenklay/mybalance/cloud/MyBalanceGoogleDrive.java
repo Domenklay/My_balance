@@ -22,6 +22,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.security.MessageDigest;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
@@ -51,7 +52,7 @@ public final class MyBalanceGoogleDrive extends GodotPlugin {
     private static final SignalInfo CONNECTED = new SignalInfo("google_connected");
     private static final SignalInfo DISCONNECTED = new SignalInfo("google_disconnected");
     private static final SignalInfo STATUS = new SignalInfo("google_status",
-        Boolean.class, String.class, String.class);
+        Boolean.class, String.class, String.class, String.class);
     private static final SignalInfo BACKUP = new SignalInfo("google_backup_loaded", String.class);
     private static final SignalInfo SAVED = new SignalInfo("google_backup_saved", String.class);
     private static final SignalInfo DELETED = new SignalInfo("google_backup_deleted");
@@ -164,34 +165,67 @@ public final class MyBalanceGoogleDrive extends GodotPlugin {
             JSONObject file = findBackup();
             signal(STATUS, file != null,
                 file == null ? "" : file.optString("modifiedTime", ""),
-                file == null ? "" : file.optString("md5Checksum", ""));
+                file == null ? "" : file.optString("md5Checksum", ""),
+                file == null ? "" : file.optString("id", ""));
         });
     }
 
-    @UsedByGodot public void downloadBackup() {
+    // Match both file identity and content revision before sensitive actions.
+    private boolean matchesExpected(JSONObject file, String expectedId, String expectedMd5) {
+        if (expectedId == null || expectedMd5 == null) return false;
+        if (file == null) return expectedId.isEmpty() && expectedMd5.isEmpty();
+        String id = file.optString("id", "");
+        String checksum = file.optString("md5Checksum", "");
+        return !id.isEmpty() && !checksum.isEmpty()
+            && id.equals(expectedId) && checksum.equalsIgnoreCase(expectedMd5);
+    }
+
+    private void reportChanged(JSONObject file) {
+        signal(STATUS, file != null,
+            file == null ? "" : file.optString("modifiedTime", ""),
+            file == null ? "" : file.optString("md5Checksum", ""),
+            file == null ? "" : file.optString("id", ""));
+        error("Облачная копия изменилась на другом устройстве. Проверь её перед продолжением.");
+    }
+
+    private static String md5Hex(String content) throws Exception {
+        byte[] bytes = MessageDigest.getInstance("MD5")
+            .digest(content.getBytes(StandardCharsets.UTF_8));
+        StringBuilder result = new StringBuilder(bytes.length * 2);
+        for (byte value : bytes) result.append(String.format("%02x", value & 0xff));
+        return result.toString();
+    }
+
+    @UsedByGodot public void downloadBackup(String expectedId, String expectedMd5) {
         background(() -> {
             JSONObject file = findBackup();
-            if (file == null) { error("В Google Диске нет резервной копии."); return; }
+            if (file == null || !matchesExpected(file, expectedId, expectedMd5)) {
+                reportChanged(file);
+                return;
+            }
             HttpResponse content = request("GET", "https://www.googleapis.com/drive/v3/files/"
                 + file.getString("id") + "?alt=media", null, null);
             if (content.code != 200) throw new Exception("Не удалось загрузить резервную копию.");
+            if (content.body.getBytes(StandardCharsets.UTF_8).length > MAX_BACKUP)
+                throw new Exception("Облачная копия превышает 5 МБ.");
+            if (!md5Hex(content.body).equalsIgnoreCase(expectedMd5)) {
+                reportChanged(findBackup());
+                return;
+            }
             signal(BACKUP, content.body);
         });
     }
 
-    @UsedByGodot public void uploadBackup(String json, String expectedMd5) {
-        if (json == null || json.isEmpty() || json.getBytes(StandardCharsets.UTF_8).length > MAX_BACKUP) {
-            error("Резервная копия превышает 5 МБ.");
+    @UsedByGodot public void uploadBackup(String json, String expectedMd5, String expectedId) {
+        if (json == null || json.isEmpty() ||
+                json.getBytes(StandardCharsets.UTF_8).length > MAX_BACKUP) {
+            error("Резервная копия превышает 5 МБ или пуста.");
             return;
         }
         background(() -> {
-            // Refuse to overwrite remote changes since the last check.
             JSONObject file = findBackup();
-            String actual = file == null ? "" : file.optString("md5Checksum", "");
-            if (expectedMd5 == null || !actual.equals(expectedMd5)) {
-                error("Облачная копия изменилась. Проверь её перед сохранением.");
-                signal(STATUS, file != null,
-                    file == null ? "" : file.optString("modifiedTime", ""), actual);
+            if (!matchesExpected(file, expectedId, expectedMd5)) {
+                reportChanged(file);
                 return;
             }
             HttpResponse response;
@@ -217,19 +251,22 @@ public final class MyBalanceGoogleDrive extends GodotPlugin {
             if (saved == null) throw new Exception("Копия отправлена, но не подтверждена Google Диском.");
             signal(SAVED, saved.optString("modifiedTime", ""));
             signal(STATUS, true, saved.optString("modifiedTime", ""),
-                saved.optString("md5Checksum", ""));
+                saved.optString("md5Checksum", ""), saved.optString("id", ""));
         });
     }
 
-    @UsedByGodot public void deleteBackup() {
+    @UsedByGodot public void deleteBackup(String expectedId, String expectedMd5) {
         background(() -> {
             JSONObject file = findBackup();
-            if (file == null) { signal(DELETED); signal(STATUS, false, "", ""); return; }
+            if (file == null || !matchesExpected(file, expectedId, expectedMd5)) {
+                reportChanged(file);
+                return;
+            }
             HttpResponse result = request("DELETE",
                 "https://www.googleapis.com/drive/v3/files/" + file.getString("id"), null, null);
             if (result.code != 204) throw new Exception("Google Диск отказал в удалении копии.");
             signal(DELETED);
-            signal(STATUS, false, "", "");
+            signal(STATUS, false, "", "", "");
         });
     }
 
@@ -250,8 +287,11 @@ public final class MyBalanceGoogleDrive extends GodotPlugin {
             try { action.execute(); }
             catch (Exception ex) {
                 // Never log tokens or remote personal data.
-                if (ex.getMessage() != null && ex.getMessage().startsWith("HTTP 401"))
+                if (ex.getMessage() != null && ex.getMessage().startsWith("HTTP 401")) {
+                    accessToken = null;
+                    signal(DISCONNECTED);
                     error("Срок разрешения Google истёк. Подключись ещё раз.");
+                }
                 else error(ex.getMessage() == null ? "Ошибка связи с Google Диском." : ex.getMessage());
             }
         });
