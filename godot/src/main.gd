@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.53"
+const APP_VERSION = "0.7.54"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -2563,6 +2563,65 @@ func _set_home_progress_view(view: String) -> void:
     _render()
 
 
+# Semantic accents communicate purpose independently of the selected theme.
+func _semantic_button(button: Button, background: Color, foreground: Color) -> void:
+    for state in ["normal", "hover", "pressed"]:
+        var style = button.get_theme_stylebox(state).duplicate() as StyleBoxFlat
+        if style == null:
+            continue
+        style.bg_color = background
+        if state == "hover":
+            style.bg_color = background.lightened(0.045)
+        elif state == "pressed":
+            style.bg_color = background.darkened(0.07)
+        style.border_color = foreground if HIGH_CONTRAST else background
+        style.set_border_width_all(2 if HIGH_CONTRAST else 1)
+        button.add_theme_stylebox_override(state, style)
+    for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+        button.add_theme_color_override(state, foreground)
+
+
+func _daily_macro_tile(parent: Node, caption: String, grams: float, share: float,
+        background: Color, foreground: Color, key: String) -> void:
+    var panel = PanelContainer.new()
+    panel.name = "DayMacro_" + key
+    panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    var style = StyleBoxFlat.new()
+    style.bg_color = background
+    style.set_corner_radius_all(10)
+    style.content_margin_left = 7
+    style.content_margin_right = 7
+    style.content_margin_top = 5
+    style.content_margin_bottom = 5
+    panel.add_theme_stylebox_override("panel", style)
+    parent.add_child(panel)
+    var stack = VBoxContainer.new()
+    stack.add_theme_constant_override("separation", 2)
+    panel.add_child(stack)
+    var name_label = _nowrap(stack, caption, 11, foreground)
+    name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    var amount = _nowrap(stack, str(roundi(grams)) + " г", 17, foreground)
+    amount.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    var bar = ProgressBar.new()
+    bar.name = "DayMacroShare_" + key
+    bar.max_value = 100.0
+    bar.value = clampf(share, 0.0, 100.0)
+    bar.show_percentage = false
+    bar.custom_minimum_size.y = 4
+    bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    var track = StyleBoxFlat.new()
+    track.bg_color = foreground.lerp(background, 0.78)
+    track.set_corner_radius_all(4)
+    var fill = StyleBoxFlat.new()
+    fill.bg_color = foreground
+    fill.set_corner_radius_all(4)
+    bar.add_theme_stylebox_override("background", track)
+    bar.add_theme_stylebox_override("fill", fill)
+    bar.tooltip_text = "Доля энергии БЖУ, не персональная норма"
+    stack.add_child(bar)
+
+
 func _show_water_card() -> void:
     # A single compact block in the existing Day tab; nothing changes in
     # food calories, activity targets or the five-tab navigation.
@@ -2570,11 +2629,17 @@ func _show_water_card() -> void:
     var water_card = _card("", "plain")
     water_card.get_parent().name = "DayWaterCard"
     _compact_card(water_card, 10, 6)
+    var water_bg = Color("#203E50") if DARK_MODE else Color("#E6F4F8")
+    var water_ink = Color("#BDEDF5") if DARK_MODE else Color("#245D71")
+    var water_button_bg = Color("#31596E") if DARK_MODE else Color("#D2EAF2")
+    var water_style = water_card.get_parent().get_theme_stylebox("panel") as StyleBoxFlat
+    water_style.bg_color = water_bg
+    water_style.border_color = water_ink if HIGH_CONTRAST else water_bg.darkened(0.08)
     var heading = _row(water_card)
-    var water_title = _label(heading, "💧 Вода", 15, INK)
+    var water_title = _label(heading, "💧 Вода", 16, water_ink)
     water_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     var amount_label = _nowrap(heading, str(info["ml"]) + " / " +
-        str(info["goal"]) + " мл", 14, TEXT_ACCENT)
+        str(info["goal"]) + " мл", 15, water_ink)
     amount_label.name = "WaterDailyAmount"
     # _nowrap uses ellipsis and has no intrinsic minimum; reserve width so
     # the current ml / goal never disappears on a narrow phone screen.
@@ -2590,9 +2655,13 @@ func _show_water_card() -> void:
     water_progress.custom_minimum_size.y = 8
     _style_progress(water_progress)
     var fill = StyleBoxFlat.new()
-    fill.bg_color = Color("#80C1C3") if DARK_MODE else Color("#479CAD")
+    fill.bg_color = Color("#8BD8ED") if DARK_MODE else Color("#297B9B")
     fill.set_corner_radius_all(9)
     water_progress.add_theme_stylebox_override("fill", fill)
+    var water_track = StyleBoxFlat.new()
+    water_track.bg_color = water_button_bg
+    water_track.set_corner_radius_all(9)
+    water_progress.add_theme_stylebox_override("background", water_track)
     water_card.add_child(water_progress)
     var buttons = _row(water_card)
     buttons.name = "WaterQuickAmounts"
@@ -2607,6 +2676,7 @@ func _show_water_card() -> void:
                 _message("Не удалось сохранить воду. Проверь объём или память устройства.")
         , true)
         button.name = "WaterQuickAdd_" + str(serving)
+        _semantic_button(button, water_button_bg, water_ink)
         button.custom_minimum_size.y = 41
         button.add_theme_font_size_override("font_size", 12)
     var expanded = _button(water_card,
@@ -2616,6 +2686,7 @@ func _show_water_card() -> void:
             _render()
     , true)
     expanded.name = "WaterDetailsToggle"
+    _semantic_button(expanded, water_button_bg, water_ink)
     expanded.custom_minimum_size.y = 37
     expanded.add_theme_font_size_override("font_size", 12)
     if not water_details_expanded:
@@ -3000,18 +3071,19 @@ func _show_day() -> void:
     numbers.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     numbers.add_theme_constant_override("separation", 2)
     hero_content.add_child(numbers)
-    _label(numbers, "Энергия дня", 14, HERO_MUTED)
-    var calorie_value = _label(numbers, str(roundi(total)) + " из " +
-        str(roundi(target)) + " ккал", 23, WHITE)
-    calorie_value.name = "DailyEnergyValue"
     var remaining: float = target - total
-    _label(numbers,
-        "Осталось " + str(roundi(remaining)) + " ккал" if remaining >= 0.0 else
-        "Превышение +" + str(roundi(-remaining)) + " ккал",
+    _label(numbers, "Осталось на сегодня" if remaining >= 0.0 else "Превышение нормы",
         12, HERO_MUTED if remaining >= 0.0 else SOFT_GOLD)
+    var calorie_value = _nowrap(numbers,
+        str(roundi(remaining)) + " ккал" if remaining >= 0.0 else
+        "+" + str(roundi(-remaining)) + " ккал", 27, WHITE)
+    calorie_value.name = "DailyEnergyValue"
+    var consumed_label = _nowrap(numbers, "Съедено " + str(roundi(total)) + " из " +
+        str(roundi(target)) + " ккал", 12, HERO_MUTED)
+    consumed_label.name = "DailyConsumedValue"
     var ring = RingScript.new()
     ring.name = "DailyCalorieRing"
-    ring.custom_minimum_size = Vector2(60, 60)
+    ring.custom_minimum_size = Vector2(65, 65)
     ring.size_flags_vertical = Control.SIZE_SHRINK_CENTER
     ring.size_flags_horizontal = Control.SIZE_SHRINK_END
     ring.set_palette(HERO_TRACK, HERO_FILL, WHITE)
@@ -3026,9 +3098,15 @@ func _show_day() -> void:
     hero_content.add_child(ring)
     var macros = _row(hero)
     macros.add_theme_constant_override("separation", 5)
-    _compact_macro(macros, "Белки", store.day_macro(date, "p"), PROTEIN_BG, MACRO_PROTEIN)
-    _compact_macro(macros, "Жиры", store.day_macro(date, "f"), FAT_BG, MACRO_FAT)
-    _compact_macro(macros, "Углеводы", store.day_macro(date, "c"), CARBS_BG, MACRO_CARBS)
+    var p: float = store.day_macro(date, "p")
+    var f: float = store.day_macro(date, "f")
+    var c: float = store.day_macro(date, "c")
+    var macro_energy: float = maxf(1.0, p * 4.0 + f * 9.0 + c * 4.0)
+    _daily_macro_tile(macros, "Белки", p, 400.0 * p / macro_energy, PROTEIN_BG, MACRO_PROTEIN, "p")
+    _daily_macro_tile(macros, "Жиры", f, 900.0 * f / macro_energy, FAT_BG, MACRO_FAT, "f")
+    _daily_macro_tile(macros, "Углеводы", c, 400.0 * c / macro_energy, CARBS_BG, MACRO_CARBS, "c")
+    var macro_caption = _nowrap(hero, "Полоски — доля энергии БЖУ", 10, HERO_MUTED)
+    macro_caption.name = "DayMacroShareCaption"
     # Show movement beside the journal without altering its calorie target.
     var movement: Dictionary = store.day_activity_summary(date)
     if int(movement["steps"]) > 0 or int(movement["count"]) > 0:
@@ -3084,11 +3162,16 @@ func _show_day() -> void:
     # Expansion state is in-memory, keyed by date: diary records are untouched.
     # No extra standalone title card: every meal already has its own header.
     var existing = store.day_entries(date)
+    var meal_colors = [
+        Color("#E7B36B"), Color("#8BD4BB"), Color("#B9B0EC"), Color("#EBA7A1")
+    ] if DARK_MODE else [
+        Color("#946226"), Color("#287553"), Color("#69589E"), Color("#A44D45")
+    ]
     var sections = [
-        {"meal":"Завтрак", "variant":"overview", "accent":ACCENT},
-        {"meal":"Обед", "variant":"tint", "accent":TEXT_ACCENT},
-        {"meal":"Ужин", "variant":"activity", "accent":ACTIVITY_TEXT},
-        {"meal":"Перекус", "variant":"plain", "accent":NAV_ACTIVE}
+        {"meal":"Завтрак", "variant":"overview", "accent":meal_colors[0]},
+        {"meal":"Обед", "variant":"tint", "accent":meal_colors[1]},
+        {"meal":"Ужин", "variant":"activity", "accent":meal_colors[2]},
+        {"meal":"Перекус", "variant":"plain", "accent":meal_colors[3]}
     ]
     var shares: Array = store.meal_shares()
     var yesterday: String = store.change_date(date, -1)
@@ -3119,6 +3202,15 @@ func _show_day() -> void:
             meal_style.bg_color = botanical_colors[section_index]
             meal_style.border_color = botanical_edges[section_index].lightened(0.43)
             meal_style.set_border_width_all(2 if HIGH_CONTRAST else 1)
+        else:
+            var meal_style = meal_card.get_parent().get_theme_stylebox("panel") as StyleBoxFlat
+            var meal_backgrounds = [
+                Color("#45372F"), Color("#233F40"), Color("#32354F"), Color("#463440")
+            ] if DARK_MODE else [
+                Color("#F8EDD9"), Color("#E1F1E7"), Color("#ECE8F7"), Color("#F8E8E5")
+            ]
+            meal_style.bg_color = meal_backgrounds[section_index]
+            meal_style.border_color = meal_colors[section_index] if HIGH_CONTRAST else meal_style.bg_color.darkened(0.09)
         if section_index == 0:
             diary_food_card = meal_card
         # One-row meal summary: tap its title or + to select a product,
@@ -3151,7 +3243,7 @@ func _show_day() -> void:
             ]
             food_art.modulate = icon_colors[section_index]
         else:
-            food_art.modulate = WHITE if DARK_MODE else INK
+            food_art.modulate = meal_colors[section_index]
         title_row.add_child(food_art)
         var meal_title = Button.new()
         meal_title.name = "MealHeader_" + str(section_index)
@@ -3181,6 +3273,7 @@ func _show_day() -> void:
         count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
         var add_button = _button(title_row, "+", func(): _show_meal_add_actions(meal_name), true)
         add_button.name = "MealQuickAdd_" + str(section_index)
+        _semantic_button(add_button, meal_colors[section_index], Color("#15202C") if DARK_MODE else Color.WHITE)
         add_button.tooltip_text = "Добавить продукт в " + meal_name.to_lower()
         add_button.custom_minimum_size = Vector2(37, 38)
         add_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
