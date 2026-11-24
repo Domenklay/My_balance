@@ -275,10 +275,10 @@ func _capture() -> void:
     app.tab = "profile"
     app._render()
     await _snapshot(app, "14-personal-profile")
-    app.profile_edit_open = true
-    app._render()
+    app._begin_onboarding(true)
     await _snapshot(app, "15-edit-profile")
-    app.profile_edit_open = false
+    app.onboarding_edit = false
+    app.tab = "profile"
     app._render()
     # Optional home widgets are hidden by default; capture opt-in view.
     app.store.data["settings"]["home_widgets"] = {"week":true, "weight":true}

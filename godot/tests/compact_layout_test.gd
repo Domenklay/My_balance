@@ -90,7 +90,7 @@ func _run() -> void:
     if _button(app, "▾ Выбрать рамку") != null:
         _fail("avatar frames should be in expanded achievements only")
         return
-    if _button(app, "📷 Выбрать фото для аватара") == null or \
+    if _button(app, "✎ Моя анкета") == null or \
             _button(app, "⚙ Настройки") == null:
         _fail("important profile actions hidden by compact layout")
         return

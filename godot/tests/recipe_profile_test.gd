@@ -160,13 +160,13 @@ func _run() -> void:
     app.tab = "profile"
     app._render()
     await process_frame
-    if app.tab_buttons.size() != 5 or _find_button(app, "✎ Изменить имя и значок") == null:
+    if app.tab_buttons.size() != 5 or _find_button(app, "✎ Моя анкета") == null:
         _fail("personal page missing controls or five-tab navigation")
         return
-    var edit_button = _find_button(app, "✎ Изменить имя и значок")
+    var edit_button = _find_button(app, "✎ Моя анкета")
     edit_button.pressed.emit()
     await process_frame
-    if not app.profile_edit_open or _find_button(app, "Сохранить профиль") == null:
+    if app.tab != "onboarding" or app.find_child("QuestionnaireAvatarIcon", true, false) == null:
         _fail("profile edit form not accessible")
         return
     app._navigate_to_tab("recipes")

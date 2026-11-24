@@ -80,7 +80,7 @@ func _run() -> void:
             _fail("initial profile summary incorrect in " + theme)
             return
         for caption in ["＋ Записать вес", "✎ Изменить норму калорий",
-                "⚙ Настройки", "📷 Выбрать фото для аватара"]:
+                "⚙ Настройки", "✎ Моя анкета"]:
             if _find_button(app, caption) == null:
                 _fail("important profile action missing: " + caption + " in " + theme)
                 return

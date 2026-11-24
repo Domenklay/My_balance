@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.62"
+const APP_VERSION = "0.7.63"
 const InterfaceLanguage = preload("res://src/interface_language.gd")
 const Reminders = preload("res://src/reminders.gd")
 const MacroGoals = preload("res://src/macro_goals.gd")
@@ -144,7 +144,10 @@ var settings_page: String = "main"
 # usable on smaller phones; this is presentation state, not diary data.
 var settings_section_open: String = ""
 var recipe_editor_open: bool = false
-var profile_edit_open: bool = false
+var onboarding_profile: Dictionary = {}
+var onboarding_avatar_preview: Button
+var onboarding_photo_status: Label
+var onboarding_photo_remove: Button
 var rewards_expanded: bool = false
 var frames_expanded: bool = false
 var profile_more_expanded: bool = false
@@ -1198,6 +1201,7 @@ func _begin_onboarding(from_settings: bool = false) -> void:
         onboarding_return_tab = "profile" if tab == "profile" else "settings"
     onboarding_edit = from_settings
     onboarding_step = 0
+    onboarding_profile = store.data["profile"].duplicate(true)
     var previous = store.data["settings"].get("personal", {})
     if previous is Dictionary and not previous.is_empty():
         onboarding_draft = previous.duplicate(true)
@@ -1222,11 +1226,14 @@ func _begin_onboarding(from_settings: bool = false) -> void:
     _render(true)
 
 func _show_onboarding() -> void:
-    var intro = _card("Мой баланс · знакомство", "hero")
+    var intro = _card("Моя анкета" if onboarding_edit else "Мой баланс · знакомство", "hero")
     _label(intro, "Два коротких шага для личного ориентира по калориям.", 14, HERO_MUTED)
     _label(intro, "Шаг " + str(onboarding_step + 1) + " из 2", 13, SOFT_GOLD)
     if onboarding_edit:
         _button(intro, "← Отмена и назад", func():
+            onboarding_profile.clear()
+            onboarding_draft.clear()
+            onboarding_edit = false
             tab = onboarding_return_tab
             _render(true)
         , true)
@@ -1240,6 +1247,7 @@ func _show_onboarding() -> void:
         var name = _text_input(personal, "Как к тебе обращаться", str(onboarding_draft.get("name", "")))
         name.name = "OnboardingName"
         name.max_length = 45
+        _questionnaire_avatar_controls(personal)
         var fields = _row(personal)
         var age_col = VBoxContainer.new()
         age_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1340,6 +1348,9 @@ func _show_onboarding() -> void:
         activity.item_selected.connect(compute_preview)
         goal.item_selected.connect(compute_preview)
         compute_preview.call(0)
+        # Editing appearance must not silently replace the existing calorie target.
+        if onboarding_edit:
+            calories.text = str(roundi(float(store.data["settings"]["kcal"])))
         var action_buttons = _row(choices)
         _button(action_buttons, "← Назад", func():
             onboarding_draft["activity"] = activity.selected
@@ -1360,7 +1371,8 @@ func _show_onboarding() -> void:
             if manual_kcal < 0:
                 _message("Введи суточную норму от 1000 до 5000 ккал.")
                 return
-            if store.complete_onboarding(details, float(manual_kcal), onboarding_edit):
+            if store.complete_onboarding(details, float(manual_kcal), onboarding_edit, onboarding_profile):
+                onboarding_profile.clear()
                 onboarding_draft.clear()
                 onboarding_step = 0
                 var return_tab = onboarding_return_tab if onboarding_edit else "day"
@@ -1754,58 +1766,6 @@ func _show_profile() -> void:
                 , true)
                 select_button.disabled = not available
 
-    var edit = _card("Личная страница")
-    _compact_card(edit, 12, 6)
-    _button(edit, "📷 Выбрать фото для аватара", func(): _pick_avatar_photo(), true)
-    if not str(profile.get("photo", "")).is_empty():
-        _button(edit, "Удалить фото (вернуть значок)", func():
-            _confirm_delete("Удалить фото профиля? Значок останется доступен.", func():
-                if store.update_avatar_photo(""):
-                    _render()
-                    _notify_saved("Фото аватара удалено")
-                else:
-                    _message("Не удалось удалить фото.")
-            )
-        , true)
-    if profile_edit_open:
-        _label(edit, "Фото остаётся на устройстве и входит в резервную JSON-копию.", 12, MUTED)
-    if not profile_edit_open:
-        _button(edit, "✎ Изменить имя и значок", func():
-            profile_edit_open = true
-            _render()
-        , true)
-    else:
-        _label(edit, "Как к тебе обращаться", 13, MUTED)
-        var name = _text_input(edit, "Имя", str(profile.get("name", "Мой профиль")))
-        name.max_length = 45
-        _label(edit, "Короткая подпись", 13, MUTED)
-        var motto = _text_input(edit, "Небольшая фраза о себе", str(profile.get("motto", "")))
-        motto.max_length = 140
-        var choices = ["❧ Листок", "✦ Звезда", "☾ Луна", "☀ Солнце", "✿ Цветок", "♥ Сердце"]
-        var ids = ["leaf", "star", "moon", "sun", "flower", "heart"]
-        _label(edit, "Значок профиля", 13, MUTED)
-        var icon_picker = _choice(edit, choices)
-        var chosen = ids.find(str(profile.get("avatar", "leaf")))
-        icon_picker.select(maxi(0, chosen))
-        var actions = _row(edit)
-        _button(actions, "Отмена", func():
-            profile_edit_open = false
-            _render()
-        , true)
-        _button(actions, "Сохранить профиль", func():
-            var changes = {"name": name.text.strip_edges(), "motto": motto.text.strip_edges(),
-                "avatar": ids[icon_picker.selected]}
-            if store.update_profile(changes):
-                profile_edit_open = false
-                _hide_keyboard_and_focus()
-                _render()
-                _notify_saved("Личная страница обновлена")
-            else:
-                _message("Проверь имя и подпись или свободное место.")
-        )
-
-    # Personal details and avatar settings precede optional rewards.
-    body.move_child(edit.get_parent(), 2)
     var system_card = _card("Приложение")
     system_card.get_parent().name = "ProfileSystemSettings"
     _compact_card(system_card, 11, 5)
@@ -1818,6 +1778,59 @@ func _show_profile() -> void:
     profile_settings.custom_minimum_size.y = 44
     profile_settings.alignment = HORIZONTAL_ALIGNMENT_LEFT
     _label(system_card, "Язык, темы, уведомления, аккаунт Google и резервные копии", 12, MUTED)
+
+# Appearance changes stay in the questionnaire draft until the final Save.
+func _questionnaire_avatar_controls(parent: Node) -> void:
+    var line = _row(parent)
+    line.name = "QuestionnaireAvatarControls"
+    onboarding_avatar_preview = _button(line, "", func(): _pick_avatar_photo(), true)
+    onboarding_avatar_preview.name = "QuestionnaireAvatarPreview"
+    onboarding_avatar_preview.custom_minimum_size = Vector2(76, 76)
+    onboarding_avatar_preview.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+    onboarding_avatar_preview.add_theme_font_size_override("font_size", 30)
+    onboarding_avatar_preview.expand_icon = true
+    onboarding_avatar_preview.tooltip_text = "Выбрать фото для аватара"
+    var options = VBoxContainer.new()
+    options.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    line.add_child(options)
+    var pick = _button(options, "📷 Выбрать фото", func(): _pick_avatar_photo(), true)
+    pick.name = "QuestionnairePhotoPick"
+    pick.custom_minimum_size.y = 38
+    onboarding_photo_remove = _button(options, "Убрать фото", func():
+        onboarding_profile["photo"] = ""
+        _refresh_questionnaire_avatar()
+    , true)
+    onboarding_photo_remove.name = "QuestionnairePhotoRemove"
+    onboarding_photo_remove.custom_minimum_size.y = 35
+    onboarding_photo_status = _label(options, "", 11, MUTED)
+    var ids = ["leaf", "star", "moon", "sun", "flower", "heart"]
+    _label(parent, "Значок профиля", 13, MUTED)
+    var picker = _choice(parent, ["❧ Листок", "✦ Звезда", "☾ Луна", "☀ Солнце", "✿ Цветок", "♥ Сердце"])
+    picker.name = "QuestionnaireAvatarIcon"
+    picker.select(maxi(0, ids.find(str(onboarding_profile.get("avatar", "leaf")))))
+    picker.item_selected.connect(func(index: int):
+        onboarding_profile["avatar"] = ids[index]
+        _refresh_questionnaire_avatar()
+    )
+    _label(parent, "Короткая подпись (необязательно)", 13, MUTED)
+    var motto = _text_input(parent, "Небольшая фраза о себе", str(onboarding_profile.get("motto", "")))
+    motto.name = "QuestionnaireMotto"
+    motto.max_length = 140
+    motto.text_changed.connect(func(value: String): onboarding_profile["motto"] = value)
+    _refresh_questionnaire_avatar()
+
+
+func _refresh_questionnaire_avatar() -> void:
+    if not is_instance_valid(onboarding_avatar_preview):
+        return
+    var texture = ProfilePhotoScript.decode_photo(str(onboarding_profile.get("photo", "")))
+    onboarding_avatar_preview.icon = texture
+    onboarding_avatar_preview.text = "" if texture != null else _avatar_character(str(onboarding_profile.get("avatar", "leaf")))
+    if is_instance_valid(onboarding_photo_remove):
+        onboarding_photo_remove.visible = texture != null
+    if is_instance_valid(onboarding_photo_status):
+        onboarding_photo_status.text = "Фото выбрано" if texture != null else "Фото необязательно"
+
 
 func _pick_avatar_photo() -> void:
     var supported = PackedStringArray([
@@ -1868,6 +1881,10 @@ func _apply_avatar_photo_bytes(bytes: PackedByteArray) -> bool:
     if encoded.is_empty():
         _message("Не удалось обработать фото. Нужны JPEG, PNG или WebP до 16 МБ.")
         return false
+    if tab == "onboarding" and not onboarding_profile.is_empty():
+        onboarding_profile["photo"] = encoded
+        _refresh_questionnaire_avatar()
+        return true
     if not store.update_avatar_photo(encoded):
         _message("Не удалось сохранить фото. Проверь свободное место.")
         return false

@@ -269,13 +269,20 @@ func set_macro_goals(value: Dictionary) -> bool:
 func needs_onboarding() -> bool:
     return not bool(data.get("settings", {}).get("onboarding_complete", false))
 
-func complete_onboarding(personal: Dictionary, calories: float, preserve_start: bool = false) -> bool:
+func complete_onboarding(personal: Dictionary, calories: float, preserve_start: bool = false, appearance: Dictionary = {}) -> bool:
     if not OnboardingMath.valid_details(personal):
         return false
     if not is_finite(calories) or calories < 1000.0 or calories > 5000.0:
         return false
     var old_settings: Dictionary = data["settings"].duplicate(true)
     var old_profile: Dictionary = data["profile"].duplicate(true)
+    var next_profile: Dictionary = old_profile.duplicate(true)
+    for key in ["avatar", "motto", "photo"]:
+        if appearance.has(key):
+            next_profile[key] = appearance[key]
+    next_profile["name"] = str(personal["name"]).strip_edges()
+    if not _valid_profile(next_profile):
+        return false
     var settings: Dictionary = data["settings"]
     settings["personal"] = personal.duplicate(true)
     settings["onboarding_complete"] = true
@@ -283,7 +290,7 @@ func complete_onboarding(personal: Dictionary, calories: float, preserve_start: 
     if not preserve_start:
         settings["start"] = float(personal["weight"])
     settings["goal"] = float(personal["goal_weight"])
-    data["profile"]["name"] = str(personal["name"]).strip_edges()
+    data["profile"] = next_profile
     if save():
         return true
     data["settings"] = old_settings

@@ -136,7 +136,7 @@ func _run() -> void:
     app.tab = "profile"
     app._render()
     await process_frame
-    if _has_button(app, "Выбрать фото для аватара") == null or \
+    if _has_button(app, "Моя анкета") == null or \
             _has_button(app, "Показать все достижения") == null:
         _fail("profile lacks avatar picker or reward badges")
         return

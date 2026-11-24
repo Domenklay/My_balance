@@ -209,6 +209,7 @@ static func english() -> Translation:
         "▾ Резервная копия и перенос": "▾ Backup and transfer",
         "▴ Резервная копия и перенос": "▴ Backup and transfer"
     }
+    messages.merge({"Моя анкета":"My questionnaire","📷 Выбрать фото":"📷 Choose photo","Убрать фото":"Remove photo","Фото выбрано":"Photo selected","Фото необязательно":"Photo is optional","Короткая подпись (необязательно)":"Short bio (optional)"}, true)
     for source in messages:
         result.add_message(source, messages[source])
     return result
