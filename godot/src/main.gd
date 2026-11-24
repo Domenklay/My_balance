@@ -2714,7 +2714,7 @@ func _save_ready_recipe(recipe: Dictionary) -> String:
 func _show_ready_recipes() -> void:
     var intro = _card("Готовые рецепты", "hero")
     _compact_card(intro, 10, 6)
-    _label(intro, "Подборка блюд из открытой кулинарной книги", 12, HERO_MUTED)
+    _label(intro, "Открытая кулинарная книга и рецепты редакции", 12, HERO_MUTED)
     var shortcuts = _row(intro)
     _button(shortcuts, "Мои рецепты", func():
         ready_recipes_open = false
@@ -2850,9 +2850,12 @@ func _ready_recipe_details(recipe: Dictionary) -> void:
     )
     add.name = "ReadyRecipeAddToDiary"
     _label(fields,str(recipe["instructions"]),14,INK)
-    _label(fields,"Адаптация: участники Викиучебника, CC BY-SA 4.0. Изменены количества, текст и расчёт порций.",12,MUTED)
-    _button(fields,"Открыть источник",func(): OS.shell_open(str(recipe["source_url"])),true)
-    _button(fields,"Лицензия CC BY-SA",func(): OS.shell_open(ReadyRecipes.LICENSE),true)
+    if recipe.get("original_recipe", false):
+        _label(fields,"Рецепт редакции «Мой баланс».",12,MUTED)
+    else:
+        _label(fields,"Адаптация: участники Викиучебника, CC BY-SA 4.0. Изменены количества, текст и расчёт порций.",12,MUTED)
+        _button(fields,"Открыть источник",func(): OS.shell_open(str(recipe["source_url"])),true)
+        _button(fields,"Лицензия CC BY-SA",func(): OS.shell_open(ReadyRecipes.LICENSE),true)
     sheet["confirm"].pressed.connect(func():
         if _save_ready_recipe(recipe).is_empty():
             _sheet_error(sheet,"Не удалось сохранить рецепт.")
