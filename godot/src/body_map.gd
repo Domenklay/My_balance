@@ -5,6 +5,7 @@ extends Control
 signal metric_selected(metric: String)
 
 const METRICS = preload("res://src/body_measurements.gd")
+const FIGURE = preload("res://assets/body/measurement_figure.svg")
 const PINS = {
     "neck":      {"side": "left",  "y": 14.0,  "target": Vector2(0, 60)},
     "chest":     {"side": "left",  "y": 73.0,  "target": Vector2(-22, 114)},
@@ -60,8 +61,8 @@ func configure(metric: String, values: Dictionary, text: Color, soft: Color,
     active_color = accent
     dark_mode = is_dark
     high_contrast = contrast
-    figure_color = Color("#49755D") if dark_mode else Color("#BBD8C3")
-    figure_outline = Color("#A5CFB0") if dark_mode else Color("#4E8A6B")
+    figure_color = accent.lerp(Color.WHITE, 0.44 if dark_mode else 0.69)
+    figure_outline = accent.lerp(text, 0.65 if dark_mode else 0.22)
     _update_button_styles()
     queue_redraw()
 
@@ -86,7 +87,8 @@ func _update_button_styles() -> void:
         if not metric_buttons.has(key):
             continue
         var button: Button = metric_buttons[key]
-        button.text = str(field[1])
+        button.text = str(field[1]) + "\n" + (str(snappedf(float(recorded_values[key]), 0.1)) + " см" if recorded_values.has(key) else "—")
+        button.add_theme_font_size_override("font_size", 11)
         var active: bool = key == selected_metric
         var background: Color = active_color if active else soft_color
         var foreground: Color = Color.WHITE if active else text_color
@@ -123,41 +125,9 @@ func _draw() -> void:
     var center = Vector2(size.x * 0.5, 0.0)
     if size.x < 240.0 or size.y < 310.0:
         return
-    # Stylised front-facing, anatomically neutral silhouette. No image files,
-    # internet resources or human photos are required.
-    _poly(center, [
-        Vector2(-11, 54), Vector2(11, 54),
-        Vector2(11, 70), Vector2(-11, 70)
-    ], figure_color)
-    _poly(center, [
-        Vector2(-29, 72), Vector2(-41, 79), Vector2(-53, 141),
-        Vector2(-48, 182), Vector2(-39, 183), Vector2(-40, 143),
-        Vector2(-30, 105)
-    ], figure_color)
-    _poly(center, [
-        Vector2(29, 72), Vector2(41, 79), Vector2(53, 141),
-        Vector2(48, 182), Vector2(39, 183), Vector2(40, 143),
-        Vector2(30, 105)
-    ], figure_color)
-    _poly(center, [
-        Vector2(-24, 72), Vector2(24, 72), Vector2(33, 109),
-        Vector2(25, 161), Vector2(30, 193), Vector2(27, 207),
-        Vector2(-27, 207), Vector2(-30, 193), Vector2(-25, 161),
-        Vector2(-33, 109)
-    ], figure_color)
-    _poly(center, [
-        Vector2(-27, 205), Vector2(-3, 205), Vector2(-7, 266),
-        Vector2(-10, 319), Vector2(-35, 319), Vector2(-30, 308),
-        Vector2(-23, 259)
-    ], figure_color)
-    _poly(center, [
-        Vector2(27, 205), Vector2(3, 205), Vector2(7, 266),
-        Vector2(10, 319), Vector2(35, 319), Vector2(30, 308),
-        Vector2(23, 259)
-    ], figure_color)
-    draw_circle(center + Vector2(0, 36), 17.5, figure_color)
-    draw_arc(center + Vector2(0, 36), 17.5, 0, TAU, 32,
-        figure_outline, 1.5, true)
+    # Smooth, neutral front-facing vector illustration. It does not infer
+    # the user's shape from circumference measurements.
+    draw_texture_rect(FIGURE, Rect2(center.x - 61.0, 13.0, 122.0, 310.0), false, figure_color)
 
     var button_width: float = clampf(size.x * 0.305, 78.0, 112.0)
     for field in METRICS.FIELDS:
@@ -171,7 +141,8 @@ func _draw() -> void:
         var line_color: Color = active_color if chosen else figure_outline
         draw_line(target, end, line_color, 2.0 if chosen else 1.2, true)
         if chosen:
-            draw_circle(target, 8.0, line_color.lightened(0.38))
-        draw_circle(target, 4.0 if chosen else 3.0, line_color)
+            draw_circle(target, 9.0, figure_color)
+            draw_arc(target, 9.0, 0, TAU, 24, line_color, 1.7, true)
+        draw_circle(target, 4.5 if chosen else 3.5, line_color)
         if recorded_values.has(metric):
             draw_arc(target, 5.8, 0, TAU, 18, line_color, 1.2, true)

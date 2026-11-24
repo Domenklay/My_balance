@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.55"
+const APP_VERSION = "0.7.56"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -5520,9 +5520,8 @@ func _set_progress_section(section: String) -> void:
 
 
 func _show_progress() -> void:
-    var card = _card("Мой прогресс")
-    _compact_card(card, 10, 7)
-    _label(card, "Вес, замеры тела, питание и активность в одном разделе.", 12, MUTED)
+    var card = _card("Мой прогресс", "overview")
+    _compact_card(card, 10, 5)
     var choices = _row(card)
     choices.name = "ProgressSectionChoices"
     for item in [["weight", "Вес"], ["body", "Замеры"], ["stats", "Итоги"]]:
@@ -5591,22 +5590,39 @@ func _graph_period_info(parent: Node, points: Array, unit: String) -> void:
         return
     var line = _row(parent)
     line.name = "GraphMetricOverview"
-    var recent = _nowrap(line, str(snappedf(float(stats["latest"]), 0.1)) +
-        " " + unit, 21, TEXT_ACCENT)
-    recent.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    var latest_tile = VBoxContainer.new()
+    latest_tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    latest_tile.add_theme_constant_override("separation", 2)
+    line.add_child(latest_tile)
+    _label(latest_tile, "Последний замер", 11, MUTED)
+    var recent = _nowrap(latest_tile, str(snappedf(float(stats["latest"]), 0.1)) +
+        " " + unit, 27, TEXT_ACCENT)
+    recent.name = "GraphLatestValue"
     var change: float = float(stats["change"])
-    var change_text = _nowrap(line,
-        ProgressGraph.format_delta(change, unit), 17,
-        TEXT_ACCENT if change <= 0.0 else ACCENT)
+    var delta_tile = VBoxContainer.new()
+    delta_tile.custom_minimum_size.x = 98
+    delta_tile.add_theme_constant_override("separation", 2)
+    line.add_child(delta_tile)
+    var caption = _label(delta_tile, "За период", 11, MUTED)
+    caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+    # A decrease or increase is not intrinsically healthy/unhealthy.
+    var change_text = _nowrap(delta_tile, ProgressGraph.format_delta(change, unit), 23, TEXT_ACCENT)
     change_text.name = "GraphPeriodDelta"
-    # Fix narrow-screen flex layout: never render "-6.0 см" vertically.
     change_text.custom_minimum_size.x = 96
-    change_text.size_flags_horizontal = Control.SIZE_SHRINK_END
     change_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
     _label(parent, str(stats["first_date"]) + " — " +
-        str(stats["latest_date"]) + " · " +
-        str(stats["count"]) + " измерений", 12, MUTED)
-    _label(parent, "Разница между первым и последним замером выбранного периода.", 11, MUTED)
+        str(stats["latest_date"]) + " · " + str(stats["count"]) + " измерений", 12, MUTED)
+    _label(parent, "Первое: " + str(snappedf(float(stats["first"]), 0.1)) +
+        " " + unit + " · Разница первого и последнего", 11, MUTED)
+
+
+func _graph_readout(parent: Node, plot: Control) -> void:
+    var readout = _label(parent, "Нажми на график, чтобы посмотреть дату и значение.", 12, MUTED)
+    readout.name = str(plot.name) + "Readout"
+    plot.point_selected.connect(func(day: String, amount: float, unit: String):
+        readout.text = day + "  ·  " + str(snappedf(amount, 0.1)) + " " + unit
+        readout.add_theme_color_override("font_color", TEXT_ACCENT)
+    )
 
 
 func _refresh_body_diagram_preserving_draft() -> void:
@@ -5641,6 +5657,8 @@ func _show_body_measurements() -> void:
     var edit_card = _card("Замеры тела")
     _compact_card(edit_card, 10, 7)
     _date_nav(edit_card)
+    if calendar_expanded:
+        _calendar(edit_card)
     _label(edit_card, "Указывай только то, что измерила. Пустые поля не заполняются автоматически.", 12, MUTED)
     var current: Dictionary = store.body_measurements_on(date)
     var fields: Dictionary = {}
@@ -5691,7 +5709,7 @@ func _show_body_measurements() -> void:
     )
     save_button.name = "BodyMeasurementsSave"
 
-    var graph_card = _card("Карта тела и график")
+    var graph_card = _card("Карта тела и график", "overview")
     _compact_card(graph_card, 10, 7)
     _label(graph_card,
         "Нажми на область тела, чтобы выбрать параметр и посмотреть его изменения.",
@@ -5709,6 +5727,7 @@ func _show_body_measurements() -> void:
     silhouette.configure(selected_body_metric, latest, INK,
         SECONDARY, BORDER, NAV_ACTIVE, DARK_MODE, HIGH_CONTRAST)
     silhouette.metric_selected.connect(_body_map_select)
+    _label(graph_card, "Последние записанные значения · см", 11, MUTED)
     var picker = _choice(graph_card, [])
     picker.name = "BodyMeasurementMetricPicker"
     var selected_index = 0
@@ -5725,11 +5744,12 @@ func _show_body_measurements() -> void:
     _graph_period_info(graph_card, points, "см")
     var plot = GraphScript.new()
     plot.name = "BodyMeasurementsGraph"
-    plot.custom_minimum_size = Vector2(0, 205)
+    plot.custom_minimum_size = Vector2(0, 230)
     plot.set_palette(TEXT_ACCENT, CHART_GRID, MUTED, ACCENT, CHART_AREA, SECONDARY)
     plot.set_unit("см")
     plot.set_overview_points(points, -1.0)
     graph_card.add_child(plot)
+    _graph_readout(graph_card, plot)
     # Show the recent dates for the *selected* body parameter, while the
     # complete mixed-parameter journal remains intact below the chart.
     var selected_history = VBoxContainer.new()
@@ -5815,10 +5835,15 @@ func _show_body_measurements() -> void:
 
 
 func _show_weight() -> void:
-    var card = _card("История веса")
+    var card = _card("Записать вес")
+    _compact_card(card, 10, 6)
     _date_nav(card)
+    if calendar_expanded:
+        _calendar(card)
     var settings: Dictionary = store.data["settings"]
-    _label(card, "Старт: " + str(settings["start"]) + " кг     Цель: " + str(settings["goal"]) + " кг", 15, MUTED)
+    var weight_targets = _row(card)
+    _catalog_nutrient(weight_targets, "Старт, кг", float(settings["start"]), CARBS_BG, MACRO_CARBS)
+    _catalog_nutrient(weight_targets, "Цель, кг", float(settings["goal"]), PROTEIN_BG, MACRO_PROTEIN)
     var value = _number(card, store.weight_prefill(date), 20, 400, 0.1)
     value.name = "WeightEntryValue"
     _label(card, "Предложен последний измеренный вес на выбранную дату. Измени его перед сохранением.", 12, MUTED)
@@ -5837,11 +5862,12 @@ func _show_weight() -> void:
     _graph_period_info(chart, window, "кг")
     var g = GraphScript.new()
     g.name = "WeightProgressGraph"
-    g.custom_minimum_size = Vector2(0, 210)
+    g.custom_minimum_size = Vector2(0, 235)
     g.set_palette(TEXT_ACCENT, CHART_GRID, MUTED, ACCENT, CHART_AREA, SECONDARY)
     g.set_unit("кг")
     g.set_overview_points(window, float(settings["goal"]))
     chart.add_child(g)
+    _graph_readout(chart, g)
     var history = store.data["weights"].duplicate()
     history.sort_custom(func(a,b): return str(a.get("date", "")) > str(b.get("date", "")))
     var total_history: int = history.size()
@@ -5997,6 +6023,10 @@ func _show_stats() -> void:
             "в обоих периодах (" + str(current_days) + " и " + str(previous_days) + " дн.).")
     var compare_label = _label(card, compare_text, 12, TEXT_ACCENT)
     compare_label.name = "StatsPreviousComparison"
+    # Hide nutrition summary when the user is exploring weight or activity.
+    metrics.visible = stats_detail_tab == "nutrition"
+    stats_explanation.visible = stats_detail_tab == "nutrition"
+    compare_label.visible = stats_detail_tab == "nutrition"
     # One visualization at a time: larger readable graphs, shorter page.
     var tabrow = _row(card)
     tabrow.name = "StatsSectionSelector"
@@ -6027,11 +6057,11 @@ func _show_stats() -> void:
             _metric_tile(activity_stats, str(int(report["exercise"])) + " мин", "Тренировки")
             var activity_chart = StatsChartScript.new()
             activity_chart.name = "StatsActivityChart"
-            activity_chart.custom_minimum_size.y = 185
+            activity_chart.custom_minimum_size.y = 205
             movement.add_child(activity_chart)
             activity_chart.setup(report["columns"], "activity", 0.0,
                 TEXT_ACCENT, ACCENT, MUTED, CHART_GRID)
-            _label(movement, "Линия 1 — ходьба · линия 2 — тренировки · Сеансов: " +
+            _label(movement, "Столбцы: ходьба и тренировки · Сеансов: " +
                 str(int(report["workouts"])), 12, contrast_text)
             if (int(report["walking"]) + int(report["exercise"]) +
                     int(previous_report["walking"]) + int(previous_report["exercise"]) > 0):
@@ -6065,6 +6095,7 @@ func _show_stats() -> void:
             weight_graph.set_points(report["weights"], float(store.data["settings"]["goal"]),
                 120 if stats_period == "quarter" else 30)
             weight.add_child(weight_graph)
+            _graph_readout(weight, weight_graph)
         _:
             var calories = _card("Калории и БЖУ", "tint")
             calories.get_parent().name = "StatsCalorieCard"
@@ -6075,7 +6106,7 @@ func _show_stats() -> void:
             _label(calories, calorie_group_hint, 12, MUTED)
             var kcal_chart = StatsChartScript.new()
             kcal_chart.name = "StatsCalorieChart"
-            kcal_chart.custom_minimum_size.y = 190
+            kcal_chart.custom_minimum_size.y = 210
             calories.add_child(kcal_chart)
             kcal_chart.setup(report["columns"], "calories",
                 float(store.data["settings"]["kcal"]), TEXT_ACCENT, ACCENT, MUTED, CHART_GRID)
@@ -6094,9 +6125,9 @@ func _show_stats() -> void:
                 macro_heading.name = "StatsMacrosHeading"
                 var macro_row = _row(calories)
                 macro_row.add_theme_constant_override("separation", 4)
-                _compact_macro(macro_row, "Белки", float(report["avg_p"]), PROTEIN_BG, INK)
-                _compact_macro(macro_row, "Жиры", float(report["avg_f"]), FAT_BG, INK)
-                _compact_macro(macro_row, "Углеводы", float(report["avg_c"]), CARBS_BG, INK)
+                _compact_macro(macro_row, "Белки", float(report["avg_p"]), PROTEIN_BG, MACRO_PROTEIN)
+                _compact_macro(macro_row, "Жиры", float(report["avg_f"]), FAT_BG, MACRO_FAT)
+                _compact_macro(macro_row, "Углеводы", float(report["avg_c"]), CARBS_BG, MACRO_CARBS)
 
 
 func _settings_section(title: String, section: String, summary: String) -> VBoxContainer:

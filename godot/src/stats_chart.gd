@@ -21,6 +21,13 @@ func setup(data: Array, metric: String, goal: float,
     grid = grid_color
     queue_redraw()
 
+func _rounded_bar(rect: Rect2, color: Color) -> void:
+    var style = StyleBoxFlat.new()
+    style.bg_color = color
+    style.set_corner_radius_all(roundi(minf(5.0, minf(rect.size.x, rect.size.y) * 0.4)))
+    draw_style_box(style, rect)
+
+
 func _draw() -> void:
     var w: float = size.x
     var h: float = size.y
@@ -73,10 +80,10 @@ func _draw() -> void:
             height_primary = maxf(0.0, area * float(item.get("walk", 0)) / maximum)
             height_secondary = maxf(0.0, area * float(item.get("exercise", 0)) / maximum)
         if height_primary > 0:
-            draw_rect(Rect2(x, bottom - height_primary, bar_w, height_primary), primary, true)
+            _rounded_bar(Rect2(x, bottom - height_primary, bar_w, height_primary), primary)
         if height_secondary > 0:
-            draw_rect(Rect2(x, bottom - height_primary - height_secondary,
-                bar_w, height_secondary), secondary, true)
+            _rounded_bar(Rect2(x, bottom - height_primary - height_secondary,
+                bar_w, height_secondary), secondary)
         var tag: String = str(item.get("label", ""))
         draw_string(font, Vector2(center - step * 0.5, h - 9.0), tag,
             HORIZONTAL_ALIGNMENT_CENTER, step, 11, muted)

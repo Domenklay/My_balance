@@ -1,5 +1,9 @@
 extends Control
 
+signal point_selected(day: String, amount: float, unit: String)
+var selected_index: int = -1
+var plotted_points: PackedVector2Array = PackedVector2Array()
+var tap_origin: Vector2 = Vector2(-10000, -10000)
 var samples: Array = []
 var goal: float = 65.0
 var GREEN: Color = Color("#195b4a")
@@ -46,6 +50,8 @@ func set_overview_points(entries: Array, target: float) -> void:
 
 func set_points(weight_entries: Array, target: float, max_points: int = 30) -> void:
     goal = target
+    selected_index = -1
+    plotted_points = PackedVector2Array()
     samples = []
     for item in weight_entries:
         if item is Dictionary and item.has("date") and item.has("value"):
@@ -58,12 +64,42 @@ func set_points(weight_entries: Array, target: float, max_points: int = 30) -> v
         samples = samples.slice(samples.size() - limit)
     queue_redraw()
 
+func _ready() -> void:
+    mouse_filter = Control.MOUSE_FILTER_PASS
+
+
+func select_point(index: int) -> bool:
+    if index < 0 or index >= samples.size():
+        return false
+    selected_index = index
+    point_selected.emit(str(samples[index]["date"]), float(samples[index]["value"]), display_unit)
+    queue_redraw()
+    return true
+
+
+func _gui_input(event: InputEvent) -> void:
+    if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+        if event.pressed:
+            tap_origin = event.position
+        elif event.position.distance_to(tap_origin) <= 12.0 and not plotted_points.is_empty():
+            var closest: int = 0
+            var best: float = INF
+            for i in range(plotted_points.size()):
+                var distance: float = absf(plotted_points[i].x - event.position.x)
+                if distance < best:
+                    best = distance
+                    closest = i
+            select_point(closest)
+    # Do not consume vertical swipe gestures.
+
+
 func _date_label(iso_date: String) -> String:
     if iso_date.length() >= 10:
         return iso_date.substr(8, 2) + "." + iso_date.substr(5, 2)
     return iso_date
 
 func _draw() -> void:
+    plotted_points = PackedVector2Array()
     var w = size.x
     var h = size.y
     if w < 140.0 or h < 100.0:
@@ -116,6 +152,7 @@ func _draw() -> void:
             lerpf(left, right, clampf((stamp - first_stamp) / time_span, 0.0, 1.0)))
         var y: float = lerpf(bottom, top, (float(samples[i]["value"]) - minimum) / range_y)
         positions.append(Vector2(x, y))
+    plotted_points = positions
     if positions.size() > 1:
         # A subtle area under the curve creates an easier-to-read trend.
         var fill_area = PackedVector2Array()
@@ -134,6 +171,12 @@ func _draw() -> void:
     draw_circle(last_point, 8.0, HALO)
     draw_circle(last_point, 5.1, GREEN)
     draw_arc(last_point, 5.1, 0, TAU, 20, Color.WHITE, 2.0, true)
+    if selected_index >= 0 and selected_index < positions.size():
+        var picked: Vector2 = positions[selected_index]
+        draw_dashed_line(Vector2(picked.x, top), Vector2(picked.x, bottom), GOLD, 1.5, 4.0)
+        draw_circle(picked, 9.0, HALO)
+        draw_circle(picked, 5.0, GREEN)
+        draw_arc(picked, 6.0, 0, TAU, 24, GOLD, 2.0, true)
     # The latest value is labelled inside the graph and never clipped by
     # the right edge. This is not a projection or a target value.
     var last_text: String = str(snappedf(float(samples[count - 1]["value"]), 0.1)) + " " + display_unit

@@ -178,6 +178,8 @@ jobs:
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/body_measurements_0745_test.gd
       - name: Test 0.7.44 five-tab layout, direct meal search and combined progress
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/simple_ui_0744_test.gd
+      - name: Test 0.7.56 progress graph point selection and themed body diagram
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/progress_design_0756_test.gd
       - name: Test 0.7.55 product cards, favorites and recipe grid
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/catalog_design_0755_test.gd
       - name: Test 0.7.54 semantic day dashboard in all five themes
