@@ -199,6 +199,8 @@ jobs:
         run: cd community_server && python3 -m unittest -v test_server
       - name: Test 0.7.67 avatar header, photo and navigation
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/header_avatar_0767_test.gd
+      - name: Test 0.7.73 pantry matching and shopping persistence
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/pantry_0773_test.gd
       - name: Test 0.7.72 recipe recommendations, budget and confirmation
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/recipe_suggest_0772_test.gd
       - name: Test 0.7.66 offline ready recipe catalog and safe copying

@@ -38,7 +38,8 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.72.2"
+const APP_VERSION = "0.7.73"
+const PantryMath = preload("res://src/pantry_math.gd")
 const RecipeSuggest = preload("res://src/recipe_suggest.gd")
 const ReadyRecipes = preload("res://src/ready_recipes.gd")
 const CommunityClient = preload("res://src/community_client.gd")
@@ -2393,6 +2394,124 @@ func _show_recipe_editor() -> void:
         _notify_saved("Рецепт сохранён")
     )
 
+func _pantry_sheet() -> void:
+    var recipes: Array = store.data.get("recipes", []).duplicate(true)
+    var known: Dictionary = {}
+    for recipe in recipes:
+        known[str(recipe["id"])] = true
+    for recipe in ReadyRecipes.all():
+        var copy = ReadyRecipes.personal_copy(recipe)
+        if not known.has(str(copy["id"])):
+            recipes.append(copy)
+    var sheet = _mobile_sheet("Что есть дома?", "Укажи продукты, которые уже есть. Совпадение по названию не гарантирует достаточное количество.", "Готово", 710.0)
+    var fields: VBoxContainer = sheet["fields"]
+    var entry = _text_input(fields, "Например: яйцо, молоко, рис")
+    entry.name = "PantryInput"
+    entry.max_length = 600
+    var add = _button(fields, "+ Добавить продукты", Callable())
+    add.name = "PantryAdd"
+    var stock = VBoxContainer.new()
+    stock.name = "PantryStock"
+    stock.add_theme_constant_override("separation", 4)
+    fields.add_child(stock)
+    _label(fields,"Подбор блюд",15,INK)
+    var mode = _choice(fields,["Всё есть","Не хватает 1–2 продуктов"])
+    mode.name = "PantryMode"
+    mode.select(1)
+    var category = _choice(fields,["Все блюда"] + RecipeMath.CATEGORY_LABELS)
+    category.name = "PantryCategory"
+    var results = VBoxContainer.new()
+    results.name = "PantryResults"
+    results.add_theme_constant_override("separation", 6)
+    fields.add_child(results)
+    var refresh_results = func(_unused: int):
+        for child in results.get_children():
+            results.remove_child(child)
+            child.queue_free()
+        var cat: String = "" if category.selected == 0 else RecipeMath.CATEGORY_IDS[category.selected-1]
+        var matches = PantryMath.matches(recipes, store.pantry_list(), 0 if mode.selected == 0 else 2, cat)
+        _label(results,"Подходит: " + str(matches.size()) + " · показано до 20",12,MUTED)
+        if matches.is_empty():
+            _label(results,"Добавь продукты или выбери другую категорию. Учитываются все ингредиенты, включая масло и воду.",12,MUTED)
+        for i in range(mini(20,matches.size())):
+            var candidate: Dictionary = matches[i]
+            var recipe: Dictionary = candidate["recipe"]
+            var missing: Array = candidate["missing"]
+            var card = _card("", "plain", results)
+            card.get_parent().name = "PantryRecipe_" + str(recipe["id"])
+            _compact_card(card,8,5)
+            _label(card,str(recipe["name"]),15,INK)
+            var values = RecipeMath.calculate(recipe["ingredients"],float(recipe["cooked_weight"]))
+            _label(card,"≈ " + str(roundi(float(values["total_kcal"]) / float(recipe["servings"]))) + " ккал / порция",12,TEXT_ACCENT)
+            _label(card,"Есть: " + ", ".join(candidate["present"]),12,TEXT_ACCENT)
+            _label(card,"Все названия совпадают" if missing.is_empty() else "Не хватает: " + ", ".join(missing),12,MUTED)
+            if not missing.is_empty():
+                var shopping = _button(card,"В список покупок",func():
+                    if store.add_pantry_names(missing,"pantry_shopping"):
+                        _notify_saved("Добавлено в покупки")
+                    else:
+                        _sheet_error(sheet,"Не удалось сохранить список покупок.")
+                ,true)
+                shopping.name = "PantryBuy_" + str(recipe["id"])
+            var details = _button(card,"Состав и приготовление",func():
+                sheet["root"].queue_free()
+                await get_tree().process_frame
+                _pantry_recipe_details(recipe)
+            ,true)
+            details.name = "PantryOpen_" + str(recipe["id"])
+    var refresh_stock = func():
+        for child in stock.get_children():
+            stock.remove_child(child)
+            child.queue_free()
+        var items = store.pantry_list()
+        _label(stock,"Дома: " + str(items.size()),14,TEXT_ACCENT)
+        for item in items:
+            var title: String = str(item)
+            var row = _row(stock)
+            var caption = _label(row,title,13,INK)
+            caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            var remove = _button(row,"×",func():
+                if store.remove_pantry_name(title):
+                    sheet["root"].queue_free()
+                    await get_tree().process_frame
+                    _pantry_sheet()
+                else:
+                    _sheet_error(sheet,"Не удалось удалить продукт.")
+            ,true)
+            remove.custom_minimum_size = Vector2(40,36)
+            remove.size_flags_horizontal = Control.SIZE_SHRINK_END
+        refresh_results.call(0)
+    var save_names = func():
+        if store.add_pantry_names(Array(entry.text.replace("; ",",").replace(";",",").split(",",false))):
+            entry.text = ""
+            refresh_stock.call()
+        else:
+            _sheet_error(sheet,"Не удалось сохранить. До 100 продуктов, название до 120 символов.")
+    add.pressed.connect(save_names)
+    entry.text_submitted.connect(func(_text: String): save_names.call())
+    mode.item_selected.connect(refresh_results)
+    category.item_selected.connect(refresh_results)
+    var purchases = _button(fields,"Открыть список покупок",func():
+        sheet["root"].queue_free()
+        _open_week_planner()
+    ,true)
+    purchases.name = "PantryOpenShopping"
+    refresh_stock.call()
+    sheet["confirm"].pressed.connect(func(): sheet["root"].queue_free())
+
+func _pantry_recipe_details(recipe: Dictionary) -> void:
+    var sheet = _mobile_sheet(str(recipe["name"]),"Количество на " + str(recipe["servings"]) + " порций", "Выбрать порцию", 650.0)
+    var fields: VBoxContainer = sheet["fields"]
+    for ingredient in recipe["ingredients"]:
+        _label(fields,str(ingredient["name"]) + " · " + str(ingredient["grams"]) + " " + str(ingredient.get("unit","г")),13,INK)
+    _label(fields,"Приготовление",16,INK)
+    _label(fields,str(recipe.get("instructions","")),13,INK)
+    sheet["confirm"].pressed.connect(func():
+        sheet["root"].queue_free()
+        await get_tree().process_frame
+        _recipe_portion_sheet(recipe,0.0,date,true)
+    )
+
 func _recipe_suggest_sheet(day: String) -> void:
     var budget = RecipeSuggest.remaining(float(store.data["settings"]["kcal"]), store.day_calories(day),
         store.macro_targets(), {"p":store.day_macro(day,"p"),"f":store.day_macro(day,"f"),"c":store.day_macro(day,"c")})
@@ -2893,6 +3012,9 @@ func _show_ready_recipes() -> void:
     var suggest = _button(intro, "Подобрать по остаткам КБЖУ", func(): _recipe_suggest_sheet(date), true)
     suggest.name = "ReadyRecipeSuggest"
     suggest.custom_minimum_size.y = 38
+    var pantry = _button(intro, "Что есть дома?", func(): _pantry_sheet(), true)
+    pantry.name = "ReadyRecipePantry"
+    pantry.custom_minimum_size.y = 38
     var filters = _card("")
     _compact_card(filters, 9, 5)
     var query = _text_input(filters, "Поиск блюда или ингредиента", ready_query)
@@ -3087,6 +3209,8 @@ func _show_recipes() -> void:
             _render(true)
         )
         ready_button.name = "RecipesReadyCatalog"
+        var pantry = _button(intro, "Что есть дома?", func(): _pantry_sheet(), true)
+        pantry.name = "PersonalRecipePantry"
     _label(intro, "Личная коллекция блюд · КБЖУ на порцию", 12, HERO_MUTED)
     if _meal_entry_locked:
         var destination: String = selected_meal
@@ -4087,6 +4211,25 @@ func _show_week_planner() -> void:
         , true)
         open_diary.name = "PlannerOpenDiary"
 
+    var extra_shopping = _card("Покупки из подбора рецептов")
+    _compact_card(extra_shopping,10,5)
+    _label(extra_shopping,"Список по названиям, без автоматического расчёта количества.",11,MUTED)
+    var extra_items = store.pantry_list("pantry_shopping")
+    if extra_items.is_empty():
+        _label(extra_shopping,"Нет дополнительных покупок.",12,MUTED)
+    for item in extra_items:
+        var title: String = str(item)
+        var row = _row(extra_shopping)
+        var caption = _label(row,title,13,INK)
+        caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        var remove = _button(row,"✓ Куплено",func():
+            if store.remove_pantry_name(title,"pantry_shopping"):
+                _render()
+            else:
+                _message("Не удалось обновить покупки.")
+        ,true)
+        remove.custom_minimum_size.y = 36
+        remove.size_flags_horizontal = Control.SIZE_SHRINK_END
     var shopping = _card("Покупки на всю неделю")
     _compact_card(shopping, 11, 7)
     var shopping_items: Array = store.week_planned_shopping(planner_day)

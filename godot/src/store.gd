@@ -17,6 +17,7 @@ const WaterMath = preload("res://src/water_tracker.gd")
 const MealPlanner = preload("res://src/meal_planner.gd")
 const MacroGoals = preload("res://src/macro_goals.gd")
 const Reminders = preload("res://src/reminders.gd")
+const Pantry = preload("res://src/pantry_math.gd")
 
 const MEAL_NAMES = ["Завтрак", "Обед", "Ужин", "Перекус"]
 const DEFAULT_MEAL_SHARES = [25, 35, 30, 10]
@@ -140,7 +141,7 @@ func default_data() -> Dictionary:
             "meal_shares": DEFAULT_MEAL_SHARES.duplicate(), "home_widgets": DEFAULT_HOME_WIDGETS.duplicate(), "water_goal_ml": DEFAULT_WATER_GOAL_ML, "onboarding_complete": false,
             "personal": {}, "macro_goals": MacroGoals.defaults(), "reminders": Reminders.defaults(), "language":"ru"},
         "foods": [], "entries": [], "activities": [], "steps": {}, "weights": [], "body_measurements": [], "water_entries": [], "notes": {}, "favorites": [],
-        "food_search_history": [], "recipes": [], "meal_templates": [], "planned_meals": [], "shopping_checked": {}, "day_copy_undo": {}, "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
+        "food_search_history": [], "pantry_items": [], "pantry_shopping": [], "recipes": [], "meal_templates": [], "planned_meals": [], "shopping_checked": {}, "day_copy_undo": {}, "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
             "photo": "", "frame": "plain"}
     }
 
@@ -718,6 +719,11 @@ func import_json(raw: String, persist: bool = true) -> bool:
         if ids.has(recipe_id):
             return false
         ids[recipe_id] = true
+    for pantry_field in ["pantry_items","pantry_shopping"]:
+        if not obj.has(pantry_field):
+            obj[pantry_field] = []
+        if not Pantry.valid_list(obj[pantry_field]):
+            return false
     if not obj.has("food_search_history"):
         obj["food_search_history"] = []
     if not obj["food_search_history"] is Array or obj["food_search_history"].size() > 20:
@@ -885,6 +891,50 @@ func recent_foods(limit: int = 8) -> Array:
 
 # Last distinct products with the actual portion last logged. Derived from the
 # journal itself, so upgrades require no new storage fields or migration.
+func pantry_list(field: String = "pantry_items") -> Array:
+    if field not in ["pantry_items","pantry_shopping"]:
+        return []
+    return data.get(field, []).duplicate()
+
+func add_pantry_names(names: Array, field: String = "pantry_items") -> bool:
+    if field not in ["pantry_items","pantry_shopping"]:
+        return false
+    var previous = pantry_list(field)
+    var next = previous.duplicate()
+    var seen = {}
+    for item in previous:
+        seen[Pantry.key(item)] = true
+    for raw in names:
+        var title = str(raw).strip_edges()
+        if title.is_empty():
+            continue
+        if title.length() > 120:
+            return false
+        var id = Pantry.key(title)
+        if not seen.has(id):
+            next.append(title)
+            seen[id] = true
+    if not Pantry.valid_list(next):
+        return false
+    if next == previous:
+        return true
+    data[field] = next
+    if save():
+        return true
+    data[field] = previous
+    return false
+
+func remove_pantry_name(title: String, field: String = "pantry_items") -> bool:
+    if field not in ["pantry_items","pantry_shopping"]:
+        return false
+    var previous = pantry_list(field)
+    var next = previous.filter(func(item): return Pantry.key(item) != Pantry.key(title))
+    data[field] = next
+    if save():
+        return true
+    data[field] = previous
+    return false
+
 func food_search_history() -> Array:
     return data.get("food_search_history", []).duplicate()
 
