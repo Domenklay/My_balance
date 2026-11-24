@@ -31,7 +31,7 @@ FILES = {
     "catalog_apple_muffins": "Allison's Fine Baked Goods Apple Muffin 2010.jpg",
     "catalog_berry_yogurt": "Yogurt fruit bowl.jpg",
 }
-UA = "MyBalance/0.7.69 (https://github.com/Domenklay/My_balance; offline recipe photo attribution)"
+UA = "MyBalance/0.7.70 (https://github.com/Domenklay/My_balance; offline recipe photo attribution)"
 def get(url, max_bytes=12_000_000):
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     with urllib.request.urlopen(req, timeout=12) as response:
@@ -59,13 +59,27 @@ def work(item):
             raise ValueError("unsupported or missing license")
         if not author or info.get("mime") != "image/jpeg":
             raise ValueError("missing author or not JPEG")
-        url = info.get("thumburl", info["url"])
-        if not url.startswith("https://upload.wikimedia.org/"):
-            raise ValueError("unexpected host")
-        try:
-            raw = get(url)
-        except Exception:
-            raw = get(info["url"])
+        def trusted_image_url(value):
+            url = urllib.parse.urljoin("https://upload.wikimedia.org/", value)
+            parsed = urllib.parse.urlsplit(url)
+            if parsed.scheme == "http" and parsed.hostname == "upload.wikimedia.org":
+                url = parsed._replace(scheme="https").geturl()
+                parsed = urllib.parse.urlsplit(url)
+            if parsed.scheme == "https" and parsed.netloc == "upload.wikimedia.org":
+                return url
+            return None
+        raw = None
+        for candidate in (info.get("thumburl", ""), info.get("url", "")):
+            url = trusted_image_url(candidate)
+            if not url or not candidate:
+                continue
+            try:
+                raw = get(url)
+                break
+            except Exception:
+                continue
+        if raw is None:
+            raise ValueError("no downloadable trusted Wikimedia image")
         if not raw.startswith(b"\xff\xd8") or not raw.endswith(b"\xff\xd9"):
             raise ValueError("not a complete JPEG")
         (OUT / (key + ".jpg")).write_bytes(raw)

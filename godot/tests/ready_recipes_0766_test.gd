@@ -13,6 +13,9 @@ func _run() -> void:
             _fail("invalid catalog entry")
             return
         ids[recipe["id"]] = true
+    if ids.size() != 100:
+        _fail("expected 100 unique offline recipes")
+        return
     var app = load("res://main.tscn").instantiate()
     root.add_child(app)
     await process_frame
@@ -23,6 +26,10 @@ func _run() -> void:
     await process_frame
     if app.find_child("ReadyRecipe_catalog_oats",true,false) == null or JSON.stringify(app.store.data) != original:
         _fail("empty diary does not show ready catalog or modified data")
+        return
+    var grid = app.find_child("ReadyRecipeGrid", true, false) as GridContainer
+    if grid == null or grid.get_child_count() != 100:
+        _fail("catalog grid does not contain all entries")
         return
     var cat = app.find_child("ReadyRecipeCategory",true,false) as OptionButton
     cat.select(Math.CATEGORY_IDS.find("soups")+1)

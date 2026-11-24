@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.69"
+const APP_VERSION = "0.7.70"
 const ReadyRecipes = preload("res://src/ready_recipes.gd")
 const CommunityClient = preload("res://src/community_client.gd")
 const InterfaceLanguage = preload("res://src/interface_language.gd")

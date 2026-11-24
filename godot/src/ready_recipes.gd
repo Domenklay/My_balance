@@ -1,4 +1,5 @@
 extends RefCounted
+const ExtraRecipes = preload("res://src/ready_recipes_extra.gd")
 # Adapted recipe ideas with explicit estimated quantities, yields and generic nutrition.
 # Source attribution is kept per recipe. No third-party photos or copied articles.
 const SOURCE_HOME = "https://ru.wikibooks.org/wiki/Кулинарная_книга"
@@ -926,7 +927,7 @@ const RECIPES = [
 ]
 
 static func all() -> Array:
-    return RECIPES.duplicate(true)
+    return (RECIPES + ExtraRecipes.RECIPES).duplicate(true)
 
 static func personal_copy(recipe: Dictionary) -> Dictionary:
     var copy = recipe.duplicate(true)
