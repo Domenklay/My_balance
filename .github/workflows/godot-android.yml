@@ -180,6 +180,8 @@ jobs:
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/simple_ui_0744_test.gd
       - name: Test community server API and moderation
         run: cd community_server && python3 -m unittest -v test_server
+      - name: Test 0.7.66 offline ready recipe catalog and safe copying
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/ready_recipes_0766_test.gd
       - name: Test 0.7.65 community UI and private payload
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/community_0765_test.gd
       - name: Test 0.7.64 categorized recipe library, calorie filters and sharing

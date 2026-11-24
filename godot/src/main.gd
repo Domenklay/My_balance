@@ -38,7 +38,8 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.65"
+const APP_VERSION = "0.7.66"
+const ReadyRecipes = preload("res://src/ready_recipes.gd")
 const CommunityClient = preload("res://src/community_client.gd")
 const InterfaceLanguage = preload("res://src/interface_language.gd")
 const Reminders = preload("res://src/reminders.gd")
@@ -169,6 +170,10 @@ var recipe_list_filter: String = "all"
 var recipe_grid_view: bool = false
 var community = CommunityClient.new()
 var community_open: bool = false
+var ready_recipes_open: bool = false
+var ready_query: String = ""
+var ready_category: int = 0
+var ready_calorie: int = 0
 var community_mine: bool = false
 var community_items: Array = []
 var community_more: bool = false
@@ -967,6 +972,7 @@ func _make_tabs() -> void:
             if target == "search":
                 _meal_entry_locked = false
                 _meal_entry_date = ""
+                ready_recipes_open = store.data.get("recipes", []).is_empty()
                 _navigate_to_tab("recipes")
             else:
                 _navigate_to_tab(target)
@@ -2269,7 +2275,7 @@ func _recipe_portion_sheet(recipe: Dictionary) -> void:
     var normal_weight: float = float(recipe["cooked_weight"]) / maxf(1.0, float(recipe["servings"]))
     var initial_weight: float = float(last.get("grams", normal_weight))
     var sheet = _mobile_sheet(str(recipe.get("name", "Рецепт")),
-        "Выбери съеденный вес готового блюда. Расчёт КБЖУ ведётся по фактическому весу после готовки.",
+        "Для готовых рецептов выход и КБЖУ приблизительные. Уточни фактический вес в редакторе." if recipe.has("source_url") else "Выбери съеденный вес готового блюда. Расчёт КБЖУ ведётся по фактическому весу после готовки.",
         "Добавить порцию", 425.0)
     var fields: VBoxContainer = sheet["fields"]
     _label(fields, "Порция готового блюда, г", 13, MUTED)
@@ -2628,22 +2634,148 @@ func _show_community() -> void:
         ,true)
 
 
+func _save_ready_recipe(recipe: Dictionary) -> String:
+    var copy = ReadyRecipes.personal_copy(recipe)
+    var id: String = str(copy["id"])
+    if not store.recipe_by_id(id).is_empty():
+        return id
+    return store.save_recipe(copy)
+
+
+func _show_ready_recipes() -> void:
+    var intro = _card("Готовые рецепты", "hero")
+    _compact_card(intro, 10, 6)
+    _label(intro, "Подборка блюд из открытой кулинарной книги", 12, HERO_MUTED)
+    var shortcuts = _row(intro)
+    _button(shortcuts, "Мои рецепты", func():
+        ready_recipes_open = false
+        _render(true)
+    , true)
+    var products = _button(shortcuts, "⌕ Продукты", func(): _navigate_to_tab("search"), true)
+    products.name = "RecipesOpenProducts"
+    _button(intro, "+ Создать рецепт", func():
+        ready_recipes_open = false
+        _begin_recipe_editor()
+    )
+    var filters = _card("")
+    _compact_card(filters, 9, 5)
+    var query = _text_input(filters, "Поиск блюда или ингредиента", ready_query)
+    query.name = "ReadyRecipeSearch"
+    query.clear_button_enabled = true
+    _label(filters, "Категория", 12, MUTED)
+    var category = _choice(filters, ["Все блюда"] + RecipeMath.CATEGORY_LABELS)
+    category.name = "ReadyRecipeCategory"
+    category.select(ready_category)
+    category.item_selected.connect(func(index: int):
+        ready_category = index
+        _render()
+    )
+    _label(filters, "Калорийность на порцию", 12, MUTED)
+    var kcal = _choice(filters, ["Любая калорийность","До 200 ккал","До 350 ккал","До 500 ккал","До 750 ккал","Свыше 750 ккал"])
+    kcal.name = "ReadyRecipeCalories"
+    kcal.select(ready_calorie)
+    kcal.item_selected.connect(func(index: int):
+        ready_calorie = index
+        _render()
+    )
+    var count = _label(filters, "", 12, MUTED)
+    _label(filters, "КБЖУ и вес готового блюда — приблизительные. Сохранённую копию можно уточнить.", 12, MUTED)
+    var cards: Array = []
+    for recipe in ReadyRecipes.all():
+        if ready_category > 0 and recipe["category"] != RecipeMath.CATEGORY_IDS[ready_category-1]:
+            continue
+        var data = RecipeMath.calculate(recipe["ingredients"],float(recipe["cooked_weight"]))
+        var servings: float = float(recipe["servings"])
+        if not RecipeMath.matches_calorie_filter(float(data["total_kcal"])/servings,ready_calorie):
+            continue
+        var card = _card("")
+        card.get_parent().name = "ReadyRecipe_" + str(recipe["id"])
+        _compact_card(card, 10, 5)
+        var row = _row(card)
+        _recipe_photo_thumb(row, recipe, 58)
+        var info = VBoxContainer.new()
+        info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        row.add_child(info)
+        _label(info, str(recipe["name"]), 16, INK)
+        _label(info, RecipeMath.CATEGORY_LABELS[RecipeMath.CATEGORY_IDS.find(recipe["category"])], 11, MUTED)
+        _label(info, "≈ " + str(roundi(float(data["total_kcal"])/servings)) + " ккал / порция", 13, TEXT_ACCENT)
+        var macros = _row(card)
+        _catalog_nutrient(macros, "Б",float(data["total_p"])/servings,PROTEIN_BG,MACRO_PROTEIN)
+        _catalog_nutrient(macros, "Ж",float(data["total_f"])/servings,FAT_BG,MACRO_FAT)
+        _catalog_nutrient(macros, "У",float(data["total_c"])/servings,CARBS_BG,MACRO_CARBS)
+        var actions = _row(card)
+        var details = _button(actions, "Рецепт", func(): _ready_recipe_details(recipe), true)
+        details.custom_minimum_size.y = 38
+        var saved = not store.recipe_by_id("saved_" + str(recipe["id"])).is_empty()
+        var save = _button(actions, "В коллекции ✓" if saved else "+ Сохранить", func():
+            var id = _save_ready_recipe(recipe)
+            if id.is_empty():
+                _message("Не удалось сохранить рецепт.")
+            else:
+                _render()
+                _notify_saved("Рецепт в личной коллекции")
+        )
+        save.name = "ReadySave_" + str(recipe["id"])
+        save.disabled = saved
+        save.custom_minimum_size.y = 38
+        var terms: String = str(recipe["name"]).to_lower()
+        for ingredient in recipe["ingredients"]:
+            terms += " " + str(ingredient["name"]).to_lower()
+        cards.append({"panel":card.get_parent(),"terms":terms})
+    var empty = _card("Нет подходящих блюд")
+    _label(empty,"Измени фильтры или поисковый запрос.",12,MUTED)
+    var refresh = func(value: String):
+        ready_query = value
+        var shown = 0
+        for item in cards:
+            var visible: bool = str(item["terms"]).contains(value.strip_edges().to_lower())
+            item["panel"].visible = visible
+            if visible:
+                shown += 1
+        count.text = "Найдено: " + str(shown)
+        empty.get_parent().visible = shown == 0
+    query.text_changed.connect(refresh)
+    refresh.call(ready_query)
+    var sources = _card("Больше рецептов в интернете")
+    _label(sources,"Викиучебник · CC BY-SA. Внешние рецепты открываются в браузере; их КБЖУ не импортируются автоматически.",12,MUTED)
+    _button(sources,"Открыть кулинарную книгу",func(): OS.shell_open(ReadyRecipes.SOURCE_HOME),true)
+
+
+func _ready_recipe_details(recipe: Dictionary) -> void:
+    var sheet = _mobile_sheet(str(recipe["name"]),"Адаптированный рецепт · расчёт приблизительный","Сохранить в мои рецепты",520.0)
+    var fields: VBoxContainer = sheet["fields"]
+    _label(fields,"Ингредиенты на " + str(int(recipe["servings"])) + " порц. · выход ≈ " + str(int(recipe["cooked_weight"])) + " г",13,TEXT_ACCENT)
+    for part in recipe["ingredients"]:
+        _label(fields,str(part["name"]) + " · " + str(part["grams"]) + " г",13,INK)
+    _label(fields,str(recipe["instructions"]),14,INK)
+    _label(fields,"Адаптация: участники Викиучебника, CC BY-SA 4.0. Изменены количества, текст и расчёт порций.",12,MUTED)
+    _button(fields,"Открыть источник",func(): OS.shell_open(str(recipe["source_url"])),true)
+    _button(fields,"Лицензия CC BY-SA",func(): OS.shell_open(ReadyRecipes.LICENSE),true)
+    sheet["confirm"].pressed.connect(func():
+        if _save_ready_recipe(recipe).is_empty():
+            _sheet_error(sheet,"Не удалось сохранить рецепт.")
+        else:
+            sheet["root"].queue_free()
+            _render()
+            _notify_saved("Рецепт сохранён")
+    )
+
+
 func _show_recipes() -> void:
     if recipe_editor_open:
         _show_recipe_editor()
         return
-    if community_open and not _meal_entry_locked:
-        _show_community()
+    if ready_recipes_open and not _meal_entry_locked:
+        _show_ready_recipes()
         return
     var intro = _card("Рецепты", "hero")
     _compact_card(intro, 10, 5)
     if not _meal_entry_locked:
-        var community_button = _button(intro, "Книга рецептов сообщества →", func():
-            community_open = true
+        var ready_button = _button(intro, "Готовые рецепты →", func():
+            ready_recipes_open = true
             _render(true)
-            _community_load()
         )
-        community_button.name = "RecipesCommunity"
+        ready_button.name = "RecipesReadyCatalog"
     _label(intro, "Личная коллекция блюд · КБЖУ на порцию", 12, HERO_MUTED)
     if _meal_entry_locked:
         var destination: String = selected_meal
@@ -2799,6 +2931,8 @@ func _show_recipes() -> void:
         title.name = "RecipeCardTitle"
         title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
         _label(summary, RecipeMath.CATEGORY_LABELS[maxi(0, RecipeMath.CATEGORY_IDS.find(category_id))], 11, MUTED)
+        if recipe.has("source_url"):
+            _label(summary, "КБЖУ приблизительно", 11, MUTED)
         var star_button = _button(photo_row,
             "★" if bool(recipe.get("favorite", false)) else "☆", func():
                 if store.toggle_recipe_favorite(recipe_id):
@@ -2896,9 +3030,6 @@ func _show_recipes() -> void:
                 DisplayServer.clipboard_set(store.export_shared_recipe(recipe_id))
                 _notify_saved("Код рецепта скопирован. Его можно отправить другому пользователю.")
             , true)
-            if not _meal_entry_locked:
-                var publish = _button(card, "Опубликовать в сообществе", func(): _community_publish(recipe), true)
-                publish.name = "RecipePublish_" + recipe_id
             share.name = "RecipeShare_" + recipe_id
             share.custom_minimum_size.y = 36
             share.add_theme_font_size_override("font_size", 12)
