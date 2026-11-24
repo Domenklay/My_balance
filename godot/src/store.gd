@@ -16,6 +16,7 @@ const BodyMeasurements = preload("res://src/body_measurements.gd")
 const WaterMath = preload("res://src/water_tracker.gd")
 const MealPlanner = preload("res://src/meal_planner.gd")
 const MacroGoals = preload("res://src/macro_goals.gd")
+const Reminders = preload("res://src/reminders.gd")
 
 const MEAL_NAMES = ["Завтрак", "Обед", "Ужин", "Перекус"]
 const DEFAULT_MEAL_SHARES = [25, 35, 30, 10]
@@ -137,7 +138,7 @@ func default_data() -> Dictionary:
     return {
         "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true, "high_contrast": false, "animations": true,
             "meal_shares": DEFAULT_MEAL_SHARES.duplicate(), "home_widgets": DEFAULT_HOME_WIDGETS.duplicate(), "water_goal_ml": DEFAULT_WATER_GOAL_ML, "onboarding_complete": false,
-            "personal": {}, "macro_goals": MacroGoals.defaults()},
+            "personal": {}, "macro_goals": MacroGoals.defaults(), "reminders": Reminders.defaults()},
         "foods": [], "entries": [], "activities": [], "steps": {}, "weights": [], "body_measurements": [], "water_entries": [], "notes": {}, "favorites": [],
         "recipes": [], "meal_templates": [], "planned_meals": [], "shopping_checked": {}, "day_copy_undo": {}, "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
             "photo": "", "frame": "plain"}
@@ -223,6 +224,21 @@ func set_daily_calorie_goal(calories: int) -> bool:
         return true
     data["settings"] = previous
     return false
+
+func reminder_settings() -> Dictionary:
+    return data["settings"].get("reminders", Reminders.defaults()).duplicate(true)
+
+
+func set_reminders(value: Dictionary) -> bool:
+    if not Reminders.valid(value):
+        return false
+    var previous: Dictionary = data["settings"].duplicate(true)
+    data["settings"]["reminders"] = value.duplicate(true)
+    if save():
+        return true
+    data["settings"] = previous
+    return false
+
 
 func macro_targets() -> Dictionary:
     return MacroGoals.targets(data["settings"])
@@ -641,6 +657,10 @@ func import_json(raw: String, persist: bool = true) -> bool:
             return false
         ids[recipe_id] = true
     var settings: Dictionary = obj["settings"]
+    if not settings.has("reminders"):
+        settings["reminders"] = Reminders.defaults()
+    if not Reminders.valid(settings["reminders"]):
+        return false
     if not settings.has("macro_goals"):
         settings["macro_goals"] = MacroGoals.defaults()
     if not MacroGoals.valid(settings["macro_goals"]):

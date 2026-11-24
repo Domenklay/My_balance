@@ -38,7 +38,8 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.60"
+const APP_VERSION = "0.7.61"
+const Reminders = preload("res://src/reminders.gd")
 const MacroGoals = preload("res://src/macro_goals.gd")
 
 var GREEN: Color = Color("#195b4a")
@@ -116,6 +117,7 @@ var water_history_expanded: bool = false
 # Optional, user-initiated Google Drive appDataFolder backup session.
 # Tokens stay inside the native plugin; only cloud metadata reaches GDScript.
 var google_plugin = null
+var reminder_plugin = null
 var google_connected: bool = false
 var google_checked: bool = false
 var google_exists: bool = false
@@ -365,6 +367,9 @@ func _ready() -> void:
     search_http.timeout = 18.0
     add_child(search_http)
     search_http.request_completed.connect(_on_online_search_completed)
+    if OS.has_feature("android") and Engine.has_singleton("MyBalanceReminders"):
+        reminder_plugin = Engine.get_singleton("MyBalanceReminders")
+        _sync_reminders()
     if OS.has_feature("android") and Engine.has_singleton("MyBalanceGoogleDrive"):
         google_plugin = Engine.get_singleton("MyBalanceGoogleDrive")
         google_plugin.connect("google_connected", Callable(self, "_on_google_connected"))
@@ -6609,6 +6614,80 @@ func _show_google_backup_settings() -> void:
     disconnect_button.disabled = google_busy
 
 
+func _sync_reminders() -> bool:
+    if reminder_plugin == null:
+        return false
+    return bool(reminder_plugin.setSchedule(JSON.stringify(store.reminder_settings())))
+
+
+func _show_reminder_settings() -> void:
+    var current: Dictionary = store.reminder_settings()
+    var count = Reminders.enabled_count(current)
+    var card = _settings_section("Напоминания", "reminders",
+        "Включено: " + str(count) + " из " + str(Reminders.ITEMS.size()))
+    _label(card, "Уведомления по местному времени. Android может доставлять их с задержкой. Все напоминания добровольные.", 12, MUTED)
+    if reminder_plugin == null:
+        _label(card, "Уведомления доступны на Android. Расписание можно сохранить и здесь.", 12, MUTED)
+    else:
+        var allowed: bool = reminder_plugin.notificationsAllowed()
+        _label(card, "Уведомления разрешены" if allowed else "Уведомления заблокированы Android", 12, TEXT_ACCENT)
+        var permission = _button(card, "Разрешения Android", func():
+            reminder_plugin.requestNotifications()
+        , true)
+        permission.name = "ReminderPermission"
+        _button(card, "Обновить статус разрешений", func(): _render(), true)
+    var controls: Dictionary = {}
+    for item in Reminders.ITEMS:
+        var key: String = str(item[0])
+        var record: Dictionary = current[key]
+        var row = _soft_list_row(card)
+        var stack = VBoxContainer.new()
+        stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        stack.add_theme_constant_override("separation", 5)
+        row.add_child(stack)
+        var heading = _row(stack)
+        var name_label = _label(heading, str(item[1]), 15, INK)
+        name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        var toggle = CheckButton.new()
+        toggle.name = "ReminderToggle_" + key
+        toggle.button_pressed = bool(record["enabled"])
+        toggle.custom_minimum_size.y = 38
+        heading.add_child(toggle)
+        var options = _row(stack)
+        options.visible = toggle.button_pressed
+        var time_field = _text_input(options, "ЧЧ:ММ", str(record["time"]))
+        time_field.name = "ReminderTime_" + key
+        time_field.max_length = 5
+        time_field.custom_minimum_size.x = 85
+        var weekday = _choice(options, Reminders.DAYS)
+        weekday.name = "ReminderDay_" + key
+        weekday.select(int(record["day"]))
+        toggle.toggled.connect(func(enabled: bool): options.visible = enabled)
+        controls[key] = {"toggle":toggle,"time":time_field,"day":weekday}
+    var save = _button(card, "Сохранить напоминания", func():
+        var updated: Dictionary = {}
+        for key in controls:
+            var field: Dictionary = controls[key]
+            var time: String = field["time"].text.strip_edges()
+            if not Reminders.valid_time(time):
+                _message("Укажи время в формате ЧЧ:ММ, например 08:30.")
+                return
+            updated[key] = {"enabled":field["toggle"].button_pressed,"time":time,"day":field["day"].selected}
+        if not store.set_reminders(updated):
+            _message("Не удалось сохранить расписание.")
+            return
+        var synced: bool = _sync_reminders()
+        _hide_keyboard_and_focus()
+        _render()
+        _notify_saved("Расписание сохранено")
+        if reminder_plugin != null and not synced:
+            _message("Android не подтвердил расписание. Повтори сохранение.")
+        elif reminder_plugin != null and Reminders.enabled_count(updated) > 0 and not reminder_plugin.notificationsAllowed():
+            _message("Чтобы получать напоминания, разреши уведомления Android.")
+    )
+    save.name = "ReminderSave"
+
+
 func _show_settings() -> void:
     if settings_page == "foods":
         var nav = _card("Мои продукты")
@@ -6717,6 +6796,7 @@ func _show_settings() -> void:
             portion_fields[i].value = float(StoreScript.DEFAULT_MEAL_SHARES[i])
     , true)
 
+    _show_reminder_settings()
     var appearance = _settings_section("Темы и оформление", "appearance",
         AppearanceScript.name_for(current_theme) + " · " +
         ("узоры включены" if PATTERNS else "без узоров"))
@@ -6957,6 +7037,7 @@ func _confirm_restore_json(raw: String, source: String) -> void:
     add_child(confirmation)
     confirmation.confirmed.connect(func():
         if store.import_json(raw):
+            _sync_reminders()
             date = Time.get_date_string_from_system()
             month_shown = date.substr(0, 7)
             _render()

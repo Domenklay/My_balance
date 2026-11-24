@@ -36,6 +36,11 @@ shutil.copy2(source, dest)
 cloud_dest = app_root / "src/main/java/com/domenklay/mybalance/cloud/MyBalanceGoogleDrive.java"
 cloud_dest.parent.mkdir(parents=True, exist_ok=True)
 shutil.copy2(cloud_source, cloud_dest)
+reminder_src = source.parent.parent / "reminders"
+reminder_dest = dest.parent.parent / "reminders"
+reminder_dest.mkdir(parents=True, exist_ok=True)
+for java_file in ("MyBalanceReminders.java", "ReminderReceiver.java"):
+    shutil.copy2(reminder_src / java_file, reminder_dest / java_file)
 
 gradle = app_build.read_text(encoding="utf-8")
 scanner_dep = "implementation 'com.google.android.gms:play-services-code-scanner:16.1.0'"
@@ -70,6 +75,30 @@ if "org.godotengine.plugin.v2.MyBalanceGoogleDrive" not in manifest_xml or (
         manifest_xml = manifest_xml.replace("<application",
             '<uses-permission android:name="android.permission.INTERNET" />\n    <application', 1)
     manifest.write_text(manifest_xml, encoding="utf-8")
+
+# Independently inject the reminder plugin and system receiver.
+manifest_xml = manifest.read_text(encoding="utf-8")
+if "org.godotengine.plugin.v2.MyBalanceReminders" not in manifest_xml:
+    app_tag = re.search(r"<application\b[^>]*>", manifest_xml, re.DOTALL)
+    if not app_tag:
+        raise SystemExit("Missing application tag for reminder plugin")
+    reminder_nodes = '''
+        <meta-data android:name="org.godotengine.plugin.v2.MyBalanceReminders" android:value="com.domenklay.mybalance.reminders.MyBalanceReminders" />
+        <receiver android:name="com.domenklay.mybalance.reminders.ReminderReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+'''
+    manifest_xml = manifest_xml[:app_tag.end()] + reminder_nodes + manifest_xml[app_tag.end():]
+for permission in ("POST_NOTIFICATIONS", "RECEIVE_BOOT_COMPLETED"):
+    name = "android.permission." + permission
+    if name not in manifest_xml:
+        manifest_xml = manifest_xml.replace("<application", '<uses-permission android:name="' + name + '" />\n    <application', 1)
+manifest.write_text(manifest_xml, encoding="utf-8")
 
 print(f"PATCH OK: Android Gradle app={app_root}")
 print(f"PATCH OK: native Java plugin={dest}")
