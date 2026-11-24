@@ -5147,7 +5147,6 @@ func _show_activity() -> void:
         adjust.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
         adjust.custom_minimum_size = Vector2(62, 44)
     var save_steps = _button(overview, "Сохранить шаги", func():
-        steps_input.apply()
         if store.set_day_steps(date, roundi(steps_input.value)):
             _render()
             _notify_saved("Шаги сохранены")
