@@ -68,9 +68,8 @@ func _run() -> void:
     app._refresh_appearance()
     app._render()
     await process_frame
-    var landscape = app.find_child("BotanicalActivityLandscape", true, false)
-    if landscape == null or landscape.kind != "hills" or landscape.opacity > 0.15:
-        _fail("subtle botanical landscape missing")
+    if app.find_child("DailyActivity", true, false) != null:
+        _fail("duplicate movement card remains")
         return
     (app.find_child("MealHeader_1", true, false) as Button).pressed.emit()
     await process_frame

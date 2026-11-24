@@ -53,9 +53,9 @@ func _run() -> void:
         var water = app.find_child("DayWaterCard", true, false)
         var snack = app.find_child("DailyMeal_3", true, false)
         var activity = app.find_child("DailyActivity", true, false)
-        if water == null or snack == null or activity == null or water.get_parent() != app.body or \
-                water.get_index() != snack.get_index() + 1 or activity.get_index() != water.get_index() + 1:
-            _fail("water should follow snack and precede movement: " + id)
+        if water == null or snack == null or activity != null or water.get_parent() != app.body or \
+                water.get_index() != snack.get_index() + 1:
+            _fail("water should follow snack without duplicate movement: " + id)
             return
         if app.find_child("WaterQuickAdd_250", true, false) == null or app.store.day_calories(app.date) != total:
             _fail("day actions or totals lost")

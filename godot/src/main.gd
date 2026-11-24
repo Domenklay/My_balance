@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.71"
+const APP_VERSION = "0.7.71.1"
 const ReadyRecipes = preload("res://src/ready_recipes.gd")
 const CommunityClient = preload("res://src/community_client.gd")
 const InterfaceLanguage = preload("res://src/interface_language.gd")
@@ -4176,15 +4176,6 @@ func _show_day() -> void:
         macro_edit.add_theme_color_override(state, WHITE)
     macro_edit.pressed.connect(_show_macro_goal_editor)
     macro_footer.add_child(macro_edit)
-    # Show movement beside the journal without altering its calorie target.
-    var movement: Dictionary = store.day_activity_summary(date)
-    if int(movement["steps"]) > 0 or int(movement["count"]) > 0:
-        var hint = _label(hero, "Движение: " + str(movement["steps"]) +
-            " шагов · " + str(movement["minutes"]) + " мин · ≈" +
-            str(movement["estimated_kcal"]) + " ккал (не вычитаются)", 11, HERO_MUTED)
-        hint.name = "DayActivitySummary"
-        hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-
     var planner_shortcut = _card("", "tint")
     _compact_card(planner_shortcut, 8, 4)
     planner_shortcut.get_parent().name = "DayPlannerShortcut"
@@ -4458,30 +4449,8 @@ func _show_day() -> void:
                 )
             , true)
 
-    # Hydration follows all four meal cards, before movement and progress.
+    # Hydration follows all four meal cards. Movement is tracked only in Sport.
     _show_water_card()
-
-    var activity = _card("Движение сегодня", "activity")
-    activity.get_parent().name = "DailyActivity"
-    _compact_card(activity, 11, 5)
-    var walking = 0
-    var exercise = 0
-    for a in store.day_activities(date):
-        if str(a.get("type", "")) == "walk":
-            walking += int(a.get("minutes", 0))
-        else:
-            exercise += int(a.get("minutes", 0))
-    var activity_caption = _label(activity, "Прогулки: " + str(walking) +
-        " мин  ·  Тренировки: " + str(exercise) + " мин", 13, ACTIVITY_TEXT)
-    activity_caption.name = "DailyActivitySummary"
-    var shortcuts = _row(activity)
-    shortcuts.add_theme_constant_override("separation", 6)
-    for quick_link in [
-        _button(shortcuts, "+ Спорт", func(): _navigate_to_tab("activity"), true),
-        _button(shortcuts, "+ Вес", func(): _navigate_to_tab("weight"), true)
-    ]:
-        quick_link.custom_minimum_size.y = 39
-        quick_link.add_theme_font_size_override("font_size", 13)
 
     # Both 0.7.29 preferences stay independently saved, but the diary only
     # renders one compact graph at a time to avoid another long scroll.

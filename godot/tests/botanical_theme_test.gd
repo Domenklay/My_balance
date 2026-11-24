@@ -70,15 +70,8 @@ func _run() -> void:
         if meal.size.y > 113:
             _fail("botanical meal card is too tall for compact home: " + str(i) + " " + str(meal.size.y))
             return
-    var activity = app.body.get_node_or_null("DailyActivity") as PanelContainer
-    if activity == null or activity.get_theme_stylebox("panel").bg_color != app.ACTIVITY_BG:
-        _fail("activity panel not themed")
-        return
-    if not _has_text(activity, "Прогулки:"):
-        _fail("activity information obscured by art")
-        return
-    if activity.find_child("BotanicalActivityLandscape", true, false) == null:
-        _fail("mountain scene not shown behind botanical activity card")
+    if app.body.get_node_or_null("DailyActivity") != null or app.find_child("DayActivitySummary", true, false) != null:
+        _fail("movement should only appear in Sport")
         return
     var add = app.find_child("MealQuickAdd_1", true, false) as Button
     add.pressed.emit()

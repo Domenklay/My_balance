@@ -44,22 +44,18 @@ func _run() -> void:
     var movement = app.body.get_node_or_null("DailyActivity") as PanelContainer
     var note_panel = app.body.get_node_or_null("DailyNote") as PanelContainer
     var editor = app.find_child("EditDailyCalorieGoal", true, false) as Button
-    if date_bar == null or movement == null or note_panel == null or editor == null:
+    if date_bar == null or movement != null or note_panel == null or editor == null:
         _fail("one of the compact day controls is absent")
         return
-    if date_bar.size.y > 67 or movement.size.y > 142 or note_panel.size.y > 82:
+    if date_bar.size.y > 67 or note_panel.size.y > 82:
         _fail("dashboard cards are not compact: date=" + str(date_bar.size.y) +
-            " movement=" + str(movement.size.y) + " note=" + str(note_panel.size.y))
+            " note=" + str(note_panel.size.y))
         return
     if editor.text != "Норма" or editor.size.y > 48:
         _fail("calorie goal editor is not a compact and readable button")
         return
-    if not _find_label(movement, "Прогулки: 0 мин") or \
-            not _find_label(movement, "Тренировки: 0 мин"):
-        _fail("activity totals disappeared")
-        return
-    if movement.find_child("BotanicalActivityLandscape", true, false) == null:
-        _fail("botanical mountains should remain")
+    if app.find_child("DayActivitySummary", true, false) != null:
+        _fail("duplicate movement hint remains")
         return
     if _button_named(note_panel, "▾ Открыть заметку") == null:
         _fail("collapsed note opener is missing")
@@ -115,19 +111,11 @@ func _run() -> void:
     app.tab = "day"
     app._render()
     await process_frame
-    _button_named(app.body.get_node("DailyActivity"), "+ Спорт").pressed.emit()
+    app.tab_buttons["activity"].pressed.emit()
     await process_frame
-    if app.tab != "activity":
-        _fail("sport quick action did not navigate")
+    if app.tab != "activity" or app.find_child("ActivityOverview", true, false) == null:
+        _fail("sport navigation or movement overview missing")
         return
-    app.tab = "day"
-    app._render()
-    await process_frame
-    _button_named(app.body.get_node("DailyActivity"), "+ Вес").pressed.emit()
-    await process_frame
-    if app.tab != "weight":
-        _fail("weight quick action did not navigate")
-        return
-    print("PASS DAY DASHBOARD POLISH: small date/activity/note, calorie goal, note saving and sport/weight navigation")
+    print("PASS DAY DASHBOARD POLISH: compact day without duplicate movement, note, calorie goal and Sport navigation")
     app.queue_free()
     quit(0)

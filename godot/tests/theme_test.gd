@@ -60,12 +60,11 @@ func _run() -> void:
             _fail("daily hero missing themed card: " + id)
             return
         var overview: PanelContainer = app.body.get_child(0) as PanelContainer
-        var activity: PanelContainer = app.body.get_node_or_null("DailyActivity") as PanelContainer
         if overview == null or overview.get_theme_stylebox("panel").bg_color != Color(str(palette["overview"])):
             _fail("day overview section color not applied: " + id)
             return
-        if activity == null or activity.get_theme_stylebox("panel").bg_color != Color(str(palette["activity"])):
-            _fail("activity section color not applied: " + id)
+        if app.body.get_node_or_null("DailyActivity") != null or app.ACTIVITY_BG != Color(str(palette["activity"])):
+            _fail("duplicate movement card or activity color token changed: " + id)
             return
         if str(palette["hero"]) == str(palette["activity"]) or str(palette["hero"]) == str(palette["overview"]):
             _fail("multi-colored cards do not have distinct backgrounds: " + id)

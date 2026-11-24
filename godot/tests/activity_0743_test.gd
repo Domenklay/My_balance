@@ -117,8 +117,8 @@ func _run() -> void:
     app.tab = "day"
     app._render()
     await process_frame
-    if app.find_child("DayActivitySummary", true, false) == null or             app.store.day_calories(date) != 0.0:
-        _fail("day integration missing or calories were inflated")
+    if app.find_child("DayActivitySummary", true, false) != null or app.find_child("DailyActivity", true, false) != null or app.store.day_calories(date) != 0.0 or app.store.day_steps(date) != 4200 or app.store.day_activities(date).size() != 1:
+        _fail("duplicate movement or changed saved data/calories")
         return
     app.queue_free()
     print("PASS ACTIVITY 0.7.43: steps, editing, MET estimate, weekly totals, food independence, legacy import, rollback and UI")

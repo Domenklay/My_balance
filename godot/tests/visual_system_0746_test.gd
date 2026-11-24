@@ -30,8 +30,8 @@ func _run() -> void:
             _fail("navigation controls missing: " + id)
             return
         var hero = app.body.get_child(1) as PanelContainer
-        var motion = app.body.get_node_or_null("DailyActivity") as PanelContainer
-        if hero == null or motion == null:
+        var motion = app.body.get_node_or_null("DayDateNavigation") as PanelContainer
+        if hero == null or motion == null or app.body.get_node_or_null("DailyActivity") != null:
             _fail("daily summary cards disappeared: " + id)
             return
         var hero_style: StyleBoxFlat = hero.get_theme_stylebox("panel") as StyleBoxFlat
@@ -41,7 +41,7 @@ func _run() -> void:
             _fail("main kcal card is not visually distinguished: " + id)
             return
         if id not in ["dark", "botanical"] and motion_style.bg_color.get_luminance() < 0.5:
-            _fail("movement card competes with dark calorie hero: " + id)
+            _fail("date card competes with dark calorie hero: " + id)
             return
         var energy = app.find_child("DailyEnergyValue", true, false) as Label
         if energy == null or energy.get_theme_font_size("font_size") < 22:
