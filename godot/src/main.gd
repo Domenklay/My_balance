@@ -37,7 +37,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.49"
+const APP_VERSION = "0.7.50"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -111,6 +111,8 @@ var weight_history_expanded: bool = false
 var body_history_expanded: bool = false
 var water_details_expanded: bool = false
 var water_history_expanded: bool = false
+var planner_day: String = ""
+var shopping_expanded: bool = false
 var stats_period: String = "week"
 var stats_anchor: String = ""
 var month_shown: String = ""
@@ -932,6 +934,7 @@ func _update_tabs() -> void:
         var button: Button = tab_buttons[key]
         var active = key == tab or (key == "profile" and tab == "settings") or \
             (key == "search" and tab == "recipes") or \
+            (key == "day" and tab == "planner") or \
             (key == "progress" and tab in ["weight", "stats"])
         var style = StyleBoxFlat.new()
         style.bg_color = NAV_ACTIVE if active else CARD_BG
@@ -1036,6 +1039,7 @@ func _render(reset_position: bool = false) -> void:
         child.queue_free()
     match tab:
         "day": _show_day()
+        "planner": _show_week_planner()
         "onboarding": _show_onboarding()
         "search": _show_food_search()
         "recipes": _show_recipes()
@@ -2493,6 +2497,11 @@ func _show_food_search() -> void:
     , true)
     my_foods_link.name = "ProductsOpenMyFoods"
     my_foods_link.custom_minimum_size.y = 40
+    if not _meal_entry_locked:
+        var planner_link = _button(intro, "▦ План питания и покупки",
+            func(): _open_week_planner(), true)
+        planner_link.name = "ProductsOpenPlanner"
+        planner_link.custom_minimum_size.y = 42
     var catalog = _card("Найти и добавить продукт")
     _compact_card(catalog, 10, 7)
     _food_form(catalog)
@@ -2757,6 +2766,14 @@ func _show_day() -> void:
             undo.add_theme_font_size_override("font_size", 12)
 
     _show_water_card()
+
+    var planner_shortcut = _card("", "tint")
+    _compact_card(planner_shortcut, 8, 4)
+    planner_shortcut.get_parent().name = "DayPlannerShortcut"
+    var plan_shortcut = _button(planner_shortcut, "▦ План недели и покупки",
+        func(): _open_week_planner(), true)
+    plan_shortcut.name = "DayOpenPlanner"
+    plan_shortcut.custom_minimum_size.y = 40
 
     # Compact sections are always present. Only the selected meal unfolds.
     # Expansion state is in-memory, keyed by date: diary records are untouched.

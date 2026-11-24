@@ -14,6 +14,7 @@ const OnboardingMath = preload("res://src/onboarding_math.gd")
 const ActivityMath = preload("res://src/activity_math.gd")
 const BodyMeasurements = preload("res://src/body_measurements.gd")
 const WaterMath = preload("res://src/water_tracker.gd")
+const MealPlanner = preload("res://src/meal_planner.gd")
 
 const MEAL_NAMES = ["Завтрак", "Обед", "Ужин", "Перекус"]
 const DEFAULT_MEAL_SHARES = [25, 35, 30, 10]
@@ -137,7 +138,7 @@ func default_data() -> Dictionary:
             "meal_shares": DEFAULT_MEAL_SHARES.duplicate(), "home_widgets": DEFAULT_HOME_WIDGETS.duplicate(), "water_goal_ml": DEFAULT_WATER_GOAL_ML, "onboarding_complete": false,
             "personal": {}},
         "foods": [], "entries": [], "activities": [], "steps": {}, "weights": [], "body_measurements": [], "water_entries": [], "notes": {}, "favorites": [],
-        "recipes": [], "meal_templates": [], "day_copy_undo": {}, "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
+        "recipes": [], "meal_templates": [], "planned_meals": [], "shopping_checked": {}, "day_copy_undo": {}, "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
             "photo": "", "frame": "plain"}
     }
 
@@ -497,6 +498,29 @@ func import_json(raw: String, persist: bool = true) -> bool:
         water_daily_totals[water_day] = int(water_daily_totals.get(water_day, 0)) + int(water["ml"])
         if int(water_daily_totals[water_day]) > WaterMath.MAX_DAY_ML:
             return false
+    # v0.7.50 weekly plans are optional in older backups, and entirely
+    # independent of foods actually consumed. Validate before replacing diary.
+    if not obj.has("planned_meals"):
+        obj["planned_meals"] = []
+    if not (obj["planned_meals"] is Array) or obj["planned_meals"].size() > MealPlanner.MAX_ITEMS:
+        return false
+    var planned_ids: Dictionary = {}
+    var planned_day_counts: Dictionary = {}
+    for planned in obj["planned_meals"]:
+        if not MealPlanner.valid_item(planned):
+            return false
+        var plan_id: String = str(planned["id"])
+        if planned_ids.has(plan_id):
+            return false
+        planned_ids[plan_id] = true
+        var planned_date: String = str(planned["date"])
+        planned_day_counts[planned_date] = int(planned_day_counts.get(planned_date, 0)) + 1
+        if int(planned_day_counts[planned_date]) > MealPlanner.MAX_DAY_ITEMS:
+            return false
+    if not obj.has("shopping_checked"):
+        obj["shopping_checked"] = {}
+    if not MealPlanner.valid_checked_state(obj["shopping_checked"]):
+        return false
     # Favorites were introduced in 0.5.3; older exports have no such field.
     if not obj.has("recipes"):
         obj["recipes"] = []
@@ -1697,6 +1721,137 @@ func delete_water(entry_id: String) -> bool:
     if save():
         return true
     data["water_entries"] = original
+    return false
+
+
+func planned_preview(kind: String, source_id: String, day: String,
+        meal: String, grams: float) -> Dictionary:
+    if kind == "recipe":
+        var recipe: Dictionary = recipe_by_id(source_id)
+        return MealPlanner.recipe_snapshot(recipe, day, meal, grams) if
+            not recipe.is_empty() else {}
+    if kind == "food":
+        var food: Dictionary = food_by_id(source_id)
+        return MealPlanner.food_snapshot(food, day, meal, grams) if
+            not food.is_empty() else {}
+    return {}
+
+
+func add_planned_meal(kind: String, source_id: String, day: String,
+        meal: String, grams: float) -> bool:
+    if data["planned_meals"].size() >= MealPlanner.MAX_ITEMS or
+            planned_meals_on(day).size() >= MealPlanner.MAX_DAY_ITEMS:
+        return false
+    var planned: Dictionary = planned_preview(kind, source_id, day, meal, grams)
+    if planned.is_empty():
+        return false
+    planned["id"] = "plan_" + str(Time.get_ticks_usec()) + "_" +
+        str(data["planned_meals"].size())
+    data["planned_meals"].append(planned)
+    if save():
+        return true
+    data["planned_meals"].erase(planned)
+    return false
+
+
+func planned_meals_on(day: String) -> Array:
+    return MealPlanner.items_for_day(data.get("planned_meals", []), day)
+
+
+func planned_day_kcal(day: String) -> float:
+    var total: float = 0.0
+    for planned in planned_meals_on(day):
+        total += MealPlanner.item_kcal(planned)
+    return total
+
+
+func delete_planned_meal(planned_id: String) -> bool:
+    var original: Array = data["planned_meals"].duplicate(true)
+    var kept: Array = original.filter(func(e):
+        return str(e.get("id", "")) != planned_id)
+    if original.size() == kept.size():
+        return false
+    data["planned_meals"] = kept
+    if save():
+        return true
+    data["planned_meals"] = original
+    return false
+
+
+func planned_day_pending(day: String) -> int:
+    var existing: Dictionary = {}
+    for entry in day_entries(day):
+        if not str(entry.get("plan_id", "")).is_empty():
+            existing[str(entry["plan_id"])] = true
+    var pending: int = 0
+    for planned in planned_meals_on(day):
+        if not existing.has(str(planned["id"])):
+            pending += 1
+    return pending
+
+
+func apply_planned_day(day: String) -> int:
+    if not valid_diary_date(day):
+        return 0
+    var known: Dictionary = {}
+    for entry in day_entries(day):
+        if not str(entry.get("plan_id", "")).is_empty():
+            known[str(entry["plan_id"])] = true
+    var pending: Array = []
+    for planned in planned_meals_on(day):
+        if known.has(str(planned["id"])):
+            continue
+        var entry: Dictionary = {
+            "id": "plan_entry_" + str(Time.get_ticks_usec()) + "_" +
+                str(data["entries"].size() + pending.size()),
+            "plan_id": str(planned["id"]), "date": day,
+            "meal": str(planned["meal"]), "food": ("recipe:" if
+                str(planned["source"]) == "recipe" else "") + str(planned["source_id"]),
+            "grams": float(planned["grams"]), "unit": str(planned["unit"]),
+            "nutrition": planned["nutrition"].duplicate(true)
+        }
+        if str(planned["source"]) == "recipe":
+            entry["recipe_id"] = str(planned["source_id"])
+        pending.append(entry)
+    if pending.is_empty() or data["entries"].size() + pending.size() > 50000:
+        return 0
+    data["entries"].append_array(pending)
+    if save():
+        return pending.size()
+    for entry in pending:
+        data["entries"].erase(entry)
+    return 0
+
+
+func week_planned_shopping(day: String) -> Array:
+    var week: Array = week_dates(day)
+    var start: String = str(week[0])
+    var bought: Array = data.get("shopping_checked", {}).get(start, [])
+    return MealPlanner.shopping_for_week(data.get("planned_meals", []), week, bought)
+
+
+func toggle_shopping_item(day: String, shopping_key: String) -> bool:
+    if not valid_diary_date(day):
+        return false
+    var items: Array = week_planned_shopping(day)
+    var found = false
+    for item in items:
+        if str(item["key"]) == shopping_key:
+            found = true
+            break
+    if not found:
+        return false
+    var previous: Dictionary = data["shopping_checked"].duplicate(true)
+    var monday: String = str(week_dates(day)[0])
+    var checked: Array = data["shopping_checked"].get(monday, []).duplicate()
+    if shopping_key in checked:
+        checked.erase(shopping_key)
+    else:
+        checked.append(shopping_key)
+    data["shopping_checked"][monday] = checked
+    if save():
+        return true
+    data["shopping_checked"] = previous
     return false
 
 
