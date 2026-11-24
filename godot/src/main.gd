@@ -2818,7 +2818,7 @@ func _show_ready_recipes() -> void:
                 continue
             if not RecipeMath.matches_calorie_filter(float(item["data"]["total_kcal"]) / float(recipe["servings"]), ready_calorie):
                 continue
-            if not str(item["terms"]).contains(needle):
+            if not needle.is_empty() and not str(item["terms"]).contains(needle):
                 continue
             filtered.append(item)
         var shown: int = mini(ready_visible_limit, filtered.size())
