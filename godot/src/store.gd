@@ -1728,12 +1728,14 @@ func planned_preview(kind: String, source_id: String, day: String,
         meal: String, grams: float) -> Dictionary:
     if kind == "recipe":
         var recipe: Dictionary = recipe_by_id(source_id)
-        return MealPlanner.recipe_snapshot(recipe, day, meal, grams) if
-            not recipe.is_empty() else {}
+        if recipe.is_empty():
+            return {}
+        return MealPlanner.recipe_snapshot(recipe, day, meal, grams)
     if kind == "food":
         var food: Dictionary = food_by_id(source_id)
-        return MealPlanner.food_snapshot(food, day, meal, grams) if
-            not food.is_empty() else {}
+        if food.is_empty():
+            return {}
+        return MealPlanner.food_snapshot(food, day, meal, grams)
     return {}
 
 

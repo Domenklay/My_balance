@@ -20,6 +20,7 @@ const PatternScript = preload("res://src/theme_pattern.gd")
 const ActivityMath = preload("res://src/activity_math.gd")
 const BodyMeasurements = preload("res://src/body_measurements.gd")
 const BodyMapScript = preload("res://src/body_map.gd")
+const MealPlannerScript = preload("res://src/meal_planner.gd")
 const MEAL_TEXTURES = [
     preload("res://assets/meals/breakfast.svg"),
     preload("res://assets/meals/lunch.svg"),
@@ -2663,6 +2664,291 @@ func _show_water_card() -> void:
                 _render()
         , true)
         toggle.name = "WaterHistoryToggle"
+
+
+func _open_week_planner() -> void:
+    planner_day = date
+    shopping_expanded = false
+    _meal_entry_locked = false
+    _meal_entry_date = ""
+    tab = "planner"
+    _render(true)
+
+
+func _planner_choose_day(chosen: String) -> void:
+    if not StoreScript.valid_diary_date(chosen):
+        return
+    planner_day = chosen
+    _render(true)
+
+
+func _planner_shift_week(weeks: int) -> void:
+    planner_day = store.change_date(planner_day, weeks * 7)
+    _render(true)
+
+
+func _planner_add_sheet(kind: String) -> void:
+    var sources: Array = []
+    if kind == "recipe":
+        sources = store.data.get("recipes", []).duplicate()
+        sources.sort_custom(func(a, b):
+            if bool(a.get("favorite", false)) != bool(b.get("favorite", false)):
+                return bool(a.get("favorite", false))
+            return str(a.get("name", "")).nocasecmp_to(str(b.get("name", ""))) < 0)
+    elif kind == "food":
+        sources = store.all_foods()
+    if sources.is_empty():
+        _message("Сначала создай рецепт или добавь продукт в каталог.")
+        return
+    var title: String = "Запланировать рецепт" if kind == "recipe" else "Запланировать продукт"
+    var detail: String = ("Вес готового блюда в граммах. Список покупок учитывает сырые ингредиенты."
+        if kind == "recipe" else "Порция продукта. Вес и объём считаются в своих единицах.")
+    var sheet = _mobile_sheet(title, detail, "Добавить в план", 555.0)
+    var fields: VBoxContainer = sheet["fields"]
+    _label(fields, "Дата: " + planner_day.substr(8, 2) + "." +
+        planner_day.substr(5, 2) + "." + planner_day.substr(0, 4), 13, TEXT_ACCENT)
+    _label(fields, "Приём пищи", 13, MUTED)
+    var meal_picker = _choice(fields, MealPlannerScript.MEALS)
+    meal_picker.name = "PlannerMeal"
+    _label(fields, "Найти название", 13, MUTED)
+    var search = _text_input(fields, "Поиск рецепта или продукта")
+    search.name = "PlannerSourceSearch"
+    var picker = _choice(fields, [])
+    picker.name = "PlannerSourcePicker"
+    _label(fields, "Количество, г или мл", 13, MUTED)
+    var amount = _number(fields, 200 if kind == "recipe" else 100, 1, 5000, 1)
+    amount.name = "PlannerPortion"
+    var preview = _label(fields, "Выбери продукт или рецепт.", 13, TEXT_ACCENT)
+    preview.name = "PlannerNutritionPreview"
+    var visible_ids: Array = []
+    var refresh_options = func(query: String):
+        visible_ids.clear()
+        picker.clear()
+        var normalized: String = query.strip_edges().to_lower()
+        for item in sources:
+            if not (item is Dictionary):
+                continue
+            var name: String = str(item.get("name", ""))
+            if not normalized.is_empty() and not name.to_lower().contains(normalized):
+                continue
+            var id: String = str(item.get("id", ""))
+            if id.is_empty():
+                continue
+            picker.add_item(name)
+            visible_ids.append(id)
+            if visible_ids.size() >= 30:
+                break
+        if not visible_ids.is_empty():
+            picker.select(0)
+    var update_preview = func():
+        if picker.selected < 0 or picker.selected >= visible_ids.size():
+            preview.text = "Ничего не найдено. Уточни поиск."
+            return
+        var id: String = str(visible_ids[picker.selected])
+        var meal: String = str(MealPlannerScript.MEALS[meal_picker.selected])
+        var planned: Dictionary = store.planned_preview(kind, id,
+            planner_day, meal, amount.value)
+        if planned.is_empty():
+            preview.text = "Не удалось рассчитать блюдо. Проверь сохранённый рецепт."
+            return
+        var nutrition: Dictionary = planned["nutrition"]
+        var factor: float = float(planned["grams"]) / 100.0
+        preview.text = (str(roundi(float(nutrition["kcal"]) * factor)) +
+            " ккал · Б " + str(snappedf(float(nutrition["p"]) * factor, 0.1)) +
+            " · Ж " + str(snappedf(float(nutrition["f"]) * factor, 0.1)) +
+            " · У " + str(snappedf(float(nutrition["c"]) * factor, 0.1)) +
+            " · " + str(planned["grams"]) + " " + str(planned["unit"]))
+    refresh_options.call("")
+    update_preview.call()
+    search.text_changed.connect(func(query: String):
+        refresh_options.call(query)
+        update_preview.call())
+    picker.item_selected.connect(func(_index: int): update_preview.call())
+    meal_picker.item_selected.connect(func(_index: int): update_preview.call())
+    amount.value_changed.connect(func(_amount: float): update_preview.call())
+    var confirm: Button = sheet["confirm"]
+    confirm.name = "PlannerConfirmAdd"
+    confirm.pressed.connect(func():
+        if picker.selected < 0 or picker.selected >= visible_ids.size():
+            _sheet_error(sheet, "Выбери продукт или рецепт из поиска.")
+            return
+        var id: String = str(visible_ids[picker.selected])
+        var meal: String = str(MealPlannerScript.MEALS[meal_picker.selected])
+        if store.add_planned_meal(kind, id, planner_day, meal, amount.value):
+            sheet["root"].queue_free()
+            _hide_keyboard_and_focus()
+            _render()
+            _notify_saved("Блюдо добавлено в план")
+        else:
+            _sheet_error(sheet, "Не удалось сохранить блюдо. Проверь порцию.")
+    )
+
+
+func _planner_commit_day() -> void:
+    var pending: int = store.planned_day_pending(planner_day)
+    if pending <= 0:
+        _message("Всё запланированное уже перенесено в дневник.")
+        return
+    _confirm_action("Перенести план в дневник",
+        "Добавить " + str(pending) + " блюд за " + planner_day +
+        "? Ранее перенесённые блюда не будут добавлены повторно.",
+        func():
+            var count: int = store.apply_planned_day(planner_day)
+            if count <= 0:
+                _message("Не удалось перенести план в дневник.")
+                return
+            _render()
+            _notify_saved("В дневник добавлено " + str(count) + " блюд")
+    , "Добавить " + str(pending))
+
+
+func _show_week_planner() -> void:
+    if not StoreScript.valid_diary_date(planner_day):
+        planner_day = date
+    var week: Array = store.week_dates(planner_day)
+    var first: String = str(week[0])
+    var last: String = str(week[6])
+    var header = _card("План питания на неделю", "hero")
+    _compact_card(header, 12, 8)
+    _label(header, "Сначала запланируй блюда, затем перенеси выбранный день в дневник.", 12, HERO_MUTED)
+    var navigation = _row(header)
+    var previous = _button(navigation, "‹", func(): _planner_shift_week(-1), true)
+    previous.name = "PlannerPreviousWeek"
+    var week_label = _nowrap(navigation,
+        first.substr(8, 2) + "." + first.substr(5, 2) + " — " +
+        last.substr(8, 2) + "." + last.substr(5, 2), 14, WHITE)
+    week_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    week_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    var following = _button(navigation, "›", func(): _planner_shift_week(1), true)
+    following.name = "PlannerNextWeek"
+    var shortcuts = _row(header)
+    var today = _button(shortcuts, "Текущая неделя", func():
+        planner_day = Time.get_date_string_from_system()
+        _render(true)
+    , true)
+    today.name = "PlannerCurrentWeek"
+    var back = _button(shortcuts, "← Дневник", func(): _navigate_to_tab("day"), true)
+    back.name = "PlannerBackToDay"
+
+    var grid_card = _card("Выбери день")
+    _compact_card(grid_card, 9, 7)
+    var dates = _row(grid_card)
+    dates.name = "PlannerWeekDates"
+    dates.add_theme_constant_override("separation", 2)
+    var weekdays = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"]
+    for i in range(7):
+        var day: String = str(week[i])
+        var count: int = store.planned_meals_on(day).size()
+        var label: String = str(weekdays[i]) + "\n" + day.substr(8, 2) + (
+            " •" if count > 0 else "")
+        var selected: bool = day == planner_day
+        var choose = _button(dates, label, func(): _planner_choose_day(day), not selected)
+        choose.name = "PlannerDay_" + str(i)
+        choose.custom_minimum_size = Vector2(0, 52)
+        choose.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        choose.add_theme_font_size_override("font_size", 11)
+        choose.clip_text = true
+    var total: float = store.planned_day_kcal(planner_day)
+    var day_card = _card("Блюда на " + planner_day.substr(8, 2) + "." +
+        planner_day.substr(5, 2))
+    _compact_card(day_card, 11, 8)
+    var daily_total = _label(day_card, str(roundi(total)) + " ккал в плане · " +
+        str(roundi(float(store.data["settings"]["kcal"]))) +
+        " ккал дневной ориентир", 14, TEXT_ACCENT)
+    daily_total.name = "PlannerDayCalories"
+    _label(day_card, "Калории плана не учитываются в дневнике до переноса.", 11, MUTED)
+    var add_row = _row(day_card)
+    var recipe_button = _button(add_row, "+ Рецепт", func(): _planner_add_sheet("recipe"), true)
+    recipe_button.name = "PlannerAddRecipe"
+    recipe_button.custom_minimum_size.y = 41
+    var food_button = _button(add_row, "+ Продукт", func(): _planner_add_sheet("food"), true)
+    food_button.name = "PlannerAddFood"
+    food_button.custom_minimum_size.y = 41
+    var records: Array = store.planned_meals_on(planner_day)
+    for meal in MealPlannerScript.MEALS:
+        var meal_items: Array = records.filter(func(item):
+            return str(item["meal"]) == str(meal))
+        var meal_box = _soft_list_row(day_card)
+        var meal_col = VBoxContainer.new()
+        meal_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        meal_col.add_theme_constant_override("separation", 5)
+        meal_box.add_child(meal_col)
+        _label(meal_col, str(meal) + " · " + str(meal_items.size()) + " блюд", 13, INK)
+        for item in meal_items:
+            var row = _row(meal_col)
+            var amount: String = str(snappedf(float(item["grams"]), 0.1)) + " " +
+                str(item["unit"])
+            var meal_label = _label(row, str(item["name"]) + " · " + amount +
+                " · " + str(roundi(MealPlannerScript.item_kcal(item))) + " ккал", 12, MUTED)
+            meal_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            var pid: String = str(item["id"])
+            var remove = _button(row, "×", func():
+                _confirm_delete("Убрать блюдо из плана?", func():
+                    if store.delete_planned_meal(pid):
+                        _render()
+                        _notify_saved("Блюдо убрано из плана")
+                    else:
+                        _message("Не удалось изменить план.")
+                )
+            , true)
+            remove.name = "PlannerRemove_" + pid
+    if not records.is_empty():
+        var pending: int = store.planned_day_pending(planner_day)
+        if pending > 0:
+            var transfer = _button(day_card,
+                "Перенести в дневник (" + str(pending) + ")", func():
+                    _planner_commit_day())
+            transfer.name = "PlannerApplyDay"
+            transfer.custom_minimum_size.y = 43
+        else:
+            _label(day_card, "Все эти блюда уже записаны в дневник.", 12, TEXT_ACCENT)
+        var open_diary = _button(day_card, "Открыть этот день", func():
+            date = planner_day
+            _navigate_to_tab("day")
+        , true)
+        open_diary.name = "PlannerOpenDiary"
+
+    var shopping = _card("Покупки на всю неделю")
+    _compact_card(shopping, 11, 7)
+    var shopping_items: Array = store.week_planned_shopping(planner_day)
+    var purchased: int = 0
+    for item in shopping_items:
+        if bool(item["bought"]):
+            purchased += 1
+    var count = _label(shopping, "Отмечено " + str(purchased) + " из " +
+        str(shopping_items.size()) + " продуктов", 13, TEXT_ACCENT)
+    count.name = "PlannerShoppingCount"
+    _label(shopping, "Одинаковые ингредиенты объединены. Граммы и миллилитры считаются отдельно.", 11, MUTED)
+    if shopping_items.is_empty():
+        _label(shopping, "Добавь блюда — ингредиенты появятся здесь.", 12, MUTED)
+    var max_visible: int = shopping_items.size() if shopping_expanded else mini(shopping_items.size(), 14)
+    for index in range(max_visible):
+        var item: Dictionary = shopping_items[index]
+        var shopping_row = _soft_list_row(shopping)
+        var item_key: String = str(item["key"])
+        var bought: bool = bool(item["bought"])
+        var check = _button(shopping_row, "☑" if bought else "☐", func():
+            if store.toggle_shopping_item(planner_day, item_key):
+                _render()
+            else:
+                _message("Не удалось сохранить список покупок.")
+        , true)
+        check.name = "PlannerBuy_" + str(index)
+        check.tooltip_text = "Отметить купленным" if not bought else "Вернуть в список"
+        check.custom_minimum_size = Vector2(40, 40)
+        check.size_flags_horizontal = Control.SIZE_SHRINK_START
+        var caption = _label(shopping_row, str(item["name"]) + " · " +
+            str(snappedf(float(item["grams"]), 0.1)) + " " + str(item["unit"]), 13,
+            MUTED if bought else INK)
+        caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    if shopping_items.size() > 14:
+        var expand = _button(shopping,
+            "Свернуть список" if shopping_expanded else
+            "Показать все (" + str(shopping_items.size()) + ")", func():
+                shopping_expanded = not shopping_expanded
+                _render()
+        , true)
+        expand.name = "PlannerShoppingMore"
 
 
 func _show_day() -> void:
