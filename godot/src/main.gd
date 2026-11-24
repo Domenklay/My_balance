@@ -2936,7 +2936,7 @@ func _show_week_planner() -> void:
         check.name = "PlannerBuy_" + str(index)
         check.tooltip_text = "Отметить купленным" if not bought else "Вернуть в список"
         check.custom_minimum_size = Vector2(40, 40)
-        check.size_flags_horizontal = Control.SIZE_SHRINK_START
+        check.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
         var caption = _label(shopping_row, str(item["name"]) + " · " + \
             str(snappedf(float(item["grams"]), 0.1)) + " " + str(item["unit"]), 13,
             MUTED if bought else INK)
