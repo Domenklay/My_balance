@@ -6,6 +6,7 @@ on:
     paths:
       - "godot/**"
       - "android_scanner/**"
+      - "tools/bundle_recipe_photos.py"
       - ".github/workflows/godot-android.yml"
   workflow_dispatch:
 
@@ -91,6 +92,8 @@ jobs:
           touch godot/android/build/.gdignore
           python3 android_scanner/patch_template.py
           find godot/android/build -maxdepth 3 -name build.gradle -o -name AndroidManifest.xml
+      - name: Bundle offline recipe photographs
+        run: python3 tools/bundle_recipe_photos.py
       - name: Validate project scripts and import resources
         shell: bash
         run: |

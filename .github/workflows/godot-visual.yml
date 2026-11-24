@@ -5,6 +5,7 @@ on:
     paths:
       - "godot/tests/visual_snapshot.gd"
       - "godot/src/**"
+      - "tools/bundle_recipe_photos.py"
       - "godot/assets/**"
       - "godot/icon.svg"
       - "godot/project.godot"
@@ -30,6 +31,8 @@ jobs:
           unzip -q /tmp/godot.zip -d /tmp/bin
           mv /tmp/bin/Godot_v4.6.3-stable_linux.x86_64 /tmp/godot
           chmod +x /tmp/godot
+      - name: Bundle offline recipe photographs
+        run: python3 tools/bundle_recipe_photos.py
       - name: Capture actual Godot screens
         shell: bash
         run: |

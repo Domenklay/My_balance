@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.68"
+const APP_VERSION = "0.7.69"
 const ReadyRecipes = preload("res://src/ready_recipes.gd")
 const CommunityClient = preload("res://src/community_client.gd")
 const InterfaceLanguage = preload("res://src/interface_language.gd")
@@ -2711,6 +2711,37 @@ func _save_ready_recipe(recipe: Dictionary) -> String:
     return store.save_recipe(copy)
 
 
+func _ready_recipe_art(parent: Node, recipe: Dictionary, height: float = 104.0) -> void:
+    var art = TextureRect.new()
+    art.name = "ReadyRecipeCover"
+    art.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    art.custom_minimum_size = Vector2(0, height)
+    art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+    art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    art.clip_contents = true
+    var path: String = "res://assets/recipe_covers/" + str(recipe["id"]) + ".jpg"
+    if ResourceLoader.exists(path):
+        art.texture = load(path) as Texture2D
+    if art.texture == null:
+        art.texture = NAV_TEXTURES["recipes"]
+        art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+        art.modulate = TEXT_ACCENT
+    parent.add_child(art)
+
+
+func _ready_recipe_photo_credit(recipe: Dictionary) -> Dictionary:
+    var path = "res://data/recipe_photo_credits.json"
+    if not FileAccess.file_exists(path):
+        return {}
+    var data = JSON.parse_string(FileAccess.get_file_as_string(path))
+    if data is Dictionary:
+        var credit = data.get(str(recipe["id"]), {})
+        if credit is Dictionary:
+            return credit
+    return {}
+
+
 func _show_ready_recipes() -> void:
     var intro = _card("Готовые рецепты", "hero")
     _compact_card(intro, 10, 6)
@@ -2749,6 +2780,13 @@ func _show_ready_recipes() -> void:
     )
     var count = _label(filters, "", 12, MUTED)
     _label(filters, "КБЖУ и вес готового блюда — приблизительные. Сохранённую копию можно уточнить.", 12, MUTED)
+    var grid = GridContainer.new()
+    grid.name = "ReadyRecipeGrid"
+    grid.columns = 2 if get_viewport_rect().size.x >= 350 else 1
+    grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    grid.add_theme_constant_override("h_separation", 8)
+    grid.add_theme_constant_override("v_separation", 8)
+    body.add_child(grid)
     var cards: Array = []
     for recipe in ReadyRecipes.all():
         if ready_category > 0 and recipe["category"] != RecipeMath.CATEGORY_IDS[ready_category-1]:
@@ -2757,26 +2795,20 @@ func _show_ready_recipes() -> void:
         var servings: float = float(recipe["servings"])
         if not RecipeMath.matches_calorie_filter(float(data["total_kcal"])/servings,ready_calorie):
             continue
-        var card = _card("")
+        var card = _card("", "plain", grid)
         card.get_parent().name = "ReadyRecipe_" + str(recipe["id"])
-        _compact_card(card, 10, 5)
-        var row = _row(card)
-        _recipe_photo_thumb(row, recipe, 58)
-        var info = VBoxContainer.new()
-        info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        row.add_child(info)
-        _label(info, str(recipe["name"]), 16, INK)
-        _label(info, RecipeMath.CATEGORY_LABELS[RecipeMath.CATEGORY_IDS.find(recipe["category"])], 11, MUTED)
-        _label(info, "≈ " + str(roundi(float(data["total_kcal"])/servings)) + " ккал / порция", 13, TEXT_ACCENT)
-        var macros = _row(card)
-        _catalog_nutrient(macros, "Б",float(data["total_p"])/servings,PROTEIN_BG,MACRO_PROTEIN)
-        _catalog_nutrient(macros, "Ж",float(data["total_f"])/servings,FAT_BG,MACRO_FAT)
-        _catalog_nutrient(macros, "У",float(data["total_c"])/servings,CARBS_BG,MACRO_CARBS)
-        var actions = _row(card)
-        var details = _button(actions, "Рецепт", func(): _ready_recipe_details(recipe), true)
-        details.custom_minimum_size.y = 38
+        _compact_card(card, 8, 5)
+        _ready_recipe_art(card, recipe)
+        var heading = _label(card, str(recipe["name"]), 15, INK)
+        heading.custom_minimum_size.y = 38
+        _label(card, RecipeMath.CATEGORY_LABELS[RecipeMath.CATEGORY_IDS.find(recipe["category"])], 11, MUTED)
+        _label(card, "≈ " + str(roundi(float(data["total_kcal"])/servings)) + " ккал / порция", 13, TEXT_ACCENT)
+        _label(card, "Б " + str(snappedf(float(data["total_p"])/servings, 0.1)) + " · Ж " + str(snappedf(float(data["total_f"])/servings, 0.1)) + " · У " + str(snappedf(float(data["total_c"])/servings, 0.1)), 11, MUTED)
+        var details = _button(card, "Рецепт →", func(): _ready_recipe_details(recipe), true)
+        details.custom_minimum_size.y = 36
+        details.clip_text = true
         var saved = not store.recipe_by_id("saved_" + str(recipe["id"])).is_empty()
-        var save = _button(actions, "В коллекции ✓" if saved else "+ Сохранить", func():
+        var save = _button(card, "В коллекции ✓" if saved else "+ Сохранить", func():
             var id = _save_ready_recipe(recipe)
             if id.is_empty():
                 _message("Не удалось сохранить рецепт.")
@@ -2786,7 +2818,8 @@ func _show_ready_recipes() -> void:
         )
         save.name = "ReadySave_" + str(recipe["id"])
         save.disabled = saved
-        save.custom_minimum_size.y = 38
+        save.custom_minimum_size.y = 36
+        save.clip_text = true
         var quick_add = _button(card, "+ В дневник", func():
             var id = _save_ready_recipe(recipe)
             if id.is_empty():
@@ -2795,7 +2828,8 @@ func _show_ready_recipes() -> void:
             _recipe_portion_sheet(store.recipe_by_id(id))
         , true)
         quick_add.name = "ReadyDiary_" + str(recipe["id"])
-        quick_add.custom_minimum_size.y = 38
+        quick_add.custom_minimum_size.y = 36
+        quick_add.clip_text = true
         var terms: String = str(recipe["name"]).to_lower()
         for ingredient in recipe["ingredients"]:
             terms += " " + str(ingredient["name"]).to_lower()
@@ -2820,8 +2854,15 @@ func _show_ready_recipes() -> void:
 
 
 func _ready_recipe_details(recipe: Dictionary) -> void:
-    var sheet = _mobile_sheet(str(recipe["name"]),"Адаптированный рецепт · расчёт приблизительный","Сохранить в мои рецепты",520.0)
+    var sheet = _mobile_sheet(str(recipe["name"]),"КБЖУ и выход приблизительные","Сохранить в мои рецепты",710.0)
     var fields: VBoxContainer = sheet["fields"]
+    _ready_recipe_art(fields, recipe, 190.0)
+    var credit = _ready_recipe_photo_credit(recipe)
+    if not credit.is_empty():
+        _label(fields, "Пример подачи · фото: " + str(credit.get("author","")) + " · " + str(credit.get("license","")), 11, MUTED)
+        _button(fields, "Автор и источник фотографии", func(): OS.shell_open(str(credit["source"])), true)
+        _button(fields, "Лицензия фотографии", func(): OS.shell_open(str(credit["license_url"])), true)
+    _label(fields,"Ингредиенты",18,INK)
     _label(fields,"Количество порций для приготовления",12,MUTED)
     var portions = _number(fields, float(recipe["servings"]), 1, 100, 1)
     portions.name = "ReadyRecipePortions"
@@ -2849,6 +2890,7 @@ func _ready_recipe_details(recipe: Dictionary) -> void:
         _recipe_portion_sheet(store.recipe_by_id(id))
     )
     add.name = "ReadyRecipeAddToDiary"
+    _label(fields,"Приготовление",18,INK)
     _label(fields,str(recipe["instructions"]),14,INK)
     if recipe.get("original_recipe", false):
         _label(fields,"Рецепт редакции «Мой баланс».",12,MUTED)
