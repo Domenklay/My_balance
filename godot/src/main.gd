@@ -38,7 +38,8 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.64"
+const APP_VERSION = "0.7.65"
+const CommunityClient = preload("res://src/community_client.gd")
 const InterfaceLanguage = preload("res://src/interface_language.gd")
 const Reminders = preload("res://src/reminders.gd")
 const MacroGoals = preload("res://src/macro_goals.gd")
@@ -166,6 +167,16 @@ var recipe_search_text: String = ""
 var recipe_list_query: String = ""
 var recipe_list_filter: String = "all"
 var recipe_grid_view: bool = false
+var community = CommunityClient.new()
+var community_open: bool = false
+var community_mine: bool = false
+var community_items: Array = []
+var community_more: bool = false
+var community_query: String = ""
+var community_category: int = 0
+var community_calorie: int = 0
+var community_sort: int = 0
+var community_status: String = ""
 var recipe_category_filter: int = 0
 var recipe_calorie_filter: int = 0
 var recipe_manual_open: bool = false
@@ -360,6 +371,8 @@ func _activate_botanical_default_once() -> void:
 
 
 func _ready() -> void:
+    add_child(community)
+    community.load_config()
     english_translation = InterfaceLanguage.english()
     TranslationServer.add_translation(english_translation)
     _apply_interface_language()
@@ -2388,12 +2401,249 @@ func _empty_illustration(parent: Node, kind: String, message: String) -> Label:
     return description
 
 
+func _community_result(ok: bool, result: Dictionary, success: String = "") -> void:
+    if ok:
+        community_status = success
+    else:
+        community_status = "Не удалось выполнить запрос. Проверь подключение или ограничения сервера."
+    if tab == "recipes" and community_open and not _meal_entry_locked:
+        _render()
+
+
+func _community_load(append: bool = false) -> void:
+    if community.endpoint.is_empty() or community.busy:
+        return
+    if community_mine and community.token.is_empty():
+        community_items.clear()
+        community_more = false
+        community_status = "Пока нет публикаций с этого устройства."
+        _render()
+        return
+    if not append:
+        community_items.clear()
+    var offset = community_items.size()
+    var path = "/v1/mine" if community_mine else "/v1/recipes"
+    var caps = [0,200,350,500,750,-1]
+    path += "?offset=" + str(offset) + "&max_kcal=" + str(caps[community_calorie]) + "&q=" + community_query.uri_encode()
+    if community_category > 0:
+        path += "&category=" + RecipeMath.CATEGORY_IDS[community_category-1]
+    if community_sort == 1:
+        path += "&sort=rating"
+    community_status = "Загрузка…"
+    community.send(path, HTTPClient.METHOD_GET, {}, func(ok: bool, result: Dictionary):
+        if ok and result.get("items") is Array:
+            community_items.append_array(result["items"])
+            community_more = bool(result.get("more",false))
+        else:
+            community_more = false
+        _community_result(ok, result, "Рецепты загружены")
+    )
+    _render()
+
+
+func _community_publish(recipe: Dictionary) -> void:
+    if community.endpoint.is_empty():
+        _message("Сначала настрой сервер в книге рецептов сообщества.")
+        return
+    var sheet = _mobile_sheet("Публикация рецепта", "Название, состав и способ приготовления будут общедоступны после модерации. Фото, профиль и дневник не отправляются.", "Отправить на проверку", 420.0)
+    var fields: VBoxContainer = sheet["fields"]
+    _label(fields, str(recipe["name"]), 17, INK)
+    var consent = CheckBox.new()
+    consent.text = "Это мой рецепт или у меня есть право его публиковать."
+    fields.add_child(consent)
+    var confirm: Button = sheet["confirm"]
+    confirm.disabled = true
+    consent.toggled.connect(func(value: bool): confirm.disabled = not value)
+    confirm.pressed.connect(func():
+        if not consent.button_pressed or community.busy:
+            return
+        confirm.disabled = true
+        var payload = {"recipe":CommunityClient.public_recipe(recipe),"consent":true}
+        community.ensure_account(func(ok: bool, result: Dictionary):
+            if not ok:
+                if is_instance_valid(sheet["root"]):
+                    _sheet_error(sheet,"Не удалось подключить аккаунт сообщества.")
+                    confirm.disabled = false
+                return
+            community.send("/v1/recipes", HTTPClient.METHOD_POST, payload, func(saved: bool, response: Dictionary):
+                if is_instance_valid(sheet["root"]):
+                    if saved:
+                        sheet["root"].queue_free()
+                        _message("Рецепт отправлен на модерацию. Статус доступен в «Мои публикации».")
+                    else:
+                        _sheet_error(sheet,"Публикация не отправлена.")
+                        confirm.disabled = false
+            )
+        )
+    )
+
+
+func _community_action(id: String, action: String, payload: Dictionary) -> void:
+    if community.busy:
+        return
+    community.ensure_account(func(ok: bool, result: Dictionary):
+        if not ok:
+            _community_result(false,result)
+            return
+        community.send("/v1/recipes/" + id + "/" + action, HTTPClient.METHOD_POST, payload, func(saved: bool, response: Dictionary):
+            _community_result(saved,response,"Действие сохранено")
+            if saved:
+                _message("Спасибо! " + ("Оценка сохранена." if action == "rating" else "Жалоба отправлена модератору."))
+                _community_load()
+        )
+    )
+
+
+func _show_community() -> void:
+    var top = _card("Рецепты сообщества", "hero")
+    _button(top, "← Моя коллекция", func():
+        community_open = false
+        _render(true)
+    , true)
+    _label(top, "Общие рецепты после проверки модератором. КБЖУ указаны авторами и не проверены лабораторно.", 12, HERO_MUTED)
+    if community.endpoint.is_empty():
+        var setup = _card("Подключение к сообществу")
+        _label(setup, "Общий каталог ещё не подключён. Для работы нужен HTTPS-адрес сервера MyBalance. Личная коллекция доступна без интернета.", 13, MUTED)
+        var endpoint = _text_input(setup, "https://recipes.example.com")
+        endpoint.name = "CommunityEndpoint"
+        _button(setup, "Подключить сервер", func():
+            if not community.configure(endpoint.text.strip_edges().trim_suffix("/")):
+                _message("Укажи корректный HTTPS-адрес сервера.")
+                return
+            _community_load()
+        )
+        return
+    var filters = _card("")
+    var tabs = _row(filters)
+    _button(tabs, "Все рецепты", func():
+        community_mine = false
+        _community_load()
+    , community_mine)
+    _button(tabs, "Мои публикации", func():
+        community_mine = true
+        _community_load()
+    , not community_mine)
+    var query = _text_input(filters, "Поиск блюда или ингредиента", community_query)
+    query.name = "CommunitySearch"
+    _label(filters, "Категория", 12, MUTED)
+    var category = _choice(filters, ["Все блюда"] + RecipeMath.CATEGORY_LABELS)
+    category.select(community_category)
+    _label(filters, "Калорийность на порцию", 12, MUTED)
+    var calories = _choice(filters, ["Любая калорийность","До 200 ккал","До 350 ккал","До 500 ккал","До 750 ккал","Свыше 750 ккал"])
+    calories.select(community_calorie)
+    var order = _choice(filters, ["Сначала новые","По оценкам"])
+    order.select(community_sort)
+    _button(filters, "Найти / обновить", func():
+        community_query = query.text
+        community_category = category.selected
+        community_calorie = calories.selected
+        community_sort = order.selected
+        _community_load()
+    )
+    _label(filters, community_status, 12, MUTED)
+    if community_items.is_empty():
+        var empty = _card("Пока нет рецептов")
+        _label(empty, "Нет результатов либо сервер ещё не ответил.", 12, MUTED)
+    for item in community_items:
+        if not item is Dictionary or not item.get("recipe") is Dictionary:
+            continue
+        var rid: String = str(item.get("id",""))
+        var rx = RegEx.new()
+        rx.compile("^[a-f0-9]{32}$")
+        if rx.search(rid) == null:
+            continue
+        var recipe: Dictionary = item["recipe"].duplicate(true)
+        recipe["id"] = rid
+        if not RecipeMath.validate_recipe(recipe):
+            continue
+        var card = _card(str(recipe["name"]))
+        var data = RecipeMath.calculate(recipe["ingredients"],float(recipe["cooked_weight"]))
+        var servings: float = float(recipe["servings"])
+        _label(card, str(roundi(float(data["total_kcal"])/servings)) + " ккал / порция · Б " + str(snappedf(float(data["total_p"])/servings,0.1)) + " · Ж " + str(snappedf(float(data["total_f"])/servings,0.1)) + " · У " + str(snappedf(float(data["total_c"])/servings,0.1)), 13, TEXT_ACCENT)
+        _label(card, "★ " + str(item.get("rating",0)) + " · Оценок: " + str(item.get("votes",0)), 12, MUTED)
+        if community_mine:
+            var labels = {"pending":"На проверке","approved":"Опубликован","rejected":"Отклонён","hidden":"Скрыт"}
+            _label(card,str(labels.get(str(item.get("status","")),"Неизвестно")),13,TEXT_ACCENT)
+            _button(card,"Удалить публикацию",func():
+                _confirm_delete("Удалить публикацию из сообщества? Личный рецепт останется.",func():
+                    community.send("/v1/recipes/"+rid,HTTPClient.METHOD_DELETE,{},func(ok: bool,result: Dictionary):
+                        _community_result(ok,result)
+                        if ok: _community_load()
+                    )
+                )
+            ,true)
+        else:
+            _button(card,"Открыть рецепт",func():
+                var sheet = _mobile_sheet(str(recipe["name"]),"Ингредиенты и приготовление","Закрыть",480)
+                var fields: VBoxContainer = sheet["fields"]
+                for part in recipe["ingredients"]:
+                    _label(fields,str(part["name"])+" · "+str(part["grams"])+" "+str(part.get("unit","г")),13,INK)
+                _label(fields,str(recipe.get("instructions","")),14,INK)
+                sheet["confirm"].pressed.connect(func(): sheet["root"].queue_free())
+            ,true)
+            _button(card,"Сохранить в мои рецепты",func():
+                var imported = store.import_shared_recipe(JSON.stringify({"format":"mybalance.recipe.v1","recipe":CommunityClient.public_recipe(recipe)}))
+                _message("Рецепт сохранён." if not imported.is_empty() else "Не удалось сохранить рецепт.")
+            )
+            var actions = _row(card)
+            _button(actions,"Оценить",func():
+                var sheet = _mobile_sheet("Оценка","Одна оценка от устройства. Её можно изменить.","Сохранить",340)
+                var picker = _choice(sheet["fields"],["1","2","3","4","5"])
+                picker.select(4)
+                sheet["confirm"].pressed.connect(func():
+                    sheet["root"].queue_free()
+                    _community_action(rid,"rating",{"score":picker.selected+1})
+                )
+            ,true)
+            _button(actions,"Пожаловаться",func():
+                var sheet = _mobile_sheet("Жалоба","Причина будет видна модератору.","Отправить",340)
+                var reason = _choice(sheet["fields"],["Спам","Недопустимое содержание","Чужой рецепт","Ошибочные или опасные инструкции","Другое"])
+                sheet["confirm"].pressed.connect(func():
+                    sheet["root"].queue_free()
+                    _community_action(rid,"report",{"reason":reason.get_item_text(reason.selected)})
+                )
+            ,true)
+    if community_more:
+        _button(filters,"Загрузить ещё",func(): _community_load(true),true)
+    var account_card = _card("Аккаунт сообщества")
+    _label(account_card,"Публикации привязаны к этому устройству, не к Google. Удаление аккаунта удалит публикации, оценки и жалобы.",12,MUTED)
+    if not community.token.is_empty():
+        _button(account_card,"Удалить аккаунт сообщества",func():
+            _confirm_delete("Удалить аккаунт сообщества и его публикации? Личные записи сохранятся.",func():
+                community.send("/v1/account",HTTPClient.METHOD_DELETE,{},func(ok: bool,result: Dictionary):
+                    if ok:
+                        community.token = ""
+                        community.persist()
+                        community_items.clear()
+                    _community_result(ok,result,"Аккаунт удалён")
+                )
+            )
+        ,true)
+    else:
+        _button(account_card,"Отключить сервер",func():
+            community.endpoint = ""
+            community.persist()
+            community_items.clear()
+            _render()
+        ,true)
+
+
 func _show_recipes() -> void:
     if recipe_editor_open:
         _show_recipe_editor()
         return
+    if community_open and not _meal_entry_locked:
+        _show_community()
+        return
     var intro = _card("Рецепты", "hero")
     _compact_card(intro, 10, 5)
+    if not _meal_entry_locked:
+        var community_button = _button(intro, "Книга рецептов сообщества →", func():
+            community_open = true
+            _render(true)
+            _community_load()
+        )
+        community_button.name = "RecipesCommunity"
     _label(intro, "Личная коллекция блюд · КБЖУ на порцию", 12, HERO_MUTED)
     if _meal_entry_locked:
         var destination: String = selected_meal
@@ -2646,6 +2896,9 @@ func _show_recipes() -> void:
                 DisplayServer.clipboard_set(store.export_shared_recipe(recipe_id))
                 _notify_saved("Код рецепта скопирован. Его можно отправить другому пользователю.")
             , true)
+            if not _meal_entry_locked:
+                var publish = _button(card, "Опубликовать в сообществе", func(): _community_publish(recipe), true)
+                publish.name = "RecipePublish_" + recipe_id
             share.name = "RecipeShare_" + recipe_id
             share.custom_minimum_size.y = 36
             share.add_theme_font_size_override("font_size", 12)
