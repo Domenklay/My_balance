@@ -1,0 +1,36 @@
+name: Community backend checks
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'community_server/**'
+      - '.github/workflows/community-server.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: API tests
+        run: cd community_server && python3 -m unittest -v test_server
+      - name: Build production image
+        run: docker build -t mybalance-community:test community_server
+      - name: Smoke test and verify durable database
+        run: |
+          set -eu
+          docker volume create mybalance-ci-data
+          docker run -d --name mybalance-ci --mount source=mybalance-ci-data,target=/data -p 127.0.0.1:18000:8000 -e RAILWAY_ENVIRONMENT_ID=ci -e RAILWAY_VOLUME_MOUNT_PATH=/data mybalance-community:test
+          curl --fail --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:18000/v1/health
+          curl --fail -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:18000/v1/accounts > /tmp/community-account.json
+          docker rm -f mybalance-ci
+          docker run -d --name mybalance-ci --mount source=mybalance-ci-data,target=/data -p 127.0.0.1:18000:8000 -e RAILWAY_ENVIRONMENT_ID=ci -e RAILWAY_VOLUME_MOUNT_PATH=/data mybalance-community:test
+          curl --fail --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:18000/v1/health
+          TOKEN=$(python3 -c 'import json; print(json.load(open("/tmp/community-account.json"))["token"])')
+          curl --fail -H "Authorization: Bearer $TOKEN" http://127.0.0.1:18000/v1/mine
+          curl --fail -X DELETE -H "Authorization: Bearer $TOKEN" http://127.0.0.1:18000/v1/account
+      - name: Cleanup
+        if: always()
+        run: docker rm -f mybalance-ci || true; docker volume rm mybalance-ci-data || true

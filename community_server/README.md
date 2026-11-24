@@ -17,3 +17,6 @@ New recipes remain pending until a moderator reviews them. Run `python server.py
 
 ## Privacy
 Only recipe text, ingredient nutrition, portions, a pseudonymous installation account, ratings and reports are stored. No diary, personal profile or photo is uploaded by this version. Tokens are random, hashed at rest on the server, and stored locally on the device separately from the diary. The app can delete its community account and associated server records. Device loss may make the account unrecoverable. Rate limiting is basic and not abuse-proof; deployment needs additional abuse protections. Recipe data is user-submitted, not verified nutritional data. No public photos or comments yet.
+
+## Railway deployment
+Deployment files are included. See [Russian deployment guide](DEPLOY_RU.md). The service is not deployed yet.
