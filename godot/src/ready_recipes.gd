@@ -626,6 +626,302 @@ const RECIPES = [
                 "c": 0.04
             }
         ]
+    },
+    {
+        "id": "catalog_chicken_rice",
+        "name": "Курица с рисом",
+        "category": "mains",
+        "cooked_weight": 550,
+        "servings": 2,
+        "instructions": "Отвари рис. Нарежь курицу, обжарь на масле до полной готовности, добавь морковь и смешай с рисом.",
+        "source_url": "https://ru.wikibooks.org/wiki/Кулинарная_книга",
+        "original_recipe": true,
+        "ingredients": [
+            {
+                "name": "Куриная грудка сырая",
+                "grams": 250,
+                "kcal": 120,
+                "p": 22.5,
+                "f": 2.6,
+                "c": 0
+            },
+            {
+                "name": "Рис сухой",
+                "grams": 100,
+                "kcal": 350,
+                "p": 7,
+                "f": 0.7,
+                "c": 78
+            },
+            {
+                "name": "Морковь",
+                "grams": 80,
+                "kcal": 41,
+                "p": 0.9,
+                "f": 0.2,
+                "c": 9.6
+            },
+            {
+                "name": "Растительное масло",
+                "grams": 8,
+                "kcal": 884,
+                "p": 0,
+                "f": 100,
+                "c": 0
+            },
+            {
+                "name": "Вода",
+                "grams": 220,
+                "kcal": 0,
+                "p": 0,
+                "f": 0,
+                "c": 0
+            }
+        ]
+    },
+    {
+        "id": "catalog_lentil_soup",
+        "name": "Чечевичный суп",
+        "category": "soups",
+        "cooked_weight": 920,
+        "servings": 3,
+        "instructions": "Промой чечевицу. Нарежь овощи, прогрей лук и морковь в масле, залей водой. Добавь чечевицу и вари до мягкости.",
+        "source_url": "https://ru.wikibooks.org/wiki/Кулинарная_книга",
+        "original_recipe": true,
+        "ingredients": [
+            {
+                "name": "Красная чечевица сухая",
+                "grams": 120,
+                "kcal": 352,
+                "p": 24.6,
+                "f": 1.1,
+                "c": 63.4
+            },
+            {
+                "name": "Морковь",
+                "grams": 100,
+                "kcal": 41,
+                "p": 0.9,
+                "f": 0.2,
+                "c": 9.6
+            },
+            {
+                "name": "Лук",
+                "grams": 70,
+                "kcal": 40,
+                "p": 1.1,
+                "f": 0.1,
+                "c": 9.3
+            },
+            {
+                "name": "Масло",
+                "grams": 8,
+                "kcal": 884,
+                "p": 0,
+                "f": 100,
+                "c": 0
+            },
+            {
+                "name": "Вода",
+                "grams": 700,
+                "kcal": 0,
+                "p": 0,
+                "f": 0,
+                "c": 0
+            }
+        ]
+    },
+    {
+        "id": "catalog_apple_curd",
+        "name": "Творог с яблоком",
+        "category": "snacks",
+        "cooked_weight": 260,
+        "servings": 1,
+        "instructions": "Нарежь яблоко и смешай с творогом и йогуртом.",
+        "source_url": "https://ru.wikibooks.org/wiki/Кулинарная_книга",
+        "original_recipe": true,
+        "ingredients": [
+            {
+                "name": "Творог 5%",
+                "grams": 150,
+                "kcal": 121,
+                "p": 17,
+                "f": 5,
+                "c": 3
+            },
+            {
+                "name": "Яблоко",
+                "grams": 80,
+                "kcal": 52,
+                "p": 0.3,
+                "f": 0.2,
+                "c": 13.8
+            },
+            {
+                "name": "Йогурт натуральный",
+                "grams": 30,
+                "kcal": 73,
+                "p": 9,
+                "f": 2,
+                "c": 4
+            }
+        ]
+    },
+    {
+        "id": "catalog_banana_pancakes",
+        "name": "Банановые оладьи",
+        "category": "breakfast",
+        "cooked_weight": 210,
+        "servings": 2,
+        "instructions": "Разомни банан, смешай с яйцом и мукой. Жарь небольшие оладьи на умеренном огне до полной готовности.",
+        "source_url": "https://ru.wikibooks.org/wiki/Кулинарная_книга",
+        "original_recipe": true,
+        "ingredients": [
+            {
+                "name": "Банан",
+                "grams": 100,
+                "kcal": 89,
+                "p": 1.1,
+                "f": 0.3,
+                "c": 22.8
+            },
+            {
+                "name": "Яйцо",
+                "grams": 50,
+                "kcal": 143,
+                "p": 12.6,
+                "f": 9.5,
+                "c": 0.7
+            },
+            {
+                "name": "Мука",
+                "grams": 50,
+                "kcal": 364,
+                "p": 10.3,
+                "f": 1,
+                "c": 76
+            },
+            {
+                "name": "Молоко",
+                "grams": 30,
+                "kcal": 52,
+                "p": 3,
+                "f": 2.5,
+                "c": 4.7
+            },
+            {
+                "name": "Масло",
+                "grams": 5,
+                "kcal": 884,
+                "p": 0,
+                "f": 100,
+                "c": 0
+            }
+        ]
+    },
+    {
+        "id": "catalog_apple_muffins",
+        "name": "Яблочные кексы",
+        "category": "baking",
+        "cooked_weight": 380,
+        "servings": 4,
+        "instructions": "Смешай яйцо, молоко, сахар и масло. Добавь муку с разрыхлителем и нарезанные яблоки. Выпекай при 180 °C до сухой шпажки.",
+        "source_url": "https://ru.wikibooks.org/wiki/Кулинарная_книга",
+        "original_recipe": true,
+        "ingredients": [
+            {
+                "name": "Яблоки",
+                "grams": 180,
+                "kcal": 52,
+                "p": 0.3,
+                "f": 0.2,
+                "c": 13.8
+            },
+            {
+                "name": "Мука",
+                "grams": 100,
+                "kcal": 364,
+                "p": 10.3,
+                "f": 1,
+                "c": 76
+            },
+            {
+                "name": "Яйцо",
+                "grams": 50,
+                "kcal": 143,
+                "p": 12.6,
+                "f": 9.5,
+                "c": 0.7
+            },
+            {
+                "name": "Молоко",
+                "grams": 60,
+                "kcal": 52,
+                "p": 3,
+                "f": 2.5,
+                "c": 4.7
+            },
+            {
+                "name": "Сахар",
+                "grams": 20,
+                "kcal": 400,
+                "p": 0,
+                "f": 0,
+                "c": 100
+            },
+            {
+                "name": "Масло",
+                "grams": 15,
+                "kcal": 884,
+                "p": 0,
+                "f": 100,
+                "c": 0
+            },
+            {
+                "name": "Разрыхлитель",
+                "grams": 4,
+                "kcal": 53,
+                "p": 0,
+                "f": 0,
+                "c": 28
+            }
+        ]
+    },
+    {
+        "id": "catalog_berry_yogurt",
+        "name": "Йогурт с ягодами",
+        "category": "desserts",
+        "cooked_weight": 220,
+        "servings": 1,
+        "instructions": "Смешай йогурт с ягодами и овсяными хлопьями. Охлади перед подачей.",
+        "source_url": "https://ru.wikibooks.org/wiki/Кулинарная_книга",
+        "original_recipe": true,
+        "ingredients": [
+            {
+                "name": "Йогурт натуральный",
+                "grams": 150,
+                "kcal": 73,
+                "p": 9,
+                "f": 2,
+                "c": 4
+            },
+            {
+                "name": "Клубника",
+                "grams": 50,
+                "kcal": 32,
+                "p": 0.7,
+                "f": 0.3,
+                "c": 7.7
+            },
+            {
+                "name": "Овсяные хлопья",
+                "grams": 20,
+                "kcal": 370,
+                "p": 13,
+                "f": 7,
+                "c": 62
+            }
+        ]
     }
 ]
 
@@ -635,5 +931,8 @@ static func all() -> Array:
 static func personal_copy(recipe: Dictionary) -> Dictionary:
     var copy = recipe.duplicate(true)
     copy["id"] = "saved_" + str(recipe["id"])
+    if recipe.get("original_recipe", false):
+        copy["instructions"] = str(copy["instructions"]) + "\n\nРецепт редакции «Мой баланс». КБЖУ и выход приблизительные; уточни продукты и фактический вес."
+        return copy
     copy["instructions"] = str(copy["instructions"]) + "\n\nАдаптация: участники Викиучебника, CC BY-SA. Источник: " + str(recipe["source_url"]) + "\nКБЖУ и выход приблизительные; уточни продукты и фактический вес."
     return copy
