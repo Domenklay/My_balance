@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.56"
+const APP_VERSION = "0.7.57"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -1356,17 +1356,83 @@ func _show_calorie_goal_editor() -> void:
     )
 
 
+# Profile artwork and achievements remain entirely local; the decorative
+# progress system is read-only and never changes dietary targets.
+func _profile_badge_tile(parent: Node, achievement: Dictionary, achieved: bool,
+        value: int, target: int) -> void:
+    var panel = PanelContainer.new()
+    panel.name = "Achievement_" + str(achievement["id"])
+    panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    var style = StyleBoxFlat.new()
+    style.bg_color = PROTEIN_BG if achieved else CARD_BG
+    style.border_color = MACRO_PROTEIN if achieved else BORDER
+    style.set_border_width_all(2 if HIGH_CONTRAST else 1)
+    style.set_corner_radius_all(12)
+    style.content_margin_left = 7
+    style.content_margin_right = 7
+    style.content_margin_top = 7
+    style.content_margin_bottom = 7
+    panel.add_theme_stylebox_override("panel", style)
+    parent.add_child(panel)
+    var stack = VBoxContainer.new()
+    stack.add_theme_constant_override("separation", 3)
+    panel.add_child(stack)
+    var symbol = _label(stack, str(achievement["icon"]), 24,
+        MACRO_PROTEIN if achieved else MUTED)
+    symbol.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    var title = _label(stack, str(achievement["title"]), 12, INK)
+    title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    var caption = _label(stack, str(achievement["hint"]), 11, MUTED)
+    caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    var progress = ProgressBar.new()
+    progress.name = "AchievementProgress"
+    progress.max_value = maxf(1.0, float(target))
+    progress.value = minf(float(value), float(target))
+    progress.show_percentage = false
+    progress.custom_minimum_size.y = 5
+    _style_progress(progress)
+    stack.add_child(progress)
+    var count = _label(stack, "Открыто" if achieved else str(mini(value, target)) +
+        " / " + str(target), 11, MACRO_PROTEIN if achieved else MUTED)
+    count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+
+func _profile_counter(parent: Node, caption: String, value: String,
+        bg: Color, fg: Color) -> void:
+    var panel = PanelContainer.new()
+    panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    var style = StyleBoxFlat.new()
+    style.bg_color = bg
+    style.set_corner_radius_all(10)
+    style.content_margin_left = 5
+    style.content_margin_right = 5
+    style.content_margin_top = 7
+    style.content_margin_bottom = 7
+    panel.add_theme_stylebox_override("panel", style)
+    parent.add_child(panel)
+    var stack = VBoxContainer.new()
+    stack.add_theme_constant_override("separation", 2)
+    panel.add_child(stack)
+    var amount = _nowrap(stack, value, 18, fg)
+    amount.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    var text = _label(stack, caption, 11, fg)
+    text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+
 func _show_profile() -> void:
     var profile: Dictionary = store.data.get("profile", {})
     var hero = _card("", "hero")
     hero.get_parent().name = "ProfileHero"
-    _compact_card(hero, 14, 9)
+    _compact_card(hero, 12, 7)
     var intro = _row(hero)
     var badge = PanelContainer.new()
-    badge.custom_minimum_size = Vector2(74, 74)
+    badge.name = "ProfileAvatarFrame"
+    badge.custom_minimum_size = Vector2(88, 88)
+    badge.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+    badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
     var badge_style = StyleBoxFlat.new()
     badge_style.bg_color = CHIP_BG
-    badge_style.set_corner_radius_all(37)
+    badge_style.set_corner_radius_all(44)
     var frame_data: Dictionary = RewardsScript.frame_by_id(str(profile.get("frame", "plain")))
     badge_style.border_color = Color(str(frame_data.get("color", "#9AAFA8")))
     badge_style.set_border_width_all(4 if str(profile.get("frame", "plain")) != "plain" else 1)
@@ -1384,7 +1450,7 @@ func _show_profile() -> void:
         avatar_picture.texture = photo_texture
         avatar_picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
         avatar_picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-        avatar_picture.custom_minimum_size = Vector2(66, 66)
+        avatar_picture.custom_minimum_size = Vector2(80, 80)
         avatar_picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
         var crop_shader = Shader.new()
         crop_shader.code = "shader_type canvas_item; void fragment() { vec4 pixel = texture(TEXTURE, UV); float mask = 1.0 - smoothstep(0.48, 0.5, distance(UV, vec2(0.5))); COLOR = vec4(pixel.rgb, pixel.a * mask); }"
@@ -1393,7 +1459,7 @@ func _show_profile() -> void:
         avatar_picture.material = crop_material
         badge.add_child(avatar_picture)
     else:
-        var avatar = _label(badge, _avatar_character(str(profile.get("avatar", "leaf"))), 37, SOFT_GOLD)
+        var avatar = _label(badge, _avatar_character(str(profile.get("avatar", "leaf"))), 43, SOFT_GOLD)
         avatar.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
         avatar.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     var identity = VBoxContainer.new()
@@ -1402,6 +1468,14 @@ func _show_profile() -> void:
     intro.add_child(identity)
     _label(identity, str(profile.get("name", "Мой профиль")), 23, WHITE)
     _label(identity, str(profile.get("motto", "")), 13, HERO_MUTED)
+    var profile_settings = _button(identity, "⚙ Настройки и анкета", func():
+        settings_page = "main"
+        _navigate_to_tab("settings")
+    , true)
+    profile_settings.name = "ProfileSettingsShortcut"
+    profile_settings.custom_minimum_size.y = 37
+    profile_settings.add_theme_font_size_override("font_size", 12)
+    profile_settings.clip_text = true
 
     var settings: Dictionary = store.data["settings"]
     var progress: Dictionary = ProfileProgressScript.summarize(settings, store.data["weights"])
@@ -1447,14 +1521,17 @@ func _show_profile() -> void:
     var source = " · Последняя запись: " + str(progress["date"]) if bool(progress["has_records"]) else " · Пока используем стартовый вес"
     _label(hero, goal_status + " · Старт: " +
         str(snappedf(float(progress["start"]), 0.1)) + " кг" + source, 11, HERO_MUTED)
-    var quick_weight = _button(hero, "＋ Записать вес", func(): _navigate_to_tab("weight"), true)
+    var quick_actions = _row(hero)
+    var quick_weight = _button(quick_actions, "＋ Записать вес", func(): _navigate_to_tab("weight"), true)
     quick_weight.name = "ProfileAddWeight"
     quick_weight.custom_minimum_size.y = 39
     quick_weight.add_theme_font_size_override("font_size", 13)
-    var measure_link = _button(hero, "📏 Замеры тела", func(): _set_progress_section("body"), true)
+    quick_weight.clip_text = true
+    var measure_link = _button(quick_actions, "📏 Замеры тела", func(): _set_progress_section("body"), true)
     measure_link.name = "ProfileBodyMeasurements"
     measure_link.custom_minimum_size.y = 39
     measure_link.add_theme_font_size_override("font_size", 13)
+    measure_link.clip_text = true
     var overview = _card("Мои ориентиры")
     _compact_card(overview, 12, 7)
     var change: float = float(progress["change"])
@@ -1468,30 +1545,41 @@ func _show_profile() -> void:
     var summary: Dictionary = store.reward_summary()
     var awards = _card("Звёзды и награды", "tint")
     _compact_card(awards, 12, 7)
-    _label(awards, "★ " + str(summary["points"]) + " звёзд  ·  Уровень " +
-        str(summary["level"]) + "  ·  Серия " + str(summary["streak"]) + " дн.", 14, TEXT_ACCENT)
+    var counters = _row(awards)
+    counters.name = "ProfileRewardCounters"
+    counters.add_theme_constant_override("separation", 4)
+    _profile_counter(counters, "Звёзды", str(summary["points"]), FAT_BG, MACRO_FAT)
+    _profile_counter(counters, "Уровень", str(summary["level"]), CARBS_BG, MACRO_CARBS)
+    _profile_counter(counters, "Дней с записями", str(summary["days"]), PROTEIN_BG, MACRO_PROTEIN)
+    _label(awards, str(100 - int(summary["level_progress"])) + " ★ до следующего уровня", 12, MUTED)
     var level_bar = ProgressBar.new()
     level_bar.name = "RewardLevelProgress"
     level_bar.min_value = 0.0
     level_bar.max_value = 100.0
     level_bar.value = float(summary["level_progress"])
     _style_progress(level_bar)
+    level_bar.show_percentage = false
+    level_bar.custom_minimum_size.y = 8
     awards.add_child(level_bar)
+    _label(awards, str(summary["earned"]) + " из " + str(RewardsScript.AWARDS.size()) + " достижений открыто", 12, MUTED)
     _button(awards, "▴ Скрыть достижения" if rewards_expanded else "▾ Показать все достижения", func():
         rewards_expanded = not rewards_expanded
         _render()
     , true)
     if rewards_expanded:
-        _label(awards, str(summary["earned"]) + " из " +
-            str(RewardsScript.AWARDS.size()) + " достижений открыто", 12, MUTED)
+        var achievement_grid = GridContainer.new()
+        achievement_grid.name = "ProfileAchievementGrid"
+        achievement_grid.columns = 2
+        achievement_grid.add_theme_constant_override("h_separation", 6)
+        achievement_grid.add_theme_constant_override("v_separation", 6)
+        awards.add_child(achievement_grid)
         for achievement in RewardsScript.AWARDS:
-            var achieved: bool = bool(summary["badges"].get(str(achievement["id"]), false))
-            var award_row = _soft_list_row(awards)
-            _label(award_row,
-                ("✦ " if achieved else "◇ ") + str(achievement["title"]) +
-                " · " + str(achievement["hint"]), 12,
-                TEXT_ACCENT if achieved else MUTED)
-        _label(awards, "За записи еды, движение и рецепты — без штрафов за превышение калорий.", 12, MUTED)
+            var key: String = str(achievement["id"])
+            var achieved: bool = bool(summary["badges"].get(key, false))
+            var milestone: Dictionary = RewardsScript.achievement_progress(key, summary)
+            _profile_badge_tile(achievement_grid, achievement, achieved,
+                int(milestone["value"]), int(milestone["target"]))
+        _label(awards, "Достижения отражают записи и личные привычки. Пропущенные дни не отнимают звёзды; калории и вес не влияют на награды.", 12, MUTED)
         _button(awards, "▴ Скрыть рамки" if frames_expanded else "▾ Выбрать рамку", func():
             frames_expanded = not frames_expanded
             _render()
@@ -1502,10 +1590,19 @@ func _show_profile() -> void:
                 var limit: int = int(unlocked_frame["points"])
                 var available: bool = int(summary["points"]) >= limit
                 var frame_row = _soft_list_row(awards)
-                var swatch = ColorRect.new()
-                swatch.color = Color(str(unlocked_frame["color"]))
-                swatch.custom_minimum_size = Vector2(24, 24)
+                var swatch = PanelContainer.new()
+                swatch.custom_minimum_size = Vector2(43, 43)
+                swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+                var swatch_style = StyleBoxFlat.new()
+                swatch_style.bg_color = CHIP_BG
+                swatch_style.border_color = Color(str(unlocked_frame["color"]))
+                swatch_style.set_border_width_all(3)
+                swatch_style.set_corner_radius_all(22)
+                swatch.add_theme_stylebox_override("panel", swatch_style)
                 frame_row.add_child(swatch)
+                var preview_symbol = _label(swatch, _avatar_character(str(profile.get("avatar", "leaf"))), 20, SOFT_GOLD)
+                preview_symbol.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+                preview_symbol.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
                 var frame_label = _label(frame_row, str(unlocked_frame["name"]) +
                     (" · открыта" if available else " · от " + str(limit) + " ★"), 12, INK)
                 frame_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1569,10 +1666,6 @@ func _show_profile() -> void:
             else:
                 _message("Проверь имя и подпись или свободное место.")
         )
-    _button(edit, "⚙ Настройки и анкета", func():
-        settings_page = "main"
-        _navigate_to_tab("settings")
-    , true)
 
 func _pick_avatar_photo() -> void:
     var supported = PackedStringArray([

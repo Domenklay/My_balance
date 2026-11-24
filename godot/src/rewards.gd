@@ -122,3 +122,17 @@ static func calculate(data: Dictionary, today: String) -> Dictionary:
         "badges":badges, "earned":achieved,
         "recipes":recipe_count
     }
+
+
+# Cumulative milestone display uses the original award thresholds; points and
+# unlocked frames remain compatible with every existing diary.
+static func achievement_progress(id: String, summary: Dictionary) -> Dictionary:
+    var thresholds = {
+        "first": ["days", 1], "three_days": ["days", 3],
+        "week": ["days", 7], "fortnight": ["days", 14], "month": ["days", 30],
+        "streak": ["longest_streak", 7], "recipe": ["recipes", 1],
+        "five_recipes": ["recipes", 5], "activity": ["active_days", 1],
+        "three_activities": ["active_days", 3]
+    }
+    var item: Array = thresholds.get(id, ["days", 1])
+    return {"value": maxi(0, int(summary.get(str(item[0]), 0))), "target": int(item[1])}
