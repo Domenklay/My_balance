@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.50.1"
+const APP_VERSION = "0.7.51"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -112,6 +112,15 @@ var weight_history_expanded: bool = false
 var body_history_expanded: bool = false
 var water_details_expanded: bool = false
 var water_history_expanded: bool = false
+# Optional, user-initiated Google Drive appDataFolder backup session.
+# Tokens stay inside the native plugin; only cloud metadata reaches GDScript.
+var google_plugin = null
+var google_connected: bool = false
+var google_checked: bool = false
+var google_exists: bool = false
+var google_checksum: String = ""
+var google_modified: String = ""
+var google_busy: bool = false
 var planner_day: String = ""
 var shopping_expanded: bool = false
 var stats_period: String = "week"
@@ -331,6 +340,15 @@ func _ready() -> void:
     search_http.timeout = 18.0
     add_child(search_http)
     search_http.request_completed.connect(_on_online_search_completed)
+    if OS.has_feature("android") and Engine.has_singleton("MyBalanceGoogleDrive"):
+        google_plugin = Engine.get_singleton("MyBalanceGoogleDrive")
+        google_plugin.connect("google_connected", Callable(self, "_on_google_connected"))
+        google_plugin.connect("google_disconnected", Callable(self, "_on_google_disconnected"))
+        google_plugin.connect("google_status", Callable(self, "_on_google_status"))
+        google_plugin.connect("google_backup_loaded", Callable(self, "_on_google_backup_loaded"))
+        google_plugin.connect("google_backup_saved", Callable(self, "_on_google_backup_saved"))
+        google_plugin.connect("google_backup_deleted", Callable(self, "_on_google_backup_deleted"))
+        google_plugin.connect("google_error", Callable(self, "_on_google_error"))
     if OS.has_feature("android") and Engine.has_singleton("MyBalanceBarcode"):
         barcode_scanner = Engine.get_singleton("MyBalanceBarcode")
         if barcode_scanner.has_signal("barcode_scanned"):
@@ -5819,6 +5837,187 @@ func _settings_section(title: String, section: String, summary: String) -> VBoxC
     return contents
 
 
+func _google_refresh_settings() -> void:
+    if tab == "settings" and settings_page == "main":
+        _render()
+
+
+func _google_connect() -> void:
+    if google_plugin == null:
+        _message("Google Диск доступен в Android-приложении с Google Play Services.")
+        return
+    if google_busy:
+        return
+    google_busy = true
+    google_plugin.authorize()
+    _google_refresh_settings()
+
+
+func _on_google_connected() -> void:
+    google_connected = true
+    google_checked = false
+    google_busy = true
+    google_plugin.checkBackup()
+    _google_refresh_settings()
+
+
+func _on_google_disconnected() -> void:
+    google_connected = false
+    google_checked = false
+    google_exists = false
+    google_checksum = ""
+    google_modified = ""
+    google_busy = false
+    _google_refresh_settings()
+
+
+func _on_google_status(has_backup: bool, updated: String, checksum: String) -> void:
+    google_checked = true
+    google_exists = has_backup
+    google_checksum = checksum
+    google_modified = updated
+    google_busy = false
+    _google_refresh_settings()
+
+
+func _on_google_backup_saved(updated: String) -> void:
+    google_busy = false
+    _notify_saved("Копия сохранена в Google Диске")
+    _google_refresh_settings()
+
+
+func _on_google_backup_deleted() -> void:
+    google_busy = false
+    google_checked = false
+    google_exists = false
+    google_checksum = ""
+    google_modified = ""
+    _notify_saved("Облачная копия удалена")
+    _google_refresh_settings()
+
+
+func _on_google_error(message: String) -> void:
+    google_busy = false
+    _google_refresh_settings()
+    _message("Google Диск: " + message)
+
+
+func _on_google_backup_loaded(raw: String) -> void:
+    google_busy = false
+    _google_refresh_settings()
+    # Cloud data is never silently installed. The existing JSON validation and
+    # restore confirmation protect diet, weights, photos and current settings.
+    _confirm_restore_json(raw, "Google Диска")
+
+
+func _google_check() -> void:
+    if google_plugin == null or not google_connected or google_busy:
+        return
+    google_busy = true
+    google_plugin.checkBackup()
+    _google_refresh_settings()
+
+
+func _google_upload() -> void:
+    if google_plugin == null or not google_connected or google_busy:
+        return
+    if not google_checked:
+        _message("Сначала проверь, есть ли резервная копия на Google Диске.")
+        return
+    var expected: String = google_checksum
+    var serialized: String = store.export_json()
+    if serialized.to_utf8_buffer().size() > 5000000:
+        _message("Резервная копия больше 5 МБ. Сделай локальный экспорт.")
+        return
+    _confirm_action("Сохранить на Google Диск?",
+        "Это заменит предыдущую облачную копию, но не изменит дневник. " +
+        "При изменении копии другим устройством загрузка будет остановлена.",
+        func():
+            google_busy = true
+            google_plugin.uploadBackup(serialized, expected)
+            _google_refresh_settings()
+    , "Сохранить")
+
+
+func _google_download() -> void:
+    if google_plugin == null or not google_connected or not google_checked or \
+            not google_exists or google_busy:
+        return
+    google_busy = true
+    google_plugin.downloadBackup()
+    _google_refresh_settings()
+
+
+func _google_delete() -> void:
+    if google_plugin == null or not google_connected or not google_exists or google_busy:
+        return
+    _confirm_delete("Удалить облачную копию на Google Диске? " +
+        "Данные на этом телефоне останутся без изменений.", func():
+            google_busy = true
+            google_plugin.deleteBackup()
+            _google_refresh_settings()
+    )
+
+
+func _google_revoke() -> void:
+    if google_plugin == null or not google_connected or google_busy:
+        return
+    _confirm_action("Отключить Google Диск?",
+        "Доступ приложения к Google Диску будет отозван. " +
+        "Уже сохранённая копия останется в Google Диске; её можно удалить отдельно.",
+        func():
+            google_busy = true
+            google_plugin.revoke()
+            _google_refresh_settings()
+    , "Отключить")
+
+
+func _show_google_backup_settings() -> void:
+    var state: String = ("Подключено" if google_connected else
+        ("Доступно только на Android" if google_plugin == null else "Не подключено"))
+    if google_busy:
+        state = "Обращение к Google Диску…"
+    var card = _settings_section("Google Диск · резервные копии", "google", state)
+    if google_plugin == null:
+        var notice = _label(card,
+            "Подключение к Google доступно в Android-сборке с Google Play Services. " +
+            "На компьютере остаются обычные JSON-копии.", 13, MUTED)
+        notice.name = "GoogleCloudUnavailable"
+        return
+    _label(card,
+        "Доступ только к скрытой папке данных «Мой баланс» на твоём Google Диске. " +
+        "Без сервера разработчика. Синхронизация пока выполняется вручную.", 12, MUTED)
+    if not google_connected:
+        var sign_in = _button(card, "Подключить Google Диск", func(): _google_connect())
+        sign_in.name = "GoogleCloudConnect"
+        sign_in.disabled = google_busy
+        return
+    var status: String = "Копия ещё не проверена"
+    if google_checked:
+        status = ("Облачная копия: " + google_modified) if google_exists else \
+            "На этом Google Диске пока нет резервной копии"
+    var summary = _label(card, status, 13, TEXT_ACCENT)
+    summary.name = "GoogleCloudStatus"
+    var check = _button(card, "Проверить облачную копию", func(): _google_check(), true)
+    check.name = "GoogleCloudCheck"
+    check.disabled = google_busy
+    var save = _button(card, "Сохранить данные в Google Диск", func(): _google_upload())
+    save.name = "GoogleCloudUpload"
+    save.disabled = not google_checked or google_busy
+    var restore = _button(card, "Восстановить данные из Google Диска", func(): _google_download(), true)
+    restore.name = "GoogleCloudRestore"
+    restore.disabled = not google_checked or not google_exists or google_busy
+    _label(card, "Восстановление запрашивает подтверждение и не объединяет записи автоматически. " +
+        "Перед заменой сохрани локальную JSON-копию.", 12, MUTED)
+    if google_exists:
+        var remove = _button(card, "Удалить облачную копию", func(): _google_delete(), true)
+        remove.name = "GoogleCloudDelete"
+        remove.disabled = google_busy
+    var disconnect_button = _button(card, "Отключить Google Диск", func(): _google_revoke(), true)
+    disconnect_button.name = "GoogleCloudDisconnect"
+    disconnect_button.disabled = google_busy
+
+
 func _show_settings() -> void:
     if settings_page == "foods":
         var nav = _card("Мои продукты")
@@ -5964,6 +6163,7 @@ func _show_settings() -> void:
         settings_page = "foods"
         _render()
     , true)
+    _show_google_backup_settings()
     var backup = _settings_section("Резервная копия и перенос", "backup",
         "Сохранить или восстановить JSON")
     _label(backup, "Сохрани файл JSON вне приложения, чтобы восстановить данные после удаления или переустановки.", 13, MUTED)

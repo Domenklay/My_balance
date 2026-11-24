@@ -147,6 +147,8 @@ jobs:
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/food_sort_frequency_test.gd
       - name: Test catalog search pagination beyond first twelve products
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/food_search_pagination_test.gd
+      - name: Test Google Drive backup UI fails closed on desktop without Android plugin
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/google_cloud_backup_0751_test.gd
       - name: Test five distinctive palettes, high contrast and theme previews 0.7.50.1
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/five_distinct_themes_0750_1_test.gd
       - name: Test 0.7.50 weekly meal planning and shopping from saved ingredients
