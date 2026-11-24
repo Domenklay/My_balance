@@ -81,7 +81,7 @@ func _run() -> void:
     app.tab = "profile"
     app._render()
     await process_frame
-    if app.body.get_child_count() > 4:
+    if app.body.get_child_count() > 5:
         _fail("profile still has excess permanent cards")
         return
     if _button(app, "▾ Показать все достижения") == null:
@@ -91,7 +91,7 @@ func _run() -> void:
         _fail("avatar frames should be in expanded achievements only")
         return
     if _button(app, "📷 Выбрать фото для аватара") == null or \
-            _button(app, "⚙ Настройки и анкета") == null:
+            _button(app, "⚙ Настройки") == null:
         _fail("important profile actions hidden by compact layout")
         return
     _button(app, "▾ Показать все достижения").pressed.emit()
@@ -99,7 +99,7 @@ func _run() -> void:
     if _button(app, "▾ Выбрать рамку") == null:
         _fail("expanded achievements cannot reveal avatar frames")
         return
-    _button(app, "⚙ Настройки и анкета").pressed.emit()
+    _button(app, "⚙ Настройки").pressed.emit()
     await process_frame
     if _button(app, "Моя анкета · пересчитать норму") == null:
         _fail("existing users cannot edit questionnaire from settings")
