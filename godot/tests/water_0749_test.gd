@@ -97,9 +97,12 @@ func _run() -> void:
     app.tab = "day"
     app._render()
     await process_frame
+    var daily_readout = app.find_child("WaterDailyAmount", true, false) as Label
     if app.APP_VERSION != "0.7.49" or app.tab_buttons.size() != 5 or \
-            app.find_child("WaterDailyProgress", true, false) == null:
-        _fail("water tracker missing on day or navigation changed")
+            app.find_child("WaterDailyProgress", true, false) == null or \
+            daily_readout == null or daily_readout.custom_minimum_size.x < 140 or \
+            not daily_readout.text.contains("2000 мл"):
+        _fail("visible water total/goal missing on day or navigation changed")
         return
     var add = app.find_child("WaterQuickAdd_250", true, false) as Button
     if add == null:
