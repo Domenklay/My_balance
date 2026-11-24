@@ -3116,7 +3116,22 @@ func _show_day() -> void:
         hint.name = "DayActivitySummary"
         hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
-    var day_tools_toggle = _button(hero, "⋯ Действия с днём" +
+    _show_water_card()
+
+    var planner_shortcut = _card("", "tint")
+    _compact_card(planner_shortcut, 8, 4)
+    planner_shortcut.get_parent().name = "DayPlannerShortcut"
+    var action_row = _row(planner_shortcut)
+    action_row.add_theme_constant_override("separation", 5)
+    var plan_shortcut = _button(action_row, "▦ План недели и покупки",
+        func(): _open_week_planner(), true)
+    plan_shortcut.name = "DayOpenPlanner"
+    plan_shortcut.custom_minimum_size.y = 40
+    plan_shortcut.add_theme_font_size_override("font_size", 12)
+    plan_shortcut.clip_text = true
+    plan_shortcut.tooltip_text = "План недели и покупки"
+
+    var day_tools_toggle = _button(action_row, "⋯ Действия с днём" +
         (" ▴" if day_tools_expanded else " ▾"), func():
             day_tools_expanded = not day_tools_expanded
             _render()
@@ -3124,11 +3139,12 @@ func _show_day() -> void:
     day_tools_toggle.name = "DayToolsToggle"
     day_tools_toggle.custom_minimum_size.y = 36
     day_tools_toggle.add_theme_font_size_override("font_size", 12)
+    day_tools_toggle.clip_text = true
     if day_tools_expanded:
         var small_screen: bool = get_viewport_rect().size.x < 390.0
         var day_tool_buttons: BoxContainer = (
             VBoxContainer.new() if small_screen else HBoxContainer.new())
-        hero.add_child(day_tool_buttons)
+        planner_shortcut.add_child(day_tool_buttons)
         day_tool_buttons.name = "DayToolsActions"
         day_tool_buttons.add_theme_constant_override("separation", 5)
         var copy_button = _button(day_tool_buttons, "↻ Копировать день",
@@ -3142,21 +3158,11 @@ func _show_day() -> void:
         templates_button.custom_minimum_size.y = 39
         templates_button.add_theme_font_size_override("font_size", 12)
         if store.can_undo_day_copy(date):
-            var undo = _button(hero, "↶ Отменить копирование",
+            var undo = _button(planner_shortcut, "↶ Отменить копирование",
                 func(): _request_undo_day_copy(), true)
             undo.name = "DayCopyUndo"
             undo.custom_minimum_size.y = 39
             undo.add_theme_font_size_override("font_size", 12)
-
-    _show_water_card()
-
-    var planner_shortcut = _card("", "tint")
-    _compact_card(planner_shortcut, 8, 4)
-    planner_shortcut.get_parent().name = "DayPlannerShortcut"
-    var plan_shortcut = _button(planner_shortcut, "▦ План недели и покупки",
-        func(): _open_week_planner(), true)
-    plan_shortcut.name = "DayOpenPlanner"
-    plan_shortcut.custom_minimum_size.y = 40
 
     # Compact sections are always present. Only the selected meal unfolds.
     # Expansion state is in-memory, keyed by date: diary records are untouched.
