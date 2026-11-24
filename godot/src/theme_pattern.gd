@@ -24,7 +24,7 @@ func _draw() -> void:
     if kind == "hills":
         _draw_hills(tint)
         return
-    var spacing = 72.0
+    var spacing = 94.0
     var cols = int(ceil(size.x / spacing)) + 1
     var rows = int(ceil(size.y / spacing)) + 1
     for yy in range(rows):
@@ -32,20 +32,26 @@ func _draw() -> void:
             var c = Vector2(xx * spacing + 16.0 + (yy % 2) * 22.0, yy * spacing + 16.0)
             match kind:
                 "dots":
-                    draw_circle(c, 2.0, tint)
-                    draw_circle(c + Vector2(19, 23), 1.2, tint)
-                    draw_circle(c + Vector2(6, 37), 1.0, tint)
+                    draw_arc(c, 8.0, 0, TAU, 24, tint, 1.1, true)
+                    draw_arc(c + Vector2(27, 29), 4.0, 0, TAU, 16, tint, 0.9, true)
+                    draw_circle(c + Vector2(13, 42), 1.8, tint)
                 "grid":
-                    draw_line(c - Vector2(16, 16), c + Vector2(56, -16), tint, 0.65)
-                    draw_line(c - Vector2(16, 56), c + Vector2(-16, 16), tint, 0.65)
+                    for radius in [9.0, 15.0, 21.0]:
+                        draw_arc(c, radius, PI, TAU, 24, tint, 0.9, true)
+                    draw_circle(c + Vector2(36, 33), 1.5, tint)
                 "stars":
-                    draw_line(c + Vector2(-4, 0), c + Vector2(4, 0), tint, 1.0)
-                    draw_line(c + Vector2(0, -4), c + Vector2(0, 4), tint, 1.0)
-                    draw_circle(c + Vector2(27, 23), 1.3, tint)
+                    draw_colored_polygon(PackedVector2Array([
+                        c + Vector2(0,-7), c + Vector2(2,-2), c + Vector2(7,0),
+                        c + Vector2(2,2), c + Vector2(0,7), c + Vector2(-2,2),
+                        c + Vector2(-7,0), c + Vector2(-2,-2)
+                    ]), tint)
+                    draw_circle(c + Vector2(27, 23), 1.7, tint)
+                    draw_circle(c + Vector2(46, 9), 1.0, tint)
                 _:
-                    draw_line(c, c + Vector2(22, 28), tint, 1.1, true)
-                    draw_arc(c + Vector2(4, 11), 8.0, -2.8, -0.35, 15, tint, 1.0, true)
-                    draw_arc(c + Vector2(14, 22), 8.0, -2.8, -0.35, 15, tint, 1.0, true)
+                    draw_line(c, c + Vector2(23, 32), tint, 1.0, true)
+                    _draw_leaf(c + Vector2(3, 9), Vector2(-0.75, -0.45), 17.0, tint)
+                    _draw_leaf(c + Vector2(16, 17), Vector2(0.8, -0.6), 19.0, tint)
+                    _draw_leaf(c + Vector2(20, 27), Vector2(-0.8, -0.3), 15.0, tint)
 
 
 # Large corner foliage instead of a repeating line-doodle texture. The leaves
@@ -55,10 +61,13 @@ func _draw_leaf(center: Vector2, direction: Vector2, length: float, tint: Color)
     var side = Vector2(-axis.y, axis.x)
     var start = center - axis * length * 0.5
     var end = center + axis * length * 0.5
-    var polygon = PackedVector2Array([
-        start, center - side * (length * 0.22), end,
-        center + side * (length * 0.22)
-    ])
+    var polygon = PackedVector2Array()
+    for i in range(13):
+        var fraction: float = float(i) / 12.0
+        polygon.append(start.lerp(end, fraction) + side * sin(PI * fraction) * length * 0.23)
+    for i in range(11, 0, -1):
+        var fraction: float = float(i) / 12.0
+        polygon.append(start.lerp(end, fraction) - side * sin(PI * fraction) * length * 0.23)
     draw_colored_polygon(polygon, tint)
     draw_line(start, end, tint.lightened(0.08), 0.85, true)
 

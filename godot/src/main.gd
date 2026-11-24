@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.57"
+const APP_VERSION = "0.7.58"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -160,6 +160,10 @@ var recipe_grid_view: bool = false
 var recipe_manual_open: bool = false
 var recipe_actions_expanded: Dictionary = {}
 var _rendered_view: String = ""
+var _page_tween: Tween
+var _visual_day: String = ""
+var _visual_energy: float = -1.0
+var _visual_water: int = -1
 var _scroll_memory: Dictionary = {}
 var _render_serial: int = 0
 var tab_buttons: Dictionary = {}
@@ -297,6 +301,24 @@ func _toggle_patterns() -> void:
     _refresh_appearance()
     _render()
     _notify_saved("Узоры включены" if not previous else "Узоры выключены")
+
+func _motion_enabled() -> bool:
+    return bool(store.data["settings"].get("animations", true))
+
+
+func _toggle_animations() -> void:
+    var previous: bool = _motion_enabled()
+    store.data["settings"]["animations"] = not previous
+    if not store.save():
+        store.data["settings"]["animations"] = previous
+        _message("Не удалось сохранить настройку анимаций.")
+        return
+    if _page_tween != null and _page_tween.is_valid():
+        _page_tween.kill()
+    body.modulate.a = 1.0
+    _render()
+    _notify_saved("Анимации включены" if not previous else "Анимации выключены")
+
 
 func _toggle_high_contrast() -> void:
     var previous = bool(store.data["settings"].get("high_contrast", false))
@@ -495,6 +517,10 @@ func _notify_saved(value: String) -> void:
         return
     toast_label.text = "✓  " + value
     toast_panel.visible = true
+    toast_panel.modulate.a = 1.0
+    if _motion_enabled():
+        toast_panel.modulate.a = 0.78
+        toast_panel.create_tween().tween_property(toast_panel, "modulate:a", 1.0, 0.14)
     toast_timer.start()
 
 func _hide_keyboard_and_focus() -> void:
@@ -1071,6 +1097,13 @@ func _render(reset_position: bool = false) -> void:
         "progress": _show_progress()
         "settings": _show_settings()
     scroll.scroll_vertical = desired
+    if _page_tween != null and _page_tween.is_valid():
+        _page_tween.kill()
+    body.modulate.a = 1.0
+    if _motion_enabled() and not old_key.is_empty() and old_key != new_key:
+        body.modulate.a = 0.85
+        _page_tween = body.create_tween()
+        _page_tween.tween_property(body, "modulate:a", 1.0, 0.16).set_trans(Tween.TRANS_SINE)
     call_deferred("_restore_scroll_position", new_key, current_serial, desired)
 
 
@@ -2172,6 +2205,34 @@ func _catalog_food_icon(parent: Node) -> void:
     panel.add_child(art)
 
 
+# Small themed illustrations occupy a single row, without changing empty
+# state messages, button actions or the scroll hierarchy.
+func _empty_illustration(parent: Node, kind: String, message: String) -> Label:
+    var row = _row(parent)
+    row.name = "EmptyState_" + kind
+    row.add_theme_constant_override("separation", 9)
+    var art = TextureRect.new()
+    art.name = "EmptyStateArt"
+    art.texture = {
+        "recipes": preload("res://assets/empty/recipes.svg"),
+        "search": preload("res://assets/empty/search.svg"),
+        "activity": preload("res://assets/empty/activity.svg"),
+        "measure": preload("res://assets/empty/measure.svg")
+    }.get(kind)
+    art.custom_minimum_size = Vector2(54, 54)
+    art.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+    art.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+    art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+    art.modulate = TEXT_ACCENT
+    art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    row.add_child(art)
+    var description = _label(row, message, 12, MUTED)
+    description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    description.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    return description
+
+
 func _show_recipes() -> void:
     if recipe_editor_open:
         _show_recipe_editor()
@@ -2239,7 +2300,7 @@ func _show_recipes() -> void:
         recipe_search_count.name = "RecipeSearchCount"
     if recipes.is_empty():
         var empty = _card("Пока нет рецептов")
-        _label(empty, "Добавь ингредиенты с их сырым весом, взвесь готовое блюдо — и приложение рассчитает КБЖУ на 100 г.", 14, MUTED)
+        _empty_illustration(empty, "recipes", "Добавь ингредиенты, взвесь готовое блюдо — и приложение рассчитает КБЖУ на 100 г.")
     var recipe_grid: GridContainer = null
     if recipe_grid_view and not recipes.is_empty():
         recipe_grid = GridContainer.new()
@@ -2369,7 +2430,7 @@ func _show_recipes() -> void:
     if not recipes.is_empty():
         var no_results = _card("Ничего не найдено")
         no_results.get_parent().name = "RecipeNoMatches"
-        var no_results_text = _label(no_results, "", 13, MUTED)
+        var no_results_text = _empty_illustration(no_results, "search", "")
         var refresh_recipes = func(text_value: String):
             # Do not rebuild the entire screen as the user types. That would
             # drop keyboard focus and reset the Android cursor position.
@@ -2852,6 +2913,11 @@ func _show_water_card() -> void:
     water_track.set_corner_radius_all(9)
     water_progress.add_theme_stylebox_override("background", water_track)
     water_card.add_child(water_progress)
+    var water_now: int = int(info["ml"])
+    if _motion_enabled() and _visual_day == date and _visual_water >= 0 and _visual_water != water_now:
+        water_progress.modulate.a = 0.7
+        water_progress.create_tween().tween_property(water_progress, "modulate:a", 1.0, 0.20)
+    _visual_water = water_now
     var buttons = _row(water_card)
     buttons.name = "WaterQuickAmounts"
     buttons.add_theme_constant_override("separation", 5)
@@ -3277,6 +3343,12 @@ func _show_day() -> void:
     ring.size_flags_horizontal = Control.SIZE_SHRINK_END
     ring.set_palette(HERO_TRACK, HERO_FILL, WHITE)
     ring.set_value(total, target)
+    if _motion_enabled() and _visual_day == date and _visual_energy >= 0.0:
+        ring.call_deferred("animate_from", _visual_energy)
+    if _visual_day != date:
+        _visual_water = -1
+    _visual_day = date
+    _visual_energy = ring.progress
     var edit_goal = _button(hero_content, "Норма", func(): _show_calorie_goal_editor(), true)
     edit_goal.name = "EditDailyCalorieGoal"
     edit_goal.tooltip_text = "Изменить суточную норму калорий"
@@ -5289,7 +5361,7 @@ func _rebuild_food_results(results_box: VBoxContainer, filtered: Array,
     var shown: int = mini(maxi(12, int(results_box.get_meta("visible_count", 12))), filtered.size())
     _label(results_box, "Найдено: " + str(filtered.size()) + " · показано: " + str(shown), 12, MUTED)
     if filtered.is_empty():
-        _label(results_box, "Ничего не найдено. Попробуй другое название или бренд.", 12, MUTED)
+        _empty_illustration(results_box, "search", "Ничего не найдено. Попробуй другое название или бренд.")
     for index in range(shown):
         var item: Dictionary = filtered[index]
         var row = _soft_list_row(results_box)
@@ -5536,7 +5608,7 @@ func _show_activity() -> void:
     _compact_card(saved, 10, 6)
     var items: Array = store.day_activities(date)
     if items.is_empty():
-        _label(saved, "Записей пока нет.", 13, MUTED)
+        _empty_illustration(saved, "activity", "Записей пока нет. Здесь появятся сохранённые прогулки и тренировки.")
     for a in items:
         var r = _soft_list_row(saved)
         var kind_title = ActivityMath.type_name(str(a.get("type", "other")))
@@ -5854,7 +5926,7 @@ func _show_body_measurements() -> void:
         BodyMeasurements.display_name(selected_body_metric) +
         " (" + str(recorded.size()) + ")", 14, INK)
     if recorded.is_empty():
-        _label(selected_history, "Пока нет записей для этого параметра.", 12, MUTED)
+        _empty_illustration(selected_history, "measure", "Пока нет записей для этого параметра.")
     else:
         for offset in range(mini(4, recorded.size())):
             var item: Dictionary = recorded[recorded.size() - 1 - offset]
@@ -6575,6 +6647,9 @@ func _show_settings() -> void:
     _button(appearance, "Контраст: повышенный" if HIGH_CONTRAST else "Контраст: обычный",
         func(): _toggle_high_contrast(), true)
     _label(appearance, "Повышенный контраст делает текст, карточки, кнопки и поля ввода заметнее во всех пяти темах.", 12, MUTED)
+    var animation_switch = _button(appearance, "Анимации: включены" if _motion_enabled() else "Анимации: выключены", func(): _toggle_animations(), true)
+    animation_switch.name = "AppearanceAnimationsToggle"
+    _label(appearance, "Мягкие переходы. Можно выключить для спокойного интерфейса.", 12, MUTED)
 
     var my_foods_link = _card("Мои продукты и штрихкоды")
     _compact_card(my_foods_link, 11, 6)

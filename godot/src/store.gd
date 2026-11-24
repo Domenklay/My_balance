@@ -134,7 +134,7 @@ func _is_barcode(code: String) -> bool:
 
 func default_data() -> Dictionary:
     return {
-        "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true, "high_contrast": false,
+        "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true, "high_contrast": false, "animations": true,
             "meal_shares": DEFAULT_MEAL_SHARES.duplicate(), "home_widgets": DEFAULT_HOME_WIDGETS.duplicate(), "water_goal_ml": DEFAULT_WATER_GOAL_ML, "onboarding_complete": false,
             "personal": {}},
         "foods": [], "entries": [], "activities": [], "steps": {}, "weights": [], "body_measurements": [], "water_entries": [], "notes": {}, "favorites": [],
@@ -685,6 +685,10 @@ func import_json(raw: String, persist: bool = true) -> bool:
     if not settings.has("high_contrast"):
         settings["high_contrast"] = false
     if not (settings["high_contrast"] is bool):
+        return false
+    if not settings.has("animations"):
+        settings["animations"] = true
+    if not (settings["animations"] is bool):
         return false
     if obj["foods"].size() > 10000 or obj["entries"].size() > 50000 or obj["weights"].size() > 5000 or obj["activities"].size() > 50000:
         return false
