@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.67"
+const APP_VERSION = "0.7.68"
 const ReadyRecipes = preload("res://src/ready_recipes.gd")
 const CommunityClient = preload("res://src/community_client.gd")
 const InterfaceLanguage = preload("res://src/interface_language.gd")
@@ -2787,6 +2787,15 @@ func _show_ready_recipes() -> void:
         save.name = "ReadySave_" + str(recipe["id"])
         save.disabled = saved
         save.custom_minimum_size.y = 38
+        var quick_add = _button(card, "+ В дневник", func():
+            var id = _save_ready_recipe(recipe)
+            if id.is_empty():
+                _message("Не удалось сохранить рецепт.")
+                return
+            _recipe_portion_sheet(store.recipe_by_id(id))
+        , true)
+        quick_add.name = "ReadyDiary_" + str(recipe["id"])
+        quick_add.custom_minimum_size.y = 38
         var terms: String = str(recipe["name"]).to_lower()
         for ingredient in recipe["ingredients"]:
             terms += " " + str(ingredient["name"]).to_lower()
@@ -2813,9 +2822,33 @@ func _show_ready_recipes() -> void:
 func _ready_recipe_details(recipe: Dictionary) -> void:
     var sheet = _mobile_sheet(str(recipe["name"]),"Адаптированный рецепт · расчёт приблизительный","Сохранить в мои рецепты",520.0)
     var fields: VBoxContainer = sheet["fields"]
-    _label(fields,"Ингредиенты на " + str(int(recipe["servings"])) + " порц. · выход ≈ " + str(int(recipe["cooked_weight"])) + " г",13,TEXT_ACCENT)
+    _label(fields,"Количество порций для приготовления",12,MUTED)
+    var portions = _number(fields, float(recipe["servings"]), 1, 100, 1)
+    portions.name = "ReadyRecipePortions"
+    var yield_label = _label(fields,"",13,TEXT_ACCENT)
+    var ingredient_labels: Array = []
     for part in recipe["ingredients"]:
-        _label(fields,str(part["name"]) + " · " + str(part["grams"]) + " г",13,INK)
+        ingredient_labels.append(_label(fields,"",13,INK))
+    var refresh = func(value: float):
+        var factor: float = value / float(recipe["servings"])
+        yield_label.text = "Выход ≈ " + str(snappedf(float(recipe["cooked_weight"]) * factor, 0.1)) + " г"
+        for i in range(recipe["ingredients"].size()):
+            var part: Dictionary = recipe["ingredients"][i]
+            ingredient_labels[i].text = str(part["name"]) + " · " + str(snappedf(float(part["grams"]) * factor, 0.1)) + " " + str(part.get("unit","г"))
+    portions.value_changed.connect(refresh)
+    refresh.call(portions.value)
+    var data = RecipeMath.calculate(recipe["ingredients"], float(recipe["cooked_weight"]))
+    var serving_count: float = float(recipe["servings"])
+    _label(fields,"На порцию: ≈ " + str(roundi(float(data["total_kcal"]) / serving_count)) + " ккал · Б " + str(snappedf(float(data["total_p"]) / serving_count, 0.1)) + " · Ж " + str(snappedf(float(data["total_f"]) / serving_count, 0.1)) + " · У " + str(snappedf(float(data["total_c"]) / serving_count, 0.1)),13,TEXT_ACCENT)
+    var add = _button(fields,"Добавить в дневник",func():
+        var id = _save_ready_recipe(recipe)
+        if id.is_empty():
+            _sheet_error(sheet,"Не удалось сохранить рецепт.")
+            return
+        sheet["root"].queue_free()
+        _recipe_portion_sheet(store.recipe_by_id(id))
+    )
+    add.name = "ReadyRecipeAddToDiary"
     _label(fields,str(recipe["instructions"]),14,INK)
     _label(fields,"Адаптация: участники Викиучебника, CC BY-SA 4.0. Изменены количества, текст и расчёт порций.",12,MUTED)
     _button(fields,"Открыть источник",func(): OS.shell_open(str(recipe["source_url"])),true)
