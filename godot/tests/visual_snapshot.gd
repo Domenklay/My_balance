@@ -370,5 +370,42 @@ func _capture() -> void:
             roundi(drawing.get_global_rect().position.y -
             app.scroll.get_global_rect().position.y + app.scroll.scroll_vertical - 34.0))
         await _snapshot(app, "22-body-map-dark")
+
+    # 0.7.50 planner showcase, sampled on the phone-sized viewport.
+    app.store.data["recipes"] = [
+        {"id":"sample_planner_recipe","name":"Овсяная каша с молоком",
+         "cooked_weight":500.0,"servings":2,
+         "ingredients":[
+            {"name":"Хлопья овсяные","grams":200.0,"unit":"г",
+             "kcal":370.0,"p":13.0,"f":7.0,"c":62.0},
+            {"name":"Молоко","grams":300.0,"unit":"мл",
+             "kcal":50.0,"p":3.2,"f":2.0,"c":4.8}
+         ]}
+    ]
+    app.store.data["planned_meals"] = [
+        {"id":"sample_monday","date":"2026-11-23","meal":"Завтрак",
+         "name":"Овсяная каша с молоком","source":"recipe",
+         "source_id":"sample_planner_recipe","grams":250.0,"unit":"г",
+         "nutrition":{"name":"Овсяная каша с молоком",
+           "kcal":178.0,"p":7.12,"f":4.0,"c":27.68},
+         "ingredients":[{"name":"Хлопья овсяные","unit":"г","grams":100.0},
+                        {"name":"Молоко","unit":"мл","grams":150.0}]},
+        {"id":"sample_tuesday","date":"2026-11-24","meal":"Завтрак",
+         "name":"Овсяная каша с молоком","source":"recipe",
+         "source_id":"sample_planner_recipe","grams":250.0,"unit":"г",
+         "nutrition":{"name":"Овсяная каша с молоком",
+           "kcal":178.0,"p":7.12,"f":4.0,"c":27.68},
+         "ingredients":[{"name":"Хлопья овсяные","unit":"г","grams":100.0},
+                        {"name":"Молоко","unit":"мл","grams":150.0}]}
+    ]
+    app.store.data["shopping_checked"] = {}
+    app.tab = "planner"
+    app.planner_day = "2026-11-23"
+    app._render(true)
+    await _snapshot(app, "23-weekly-planner")
+    var shop_list = app.find_child("PlannerShoppingCount", true, false)
+    if shop_list != null:
+        app.scroll.ensure_control_visible(shop_list)
+        await _snapshot(app, "24-planner-shopping-list")
     app.queue_free()
     quit(0)

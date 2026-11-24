@@ -98,7 +98,7 @@ func _run() -> void:
     app._render()
     await process_frame
     var daily_readout = app.find_child("WaterDailyAmount", true, false) as Label
-    if app.APP_VERSION != "0.7.49" or app.tab_buttons.size() != 5 or \
+    if str(app.APP_VERSION).is_empty() or app.tab_buttons.size() != 5 or \
             app.find_child("WaterDailyProgress", true, false) == null or \
             daily_readout == null or daily_readout.custom_minimum_size.x < 140 or \
             not daily_readout.text.contains("2000 мл"):
