@@ -21,7 +21,7 @@ func _run() -> void:
     app.settings_section_open = "google"
     app._render()
     await process_frame
-    if app.APP_VERSION != "0.7.54" or app.find_child("SettingsSection_google", true, false) == null:
+    if app.APP_VERSION != "0.7.55" or app.find_child("SettingsSection_google", true, false) == null:
         _fail("cloud settings missing")
         return
     if app.google_plugin != null:
