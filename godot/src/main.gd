@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.52"
+const APP_VERSION = "0.7.53"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -5092,36 +5092,71 @@ func _edit_entry(entry: Dictionary) -> void:
         _notify_saved("Запись питания изменена")
     )
 
+# Sport metric cards use the existing semantic nutrition palettes, with
+# independent captions and values so no narrow label can stretch a row.
+func _sport_metric(parent: Node, caption: String, value: String, unit: String,
+        background: Color, foreground: Color, metric_id: String) -> void:
+    var panel = PanelContainer.new()
+    panel.name = "SportMetric_" + metric_id
+    panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    var style = StyleBoxFlat.new()
+    style.bg_color = background
+    style.set_corner_radius_all(12)
+    style.content_margin_left = 5
+    style.content_margin_right = 5
+    style.content_margin_top = 9
+    style.content_margin_bottom = 9
+    panel.add_theme_stylebox_override("panel", style)
+    parent.add_child(panel)
+    var stack = VBoxContainer.new()
+    stack.add_theme_constant_override("separation", 2)
+    panel.add_child(stack)
+    for item in [[caption, 12], [value, 18], [unit, 11]]:
+        var label = _nowrap(stack, str(item[0]), int(item[1]), foreground)
+        label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
 func _show_activity() -> void:
     var overview = _card("Движение за день")
-    _compact_card(overview, 10, 7)
+    overview.name = "SportOverviewCard"
+    _compact_card(overview, 12, 8)
     _date_nav(overview)
+    if calendar_expanded:
+        _calendar(overview)
     var summary: Dictionary = store.day_activity_summary(date)
     var metrics = _row(overview)
     metrics.name = "ActivityOverview"
-    for item in [
-        ["Шаги", str(summary["steps"])],
-        ["Занятия", str(summary["minutes"]) + " мин"],
-        ["Энергия", "≈" + str(summary["estimated_kcal"]) + " ккал"]
-    ]:
-        var stat = _label(metrics, str(item[0]) + "\n" + str(item[1]), 12, INK)
-        stat.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-        stat.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        stat.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    metrics.add_theme_constant_override("separation", 6)
+    _sport_metric(metrics, "Шаги", str(summary["steps"]), "за день", PROTEIN_BG, MACRO_PROTEIN, "steps")
+    _sport_metric(metrics, "Занятия", str(summary["minutes"]), "мин", CARBS_BG, MACRO_CARBS, "minutes")
+    _sport_metric(metrics, "Энергия", "≈" + str(summary["estimated_kcal"]), "ккал", FAT_BG, MACRO_FAT, "energy")
+    var step_title = _nowrap(overview, "Шаги за день", 13, INK)
+    step_title.name = "SportStepsCaption"
     var step_row = _row(overview)
-    _label(step_row, "Шаги", 13, MUTED)
-    var steps_input = _number(step_row, float(store.day_steps(date)), 0, 100000, 100)
+    step_row.name = "SportStepsRow"
+    var steps_input = _number(step_row, float(store.day_steps(date)), 0, 100000, 1)
     steps_input.name = "ActivitySteps"
-    steps_input.custom_minimum_size = Vector2(90, 42)
-    var save_steps = _button(step_row, "Сохранить", func():
+    steps_input.custom_minimum_size = Vector2(90, 44)
+    steps_input.get_line_edit().virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+    for delta in [-500, 500]:
+        var amount: int = delta
+        var adjust = _button(step_row, "−500" if amount < 0 else "+500", func():
+            steps_input.value = clampf(steps_input.value + amount, 0, 100000)
+        , true)
+        adjust.name = "SportStepsMinus" if amount < 0 else "SportStepsPlus"
+        adjust.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+        adjust.custom_minimum_size = Vector2(62, 44)
+    var save_steps = _button(overview, "Сохранить шаги", func():
+        steps_input.apply()
         if store.set_day_steps(date, roundi(steps_input.value)):
             _render()
             _notify_saved("Шаги сохранены")
         else:
             _message("Не удалось сохранить шаги.")
-    , true)
+    )
     save_steps.name = "ActivitySaveSteps"
-    _label(overview, "Шаги вводятся вручную. Оценка ккал относится только к записанным тренировкам; норма питания не меняется.", 12, MUTED)
+    save_steps.custom_minimum_size.y = 44
+    _label(overview, "Шаги вводятся вручную. Ккал — только по тренировкам; норма питания не меняется.", 11, MUTED)
 
     var card = _card("Добавить тренировку")
     _compact_card(card, 10, 7)
@@ -5140,10 +5175,10 @@ func _show_activity() -> void:
     var distance_box = VBoxContainer.new()
     distance_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     duration_row.add_child(distance_box)
-    _label(distance_box, "Километры (необязательно)", 12, MUTED)
+    _nowrap(distance_box, "Км (необязательно)", 12, MUTED)
     var distance = _number(distance_box, 0, 0, 100, 0.1)
     distance.name = "ActivityDistance"
-    var detail = _text_input(card, "Комментарий: упражнения, подходы, темп…")
+    var detail = _text_input(card, "Комментарий (необязательно)")
     detail.name = "ActivityDetail"
     var save_activity = _button(card, "Сохранить активность", func():
         if store.add_activity(date, types[kind.selected], minutes.value, distance.value, detail.text):
@@ -5153,6 +5188,7 @@ func _show_activity() -> void:
             _message("Не удалось сохранить тренировку. Проверь данные и память устройства.")
     )
     save_activity.name = "ActivitySaveWorkout"
+    save_activity.custom_minimum_size.y = 44
 
     var saved = _card("Тренировки за день")
     _compact_card(saved, 10, 6)

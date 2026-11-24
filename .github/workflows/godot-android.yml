@@ -178,6 +178,8 @@ jobs:
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/body_measurements_0745_test.gd
       - name: Test 0.7.44 five-tab layout, direct meal search and combined progress
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/simple_ui_0744_test.gd
+      - name: Test 0.7.53 compact sport dashboard in all five themes
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/sport_layout_0753_test.gd
       - name: Test 0.7.43 activity, manual steps, estimated energy, week totals and migration
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/activity_0743_test.gd
       - name: Test 0.7.42 barcode discovery, local saved products, exact repeats and live label review
