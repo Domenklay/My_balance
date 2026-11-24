@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.72.1"
+const APP_VERSION = "0.7.72.2"
 const RecipeSuggest = preload("res://src/recipe_suggest.gd")
 const ReadyRecipes = preload("res://src/ready_recipes.gd")
 const CommunityClient = preload("res://src/community_client.gd")
@@ -151,6 +151,8 @@ var settings_page: String = "main"
 var settings_section_open: String = ""
 var recipe_editor_open: bool = false
 var recipe_from_search: bool = false
+var recipe_details_expanded: bool = false
+var food_history_expanded: bool = false
 var onboarding_profile: Dictionary = {}
 var onboarding_avatar_preview: Button
 var onboarding_photo_status: Label
@@ -2077,6 +2079,7 @@ func _apply_recipe_photo_bytes(raw: PackedByteArray) -> bool:
 func _begin_recipe_editor(recipe: Dictionary = {}, from_search: bool = false) -> void:
     recipe_editor_open = true
     recipe_from_search = from_search
+    recipe_details_expanded = false
     recipe_search_text = ""
     recipe_manual_open = false
     if recipe.is_empty():
@@ -2152,16 +2155,33 @@ func _recipe_append_ingredient(food: Dictionary, amount: float,
 
 func _show_recipe_editor() -> void:
     var toolbar = _card("Рассчитать домашнее блюдо" if recipe_from_search else "Редактор домашнего блюда")
-    _label(toolbar, "Для каждого ингредиента КБЖУ берётся на 100 г или 100 мл. Укажи съедобный вес готового блюда: выпаривание воды меняет калорийность 100 г, но не общие КБЖУ.", 13, MUTED)
+    _compact_card(toolbar, 10, 6)
+    _label(toolbar, "Добавь ингредиенты и взвесь готовое блюдо без посуды." if recipe_from_search else "КБЖУ ингредиентов на 100 г или 100 мл. Вес после готовки определяет КБЖУ на 100 г.", 12, MUTED)
     var name = _text_input(toolbar, "Название блюда", str(recipe_draft.get("name", "")))
     name.max_length = 160
     name.name = "RecipeDishName"
-    _label(toolbar, "Категория блюда", 13, MUTED)
-    var category = _choice(toolbar, RecipeMath.CATEGORY_LABELS)
+    var metadata = VBoxContainer.new()
+    metadata.name = "RecipeOptionalDetails"
+    metadata.add_theme_constant_override("separation", 5)
+    toolbar.add_child(metadata)
+    metadata.visible = not recipe_from_search or recipe_details_expanded
+    if recipe_from_search:
+        var details_toggle = _button(toolbar, "▴ Скрыть детали рецепта" if recipe_details_expanded else "▾ Категория, фото и описание (необязательно)", Callable(), true)
+        details_toggle.name = "RecipeOptionalToggle"
+        details_toggle.custom_minimum_size.y = 38
+        details_toggle.add_theme_font_size_override("font_size", 12)
+        toolbar.move_child(details_toggle, metadata.get_index())
+        details_toggle.pressed.connect(func():
+            recipe_details_expanded = not recipe_details_expanded
+            metadata.visible = recipe_details_expanded
+            details_toggle.text = "▴ Скрыть детали рецепта" if recipe_details_expanded else "▾ Категория, фото и описание (необязательно)"
+        )
+    _label(metadata, "Категория блюда", 13, MUTED)
+    var category = _choice(metadata, RecipeMath.CATEGORY_LABELS)
     category.name = "RecipeEditCategory"
     category.select(maxi(0, RecipeMath.CATEGORY_IDS.find(str(recipe_draft.get("category", "other")))))
     category.item_selected.connect(func(index: int): recipe_draft["category"] = RecipeMath.CATEGORY_IDS[index])
-    _label(toolbar, "Способ приготовления (необязательно)", 13, MUTED)
+    _label(metadata, "Способ приготовления (необязательно)", 13, MUTED)
     var instructions = TextEdit.new()
     instructions.name = "RecipeInstructions"
     instructions.custom_minimum_size = Vector2(0, 100)
@@ -2170,13 +2190,15 @@ func _show_recipe_editor() -> void:
     instructions.placeholder_text = "Опиши шаги приготовления…"
     instructions.text = str(recipe_draft.get("instructions", ""))
     instructions.text_changed.connect(func(): recipe_draft["instructions"] = instructions.text)
-    toolbar.add_child(instructions)
-    _label(toolbar, "Вес после приготовления, г (съедобная часть, без посуды)", 13, MUTED)
-    var cooked = _number(toolbar, float(recipe_draft.get("cooked_weight", 500)), 0 if recipe_from_search else 1, 50000, 1)
+    metadata.add_child(instructions)
+    var yield_card = _card("Вес готового блюда") if recipe_from_search else toolbar
+    _compact_card(yield_card, 10, 6)
+    _label(yield_card, "Вес после приготовления, г (без посуды)", 13, MUTED)
+    var cooked = _number(yield_card, float(recipe_draft.get("cooked_weight", 500)), 0 if recipe_from_search else 1, 50000, 1)
     cooked.name = "RecipeCookedWeight"
-    _label(toolbar, "На сколько порций разделить", 13, MUTED)
-    var portions = _number(toolbar, float(recipe_draft.get("servings", 4)), 1, 100, 1)
-    var picture_row = _row(toolbar)
+    _label(metadata, "На сколько порций разделить", 13, MUTED)
+    var portions = _number(metadata, float(recipe_draft.get("servings", 4)), 1, 100, 1)
+    var picture_row = _row(metadata)
     _recipe_photo_thumb(picture_row, recipe_draft, 70)
     var picture_actions = VBoxContainer.new()
     picture_actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2196,8 +2218,13 @@ func _show_recipe_editor() -> void:
         , true)
         remove_photo.name = "RecipeRemovePhoto"
         remove_photo.custom_minimum_size.y = 34
-    var preview: Label = null
+    # Create the real label before wiring callbacks: lambdas capture local values.
+    var preview_card = _card("Расчёт КБЖУ на 100 г и всё блюдо")
+    _compact_card(preview_card, 10, 6)
+    var preview = _label(preview_card, "", 14, INK)
+    preview.name = "RecipeDishNutrition"
     var info = _card("Ингредиенты", "tint")
+    _compact_card(info, 10, 5)
     var parts: Array = recipe_draft.get("ingredients", [])
     if parts.is_empty():
         _label(info, "Пока ингредиентов нет. Найди продукт ниже и добавь его вес.", 13, MUTED)
@@ -2209,6 +2236,7 @@ func _show_recipe_editor() -> void:
             " (" + str(ingredient.get("unit", "г")) + ")", 13, INK)
         label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         var grams = _number(line, float(ingredient.get("grams", 100)), 1, 10000, 1)
+        grams.name = "RecipeIngredientWeight_" + str(index)
         grams.tooltip_text = "Количество ингредиента, " + str(ingredient.get("unit", "г"))
         grams.custom_minimum_size.x = 83
         grams.size_flags_horizontal = Control.SIZE_SHRINK_END
@@ -2222,7 +2250,9 @@ func _show_recipe_editor() -> void:
             _render()
         , true)
     var add = _card("Добавить ингредиент")
+    _compact_card(add, 10, 5)
     var search = _text_input(add, "Название продукта")
+    search.name = "RecipeIngredientSearch"
     search.text = recipe_search_text
     search.clear_button_enabled = true
     var filtered: Array = []
@@ -2284,7 +2314,8 @@ func _show_recipe_editor() -> void:
             chip.clip_text = true
             chip.custom_minimum_size.y = 35
             chip.add_theme_font_size_override("font_size", 12)
-    var manual = _card("Нет ингредиента в каталоге?")
+    var manual = _card("")
+    _compact_card(manual, 8, 4)
     _button(manual, "▴ Свернуть ручной ввод" if recipe_manual_open else "+ Ввести ингредиент вручную", func():
         _recipe_sync_form(name, cooked, portions)
         recipe_manual_open = not recipe_manual_open
@@ -2317,13 +2348,13 @@ func _show_recipe_editor() -> void:
             recipe_manual_open = false
             _render()
         )
-    var preview_card = _card("Расчёт КБЖУ на 100 г и всё блюдо")
-    preview = _label(preview_card, "", 14, INK)
-    preview.name = "RecipeDishNutrition"
+    if recipe_from_search:
+        body.move_child(yield_card.get_parent(), body.get_child_count() - 1)
+    body.move_child(preview_card.get_parent(), body.get_child_count() - 1)
     cooked.value_changed.connect(func(_value: float): _recipe_preview(preview, cooked, portions))
     portions.value_changed.connect(func(_value: float): _recipe_preview(preview, cooked, portions))
     _recipe_preview(preview, cooked, portions)
-    _label(preview_card, "Для КБЖУ используй съедобные ингредиенты, включая использованное масло и съеденный соус. Неучтённые потери питательных веществ при готовке автоматически не вычитаются.", 12, MUTED)
+    _label(preview_card, "Учитывай съеденное масло и соусы. Потери питательных веществ при готовке не вычитаются автоматически.", 11, MUTED)
     var buttons = _row(preview_card)
     _button(buttons, "Отмена", func():
         recipe_editor_open = false
@@ -2346,7 +2377,7 @@ func _show_recipe_editor() -> void:
             _recipe_portion_sheet(draft, minf(100.0, float(draft["cooked_weight"])), _selected_food_date(), true)
         )
         add_dish.name = "RecipeDishAdd"
-    _button(buttons, "Сохранить рецепт", func():
+    _button(buttons, "Сохранить блюдо" if recipe_from_search else "Сохранить рецепт", func():
         _recipe_sync_form(name, cooked, portions)
         var saved = store.save_recipe(recipe_draft)
         if saved.is_empty():
@@ -3558,37 +3589,19 @@ func _open_recipes_from_products() -> void:
 
 
 func _show_food_search() -> void:
-    var intro = _card("Продукты", "hero")
+    var intro = _card("", "hero")
     _compact_card(intro, 8, 4)
+    var heading = _row(intro)
+    var title = _label(heading, selected_meal if _meal_entry_locked else "Продукты", 18, WHITE)
+    title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     if _meal_entry_locked:
-        _label(intro, "Добавление в «" + selected_meal + "» · " +
-            _selected_food_date(), 13, HERO_MUTED)
-        _button(intro, "← Назад к дневнику", func(): _navigate_to_tab("day"), true)
-    var shortcuts = _row(intro)
-    shortcuts.name = "ProductShortcuts"
-    var recipes_link = _button(shortcuts, "▤ Мои рецепты",
-        func(): _open_recipes_from_products(), true)
-    recipes_link.name = "ProductsOpenRecipes"
-    recipes_link.custom_minimum_size.y = 38
-    recipes_link.add_theme_font_size_override("font_size", 12)
-    recipes_link.clip_text = true
-    var my_foods_link = _button(shortcuts, "Мои продукты", func():
-        settings_page = "foods"
-        _navigate_to_tab("settings")
-    , true)
-    my_foods_link.name = "ProductsOpenMyFoods"
-    my_foods_link.custom_minimum_size.y = 38
-    my_foods_link.add_theme_font_size_override("font_size", 12)
-    my_foods_link.clip_text = true
-    if not _meal_entry_locked:
-        var planner_link = _button(shortcuts, "▦ План недели",
-            func(): _open_week_planner(), true)
-        planner_link.name = "ProductsOpenPlanner"
-        planner_link.custom_minimum_size.y = 38
-        planner_link.add_theme_font_size_override("font_size", 12)
-        planner_link.clip_text = true
-    var catalog = _card("Найти и добавить продукт")
-    _compact_card(catalog, 10, 7)
+        var back = _button(heading, "← Дневник", func(): _navigate_to_tab("day"), true)
+        back.custom_minimum_size = Vector2(90, 38)
+        back.size_flags_horizontal = Control.SIZE_SHRINK_END
+        back.add_theme_font_size_override("font_size", 12)
+        _label(intro, "Дата: " + _selected_food_date(), 11, HERO_MUTED)
+    var catalog = _card("Найти продукт")
+    _compact_card(catalog, 8, 5)
     _food_form(catalog)
 
 
@@ -5946,8 +5959,8 @@ func _food_form(parent: VBoxContainer) -> void:
     quick_tabs.add_theme_constant_override("v_separation", 4)
     parent.add_child(quick_tabs)
     for option in [
-        ["Недавние", 5], ["Мои", 3], ["★ Избранное", 4],
-        ["Частые", 6], ["Брендовые", 2], ["Все", 0]
+        ["Недавние", 5], ["Частые", 6], ["★ Избранное", 4],
+        ["Мои", 3], ["Брендовые", 2], ["Все", 0]
     ]:
         var target_index: int = int(option[1])
         var filter_button = _button(quick_tabs, str(option[0]), func():
@@ -5964,35 +5977,24 @@ func _food_form(parent: VBoxContainer) -> void:
     quick_lists.name = "FoodRecentFavorites"
     quick_lists.add_theme_constant_override("separation", 5)
     parent.add_child(quick_lists)
-    var create_dish = _button(quick_lists, "+ Рассчитать целое блюдо", func():
+    var dish_actions = _row(parent)
+    dish_actions.name = "ProductShortcuts"
+    var create_dish = _button(dish_actions, "+ Создать блюдо", func():
         tab = "recipes"
         _begin_recipe_editor({}, true)
     , true)
     create_dish.name = "FoodCreateDish"
     create_dish.custom_minimum_size.y = 42
-    var history: Array = store.food_search_history()
-    if not history.is_empty():
-        var history_head = _row(quick_lists)
-        var history_title = _label(history_head, "История поиска", 14, TEXT_ACCENT)
-        history_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        var clear = _button(history_head, "Очистить", func():
-            if store.clear_food_search_history():
-                _render()
-        , true)
-        clear.name = "FoodSearchHistoryClear"
-        clear.size_flags_horizontal = Control.SIZE_SHRINK_END
-        clear.custom_minimum_size.y = 34
-        var history_box = GridContainer.new()
-        history_box.name = "FoodSearchHistory"
-        history_box.columns = 2
-        quick_lists.add_child(history_box)
-        for term in history.slice(0, 6):
-            var history_button = _button(history_box, str(term), func():
-                search.text = str(term)
-                search.text_changed.emit(search.text)
-            , true)
-            history_button.clip_text = true
-            history_button.custom_minimum_size.y = 34
+    create_dish.add_theme_font_size_override("font_size", 13)
+    var recipes_link = _button(dish_actions, "Мои блюда", func(): _open_recipes_from_products(), true)
+    recipes_link.name = "ProductsOpenRecipes"
+    recipes_link.custom_minimum_size.y = 42
+    recipes_link.add_theme_font_size_override("font_size", 13)
+    var history_section = VBoxContainer.new()
+    history_section.name = "FoodHistorySection"
+    history_section.add_theme_constant_override("separation", 4)
+    quick_lists.add_child(history_section)
+    _refresh_food_history(history_section, search)
     var recents: Array = store.recent_food_entries(4)
     if not recents.is_empty():
         _label(quick_lists, "Недавние продукты", 15, TEXT_ACCENT)
@@ -6000,7 +6002,13 @@ func _food_form(parent: VBoxContainer) -> void:
             var food: Dictionary = record["food"]
             var last_amount = str(roundi(float(record["grams"]))) + " " + str(record["unit"])
             var shortcut = _soft_list_row(quick_lists)
-            var caption = _label(shortcut, str(food.get("name", "Продукт")) + " · " + last_amount, 12, INK)
+            var info = VBoxContainer.new()
+            info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            info.add_theme_constant_override("separation", 1)
+            shortcut.add_child(info)
+            var caption = _label(info, str(food.get("name", "Продукт")), 13, INK)
+            var kcal: float = float(food.get("kcal", 0)) * float(record["grams"]) / 100.0
+            _label(info, last_amount + " · " + str(roundi(kcal)) + " ккал", 11, MUTED)
             caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
             caption.autowrap_mode = TextServer.AUTOWRAP_OFF
             caption.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -6054,9 +6062,13 @@ func _food_form(parent: VBoxContainer) -> void:
         favorite_count += 1
     search.text_changed.connect(func(_value: String):
         quick_lists.visible = search.text.strip_edges().is_empty() and category.selected == 0
+        if quick_lists.visible:
+            _refresh_food_history(history_section, search)
     )
     search.focus_exited.connect(func():
         store.remember_food_search(search.text)
+        if is_instance_valid(history_section) and history_section.is_inside_tree():
+            _refresh_food_history(history_section, search)
     )
     # One compact sorter for local results; online Open Food Facts search keeps
     # its own result ordering and label-review workflow.
@@ -6081,9 +6093,20 @@ func _food_form(parent: VBoxContainer) -> void:
     )
     # Results and portion selection are shown first. Legacy batch-add
     # controls remain accessible but are collapsed to avoid a long page.
+    var management = _row(parent)
+    management.name = "FoodManagement"
+    var my_foods_link = _button(management, "Мои продукты", func():
+        settings_page = "foods"
+        _navigate_to_tab("settings")
+    , true)
+    my_foods_link.name = "ProductsOpenMyFoods"
+    my_foods_link.custom_minimum_size.y = 38
+    if not _meal_entry_locked:
+        var planner_link = _button(management, "План недели", func(): _open_week_planner(), true)
+        planner_link.name = "ProductsOpenPlanner"
     var advanced_controls: Array = [
         favorite_only, picker, category_label, category, units_hint, values,
-        grams_presets, meal, preview, added_count, controls
+        grams_presets, meal, preview, added_count, controls, management
     ]
     for control in advanced_controls:
         control.visible = false
@@ -6102,13 +6125,57 @@ func _food_form(parent: VBoxContainer) -> void:
     parent.move_child(online_search_label, 4)
     parent.move_child(online_results_box, 5)
     parent.move_child(quick_tabs, 6)
-    parent.move_child(quick_lists, 7)
-    parent.move_child(sort_row, 8)
-    parent.move_child(results_box, 9)
-    parent.move_child(advanced_button, 10)
+    parent.move_child(dish_actions, 7)
+    parent.move_child(quick_lists, 8)
+    parent.move_child(sort_row, 9)
+    parent.move_child(results_box, 10)
+    parent.move_child(advanced_button, 11)
     parent.move_child(barcode_panel, parent.get_child_count() - 1)
     parent.move_child(barcode_divider, parent.get_child_count() - 2)
     _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star, category, results_box, meal, added_count)
+
+func _refresh_food_history(section: VBoxContainer, search: LineEdit) -> void:
+    for child in section.get_children():
+        section.remove_child(child)
+        child.queue_free()
+    var history: Array = store.food_search_history()
+    section.visible = not history.is_empty()
+    if history.is_empty():
+        return
+    var history_head = _row(section)
+    var history_title = _label(history_head, "История поиска", 14, TEXT_ACCENT)
+    history_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    var clear = _button(history_head, "Очистить", func():
+        if store.clear_food_search_history():
+            food_history_expanded = false
+            _refresh_food_history(section, search)
+    , true)
+    clear.name = "FoodSearchHistoryClear"
+    clear.size_flags_horizontal = Control.SIZE_SHRINK_END
+    clear.custom_minimum_size.y = 34
+    var history_box = GridContainer.new()
+    history_box.name = "FoodSearchHistory"
+    history_box.columns = 2
+    section.add_child(history_box)
+    var limit = history.size() if food_history_expanded else mini(6, history.size())
+    for i in range(limit):
+        var term: String = str(history[i])
+        var history_button = _button(history_box, term, func():
+            store.remember_food_search(term)
+            search.text = term
+            search.text_changed.emit(term)
+        , true)
+        history_button.clip_text = true
+        history_button.custom_minimum_size.y = 34
+        history_button.tooltip_text = term
+    if history.size() > 6:
+        var more = _button(section, "Свернуть историю" if food_history_expanded else "Вся история (" + str(history.size()) + ")", func():
+            food_history_expanded = not food_history_expanded
+            _refresh_food_history(section, search)
+        , true)
+        more.name = "FoodSearchHistoryMore"
+        more.custom_minimum_size.y = 34
+
 
 func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only: CheckButton,
         filtered: Array, grams: SpinBox, preview: Label, star: Button,

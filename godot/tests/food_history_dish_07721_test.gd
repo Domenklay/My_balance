@@ -33,6 +33,21 @@ func _run() -> void:
     if app.find_child("FoodSearchHistory",true,false) == null:
         _fail("history not visible")
         return
+    for i in range(8):
+        app.store.remember_food_search("запрос " + str(i))
+    app._render()
+    await process_frame
+    var history = app.find_child("FoodSearchHistory",true,false)
+    var more = app.find_child("FoodSearchHistoryMore",true,false) as Button
+    if history == null or history.get_child_count() != 6 or more == null:
+        _fail("compact history")
+        return
+    more.pressed.emit()
+    await process_frame
+    history = app.find_child("FoodSearchHistory",true,false)
+    if history.get_child_count() != 10:
+        _fail("full history inaccessible")
+        return
     (app.find_child("FoodCreateDish",true,false) as Button).pressed.emit()
     await process_frame
     if app.tab != "recipes" or not app.recipe_from_search or not app._meal_entry_locked:
@@ -47,6 +62,28 @@ func _run() -> void:
     if preview == null or not preview.text.contains("На 100 г готового: 50 ккал") or not preview.text.contains("Б 5"):
         _fail("whole dish nutrition calculation")
         return
+    var details = app.find_child("RecipeOptionalDetails",true,false)
+    var toggle = app.find_child("RecipeOptionalToggle",true,false) as Button
+    if details == null or details.visible or toggle == null:
+        _fail("quick calculator must hide optional recipe details")
+        return
+    toggle.pressed.emit()
+    if not details.visible:
+        _fail("optional details cannot be opened")
+        return
+    toggle.pressed.emit()
+    var grams = app.find_child("RecipeIngredientWeight_0",true,false) as SpinBox
+    var cooked = app.find_child("RecipeCookedWeight",true,false) as SpinBox
+    grams.value = 300
+    if not preview.text.contains("На 100 г готового: 75 ккал"):
+        _fail("ingredient edit did not refresh nutrition immediately")
+        return
+    cooked.value = 600
+    if not preview.text.contains("На 100 г готового: 50 ккал"):
+        _fail("cooked weight edit did not refresh nutrition")
+        return
+    grams.value = 200
+    cooked.value = 400
     (app.find_child("RecipeDishAdd",true,false) as Button).pressed.emit()
     await process_frame
     var full = app.find_child("RecipeWholeDish",true,false) as Button
