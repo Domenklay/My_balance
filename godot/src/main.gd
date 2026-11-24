@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.66"
+const APP_VERSION = "0.7.67"
 const ReadyRecipes = preload("res://src/ready_recipes.gd")
 const CommunityClient = preload("res://src/community_client.gd")
 const InterfaceLanguage = preload("res://src/interface_language.gd")
@@ -98,7 +98,10 @@ var header_pattern: Control
 var header_title: Label
 var header_subtitle: Label
 var emblem_panel: PanelContainer
-var emblem_label: Label
+var header_avatar_button: Button
+var header_avatar_photo: TextureRect
+var header_avatar_name: Label
+var header_avatar_cached: String = ""
 
 var store = StoreScript.new()
 var date: String = Time.get_date_string_from_system()
@@ -287,8 +290,7 @@ func _refresh_appearance() -> void:
         var symbol_style = emblem_panel.get_theme_stylebox("panel") as StyleBoxFlat
         if symbol_style != null:
             symbol_style.bg_color = LOGO_BG
-    if is_instance_valid(emblem_label):
-        emblem_label.add_theme_color_override("font_color", SOFT_GOLD)
+    _refresh_header_avatar()
     if is_instance_valid(shell):
         var navigation = shell.get_node_or_null("BottomNavigation") as PanelContainer
         if navigation != null:
@@ -453,22 +455,56 @@ func _ready() -> void:
     heading.add_child(brand)
     header_title = _label(brand, "Мой баланс", 21, WHITE)
     header_subtitle = _label(brand, "Забота о себе каждый день", 10, HEADER_MUTED)
+    header_avatar_name = Label.new()
+    header_avatar_name.name = "HeaderAvatarName"
+    header_avatar_name.custom_minimum_size.x = 72
+    header_avatar_name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+    header_avatar_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+    header_avatar_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    header_avatar_name.add_theme_font_size_override("font_size", 11)
+    heading.add_child(header_avatar_name)
     emblem_panel = PanelContainer.new()
-    emblem_panel.custom_minimum_size = Vector2(42, 42)
+    emblem_panel.name = "HeaderAvatarFrame"
+    emblem_panel.custom_minimum_size = Vector2(46, 46)
     emblem_panel.size_flags_horizontal = Control.SIZE_SHRINK_END
     emblem_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
     var logo_style = StyleBoxFlat.new()
     logo_style.bg_color = LOGO_BG
-    logo_style.set_corner_radius_all(13)
-    logo_style.content_margin_left = 5
-    logo_style.content_margin_right = 5
-    logo_style.content_margin_top = 5
-    logo_style.content_margin_bottom = 5
+    logo_style.set_corner_radius_all(23)
+    logo_style.set_border_width_all(1)
+    logo_style.border_color = BORDER
+    logo_style.content_margin_left = 3
+    logo_style.content_margin_right = 3
+    logo_style.content_margin_top = 3
+    logo_style.content_margin_bottom = 3
     emblem_panel.add_theme_stylebox_override("panel", logo_style)
     heading.add_child(emblem_panel)
-    emblem_label = _label(emblem_panel, "✦", 21, SOFT_GOLD)
-    emblem_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    emblem_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    header_avatar_button = Button.new()
+    header_avatar_button.name = "HeaderAvatarButton"
+    header_avatar_button.flat = true
+    header_avatar_button.custom_minimum_size = Vector2(40, 40)
+    header_avatar_button.add_theme_font_size_override("font_size", 25)
+    header_avatar_button.tooltip_text = "Открыть профиль"
+    header_avatar_button.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+    header_avatar_button.pressed.connect(func():
+        if tab != "onboarding":
+            _navigate_to_tab("profile")
+    )
+    emblem_panel.add_child(header_avatar_button)
+    header_avatar_photo = TextureRect.new()
+    header_avatar_photo.name = "HeaderAvatarPhoto"
+    header_avatar_photo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    header_avatar_photo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    header_avatar_photo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+    header_avatar_button.add_child(header_avatar_photo)
+    header_avatar_photo.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    var mask_shader = Shader.new()
+    mask_shader.code = "shader_type canvas_item; void fragment() { vec4 pixel = texture(TEXTURE, UV); float mask = 1.0 - smoothstep(0.48, 0.5, distance(UV, vec2(0.5))); COLOR = vec4(pixel.rgb, pixel.a * mask); }"
+    var mask_material = ShaderMaterial.new()
+    mask_material.shader = mask_shader
+    header_avatar_photo.material = mask_material
+    header_avatar_name.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+    _refresh_header_avatar()
     scroll = ScrollContainer.new()
     scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
     scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1109,6 +1145,7 @@ func _render(reset_position: bool = false) -> void:
     _update_tabs()
     if is_instance_valid(header_subtitle):
         header_subtitle.visible = true
+    _refresh_header_avatar()
     # Botanical texture belongs on the wallpaper, not behind nutrition values.
     if is_instance_valid(wallpaper_pattern):
         wallpaper_pattern.configure(PATTERN_STYLE, PATTERN_COLOR, PATTERNS,
@@ -1215,6 +1252,38 @@ func _month_offset(month: String, amount: int) -> String:
 func _shift_month(delta: int) -> void:
     month_shown = _month_offset(month_shown, delta)
     _render()
+
+func _refresh_header_avatar() -> void:
+    if not is_instance_valid(header_avatar_button):
+        return
+    var profile: Dictionary = store.data.get("profile", {})
+    var name_text: String = str(profile.get("name", "")).strip_edges()
+    if name_text == "Мой профиль":
+        name_text = ""
+    header_avatar_name.text = name_text
+    header_avatar_name.tooltip_text = name_text
+    header_avatar_name.visible = not name_text.is_empty() and tab != "onboarding"
+    header_avatar_name.add_theme_color_override("font_color", WHITE)
+    # Do not allow leaving the first-run or edit questionnaire through the avatar.
+    header_avatar_button.disabled = tab == "onboarding"
+    var encoded: String = str(profile.get("photo", ""))
+    if encoded != header_avatar_cached:
+        header_avatar_cached = encoded
+        header_avatar_photo.texture = ProfilePhotoScript.decode_photo(encoded)
+    header_avatar_photo.visible = header_avatar_photo.texture != null
+    var avatar_id: String = str(profile.get("avatar", ""))
+    var glyph: String = _avatar_character(avatar_id) if avatar_id in ["leaf","star","moon","sun","flower","heart"] else (name_text.left(1).to_upper() if not name_text.is_empty() else "❧")
+    header_avatar_button.text = "" if header_avatar_photo.visible else glyph
+    for state in ["font_color","font_hover_color","font_pressed_color","font_focus_color","font_disabled_color"]:
+        header_avatar_button.add_theme_color_override(state, SOFT_GOLD)
+    var style = emblem_panel.get_theme_stylebox("panel") as StyleBoxFlat
+    if style != null:
+        style.bg_color = LOGO_BG
+        var frame_id: String = str(profile.get("frame", "plain"))
+        var frame_data: Dictionary = RewardsScript.frame_by_id(frame_id)
+        style.border_color = BORDER if frame_id == "plain" else Color(str(frame_data.get("color", "#9AAFA8")))
+        style.set_border_width_all(1 if frame_id == "plain" else 2)
+
 
 func _avatar_character(id: String) -> String:
     return {"leaf":"❧", "star":"✦", "moon":"☾", "sun":"☀", "flower":"✿", "heart":"♥"}.get(id, "❧")

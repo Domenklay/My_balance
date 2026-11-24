@@ -23,6 +23,15 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Restore Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: mybalance-gradle-4.6.3-${{ runner.os }}-${{ hashFiles('android_scanner/patch_template.py') }}
+          restore-keys: |
+            mybalance-gradle-4.6.3-${{ runner.os }}-
       - name: Install Android SDK components
         shell: bash
         run: |
@@ -180,6 +189,8 @@ jobs:
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/simple_ui_0744_test.gd
       - name: Test community server API and moderation
         run: cd community_server && python3 -m unittest -v test_server
+      - name: Test 0.7.67 avatar header, photo and navigation
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/header_avatar_0767_test.gd
       - name: Test 0.7.66 offline ready recipe catalog and safe copying
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/ready_recipes_0766_test.gd
       - name: Test 0.7.65 community UI and private payload
@@ -246,7 +257,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p godot/build
-          /tmp/godot --headless --path godot --export-debug "Android" "$GITHUB_WORKSPACE/godot/build/MyBalance-debug.apk"
+          for attempt in 1 2; do
+            rm -f godot/build/MyBalance-debug.apk
+            if /tmp/godot --headless --path godot --export-debug "Android" "$GITHUB_WORKSPACE/godot/build/MyBalance-debug.apk" 2>&1 | tee /tmp/mybalance-export.log; then
+              break
+            fi
+            if [ "$attempt" = 2 ] || ! grep -qiE '429|Too Many Requests' /tmp/mybalance-export.log; then
+              exit 1
+            fi
+            sleep 45
+          done
           test -s godot/build/MyBalance-debug.apk
           sha256sum godot/build/MyBalance-debug.apk
       - name: Check generated APK and report size
