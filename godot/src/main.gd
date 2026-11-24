@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.72"
+const APP_VERSION = "0.7.72.1"
 const RecipeSuggest = preload("res://src/recipe_suggest.gd")
 const ReadyRecipes = preload("res://src/ready_recipes.gd")
 const CommunityClient = preload("res://src/community_client.gd")
@@ -150,6 +150,7 @@ var settings_page: String = "main"
 # usable on smaller phones; this is presentation state, not diary data.
 var settings_section_open: String = ""
 var recipe_editor_open: bool = false
+var recipe_from_search: bool = false
 var onboarding_profile: Dictionary = {}
 var onboarding_avatar_preview: Button
 var onboarding_photo_status: Label
@@ -2073,14 +2074,15 @@ func _apply_recipe_photo_bytes(raw: PackedByteArray) -> bool:
     return true
 
 
-func _begin_recipe_editor(recipe: Dictionary = {}) -> void:
+func _begin_recipe_editor(recipe: Dictionary = {}, from_search: bool = false) -> void:
     recipe_editor_open = true
+    recipe_from_search = from_search
     recipe_search_text = ""
     recipe_manual_open = false
     if recipe.is_empty():
         recipe_draft = {
-            "id": "", "name": "", "cooked_weight": 500.0,
-            "servings": 4.0, "ingredients": [], "photo": "", "category": "other", "instructions": ""
+            "id": "", "name": "", "cooked_weight": 0.0 if from_search else 500.0,
+            "servings": 1.0 if from_search else 4.0, "ingredients": [], "photo": "", "category": "other", "instructions": ""
         }
     else:
         recipe_draft = recipe.duplicate(true)
@@ -2149,10 +2151,11 @@ func _recipe_append_ingredient(food: Dictionary, amount: float,
 
 
 func _show_recipe_editor() -> void:
-    var toolbar = _card("Редактор домашнего блюда")
+    var toolbar = _card("Рассчитать домашнее блюдо" if recipe_from_search else "Редактор домашнего блюда")
     _label(toolbar, "Для каждого ингредиента КБЖУ берётся на 100 г или 100 мл. Укажи съедобный вес готового блюда: выпаривание воды меняет калорийность 100 г, но не общие КБЖУ.", 13, MUTED)
     var name = _text_input(toolbar, "Название блюда", str(recipe_draft.get("name", "")))
     name.max_length = 160
+    name.name = "RecipeDishName"
     _label(toolbar, "Категория блюда", 13, MUTED)
     var category = _choice(toolbar, RecipeMath.CATEGORY_LABELS)
     category.name = "RecipeEditCategory"
@@ -2169,7 +2172,8 @@ func _show_recipe_editor() -> void:
     instructions.text_changed.connect(func(): recipe_draft["instructions"] = instructions.text)
     toolbar.add_child(instructions)
     _label(toolbar, "Вес после приготовления, г (съедобная часть, без посуды)", 13, MUTED)
-    var cooked = _number(toolbar, float(recipe_draft.get("cooked_weight", 500)), 1, 50000, 1)
+    var cooked = _number(toolbar, float(recipe_draft.get("cooked_weight", 500)), 0 if recipe_from_search else 1, 50000, 1)
+    cooked.name = "RecipeCookedWeight"
     _label(toolbar, "На сколько порций разделить", 13, MUTED)
     var portions = _number(toolbar, float(recipe_draft.get("servings", 4)), 1, 100, 1)
     var picture_row = _row(toolbar)
@@ -2313,8 +2317,9 @@ func _show_recipe_editor() -> void:
             recipe_manual_open = false
             _render()
         )
-    var preview_card = _card("Расчёт КБЖУ")
+    var preview_card = _card("Расчёт КБЖУ на 100 г и всё блюдо")
     preview = _label(preview_card, "", 14, INK)
+    preview.name = "RecipeDishNutrition"
     cooked.value_changed.connect(func(_value: float): _recipe_preview(preview, cooked, portions))
     portions.value_changed.connect(func(_value: float): _recipe_preview(preview, cooked, portions))
     _recipe_preview(preview, cooked, portions)
@@ -2324,8 +2329,23 @@ func _show_recipe_editor() -> void:
         recipe_editor_open = false
         recipe_draft = {}
         recipe_search_text = ""
+        if recipe_from_search:
+            recipe_from_search = false
+            tab = "search"
         _render(true)
     , true)
+    if recipe_from_search:
+        var add_dish = _button(preview_card, "Добавить блюдо в дневник", func():
+            _recipe_sync_form(name, cooked, portions)
+            var draft: Dictionary = recipe_draft.duplicate(true)
+            if str(draft["id"]).is_empty():
+                draft["id"] = "r" + str(Time.get_ticks_usec()) + "_" + str(store.data["recipes"].size())
+            if not RecipeMath.validate_recipe(draft):
+                _message("Укажи название, ингредиенты и фактический вес всего готового блюда.")
+                return
+            _recipe_portion_sheet(draft, minf(100.0, float(draft["cooked_weight"])), _selected_food_date(), true)
+        )
+        add_dish.name = "RecipeDishAdd"
     _button(buttons, "Сохранить рецепт", func():
         _recipe_sync_form(name, cooked, portions)
         var saved = store.save_recipe(recipe_draft)
@@ -2335,6 +2355,9 @@ func _show_recipe_editor() -> void:
         recipe_editor_open = false
         recipe_draft = {}
         recipe_search_text = ""
+        if recipe_from_search:
+            recipe_from_search = false
+            tab = "search"
         _render(true)
         _notify_saved("Рецепт сохранён")
     )
@@ -2423,6 +2446,9 @@ func _recipe_portion_sheet(recipe: Dictionary, suggested_weight: float = 0.0, su
             weight.value = minf(5000.0, normal_weight * factor)
         , true)
         preset.add_theme_font_size_override("font_size", 12)
+    if recipe_from_search and float(recipe["cooked_weight"]) <= 5000:
+        var full = _button(fields, "Всё блюдо · " + str(roundi(float(recipe["cooked_weight"]))) + " г", func(): weight.value = float(recipe["cooked_weight"]), true)
+        full.name = "RecipeWholeDish"
     if not last.is_empty():
         var repeat_button = _button(fields, "↻ Последняя: " +
             str(snappedf(float(last["grams"]), 0.1)) + " г", func():
@@ -2460,6 +2486,11 @@ func _recipe_portion_sheet(recipe: Dictionary, suggested_weight: float = 0.0, su
             success = store.add_recipe_portion(str(recipe["id"]), weight.value, meal.get_item_text(meal.selected), target_day)
         if success:
             date = target_day
+            if recipe_from_search:
+                recipe_editor_open = false
+                recipe_from_search = false
+                recipe_draft = {}
+                recipe_search_text = ""
             sheet["root"].queue_free()
             _meal_entry_locked = false
             _meal_entry_date = ""
@@ -3363,82 +3394,8 @@ func _repeat_recent_in_meal(food: Dictionary, recent: Dictionary, sheet: Diction
 
 
 func _show_meal_add_actions(meal_name: String) -> void:
-    if meal_name not in StoreScript.MEAL_NAMES:
-        return
-    selected_meal = meal_name
-    _meal_entry_locked = true
-    _meal_entry_date = date
-    var recent: Array = store.recent_food_entries(3)
-    var sheet = _mobile_sheet("Добавить в " + meal_name.to_lower(),
-        "Дата: " + date.substr(8, 2) + "." + date.substr(5, 2) + "." + date.substr(0, 4) +
-        ". Поиск, недавние продукты и штрихкод.", "⌕ Найти продукт",
-        540.0 if not recent.is_empty() else 370.0)
-    var fields: VBoxContainer = sheet["fields"]
-    if not recent.is_empty():
-        _label(fields, "Недавние продукты", 15, TEXT_ACCENT)
-        for record in recent:
-            var item: Dictionary = record["food"]
-            var row = _soft_list_row(fields)
-            var name = _button(row, str(item.get("name", "Продукт")), func():
-                sheet["root"].queue_free()
-                await get_tree().process_frame
-                _quick_food_sheet(item)
-            , true)
-            name.clip_text = true
-            name.custom_minimum_size = Vector2(75, 39)
-            name.add_theme_font_size_override("font_size", 12)
-            var grams = float(record["grams"])
-            var unit = str(record["unit"])
-            var repeat = _button(row, "↻ " + str(roundi(grams)) + " " + unit,
-                func(): _repeat_recent_in_meal(item, record, sheet), true)
-            repeat.name = "RepeatRecentMealPortion"
-            repeat.custom_minimum_size = Vector2(90, 39)
-            repeat.size_flags_horizontal = Control.SIZE_SHRINK_END
-            repeat.add_theme_font_size_override("font_size", 12)
-    else:
-        _label(fields, "Недавние продукты появятся после первой записи питания.", 12, MUTED)
-    var favorites_shown: int = 0
-    for favorite_id in store.data.get("favorites", []):
-        if favorites_shown >= 2:
-            break
-        var favorite: Dictionary = store.food_by_id(str(favorite_id))
-        if favorite.is_empty():
-            continue
-        if favorites_shown == 0:
-            _label(fields, "★ Избранное", 15, TEXT_ACCENT)
-        var favorite_button = _button(fields, "★ " + str(favorite.get("name", "Продукт")), func():
-            sheet["root"].queue_free()
-            await get_tree().process_frame
-            _quick_food_sheet(favorite)
-        , true)
-        favorite_button.clip_text = true
-        favorite_button.custom_minimum_size.y = 39
-        favorites_shown += 1
-    if not store.data.get("recipes", []).is_empty():
-        var to_recipes = _button(fields, "▤ Мои блюда и рецепты", func():
-            sheet["root"].queue_free()
-            tab = "recipes"
-            recipe_list_filter = "all"
-            _render(true)
-        , true)
-        to_recipes.name = "MealChooseRecipe"
-        to_recipes.custom_minimum_size.y = 39
-    var scan = _button(fields, "▣ Сканировать штрихкод", func():
-        sheet["root"].queue_free()
-        _meal_scan_or_manual(meal_name)
-    )
-    scan.name = "MealScanBarcode"
-    var manual = _button(fields, "Ввести штрихкод вручную", func():
-        sheet["root"].queue_free()
+    if meal_name in StoreScript.MEAL_NAMES:
         _open_meal_catalog(meal_name)
-        _reveal_barcode_section()
-        _barcode_message("Введи номер с упаковки в поле EAN/UPC.")
-    , true)
-    manual.name = "MealEnterBarcode"
-    sheet["confirm"].pressed.connect(func():
-        sheet["root"].queue_free()
-        _open_meal_catalog(meal_name)
-    )
 
 
 # Use the very same search field for names, brands or a complete EAN/UPC.
@@ -5571,6 +5528,8 @@ func _name_meal_template_sheet(meal_name: String) -> void:
 
 func _quick_food_sheet(food: Dictionary, from_barcode: bool = false,
         preferred_measure: String = "") -> void:
+    if tab == "search" and is_instance_valid(online_search_field):
+        store.remember_food_search(online_search_field.text)
     var unit: String = PortionMath.base_unit(food)
     var description: String = (
         "Проверь КБЖУ на этикетке (на 100 " + unit + ")."
@@ -5829,6 +5788,7 @@ func _food_form(parent: VBoxContainer) -> void:
     var filtered: Array = []
     var search = _text_input(parent, "Поиск продукта по названию")
     search.name = "FoodNameSearch"
+    search.max_length = 120
     online_search_field = search
     if not selected_barcode_food.is_empty():
         search.text = selected_barcode_food
@@ -5837,6 +5797,7 @@ func _food_form(parent: VBoxContainer) -> void:
     var online_actions = _row(parent)
     online_actions.name = "OnlineFoodSearchActions"
     var online_button = _button(online_actions, "Найти в интернете", func():
+        store.remember_food_search(search.text)
         if not BarcodeScript.normalize_code(search.text).is_empty():
             _lookup_barcode_from_search(search)
         else:
@@ -5956,6 +5917,7 @@ func _food_form(parent: VBoxContainer) -> void:
         _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star, category, results_box, meal, added_count)
     )
     search.text_submitted.connect(func(_value: String):
+        store.remember_food_search(search.text)
         if not BarcodeScript.normalize_code(search.text).is_empty():
             _lookup_barcode_from_search(search)
         else:
@@ -6002,6 +5964,35 @@ func _food_form(parent: VBoxContainer) -> void:
     quick_lists.name = "FoodRecentFavorites"
     quick_lists.add_theme_constant_override("separation", 5)
     parent.add_child(quick_lists)
+    var create_dish = _button(quick_lists, "+ Рассчитать целое блюдо", func():
+        tab = "recipes"
+        _begin_recipe_editor({}, true)
+    , true)
+    create_dish.name = "FoodCreateDish"
+    create_dish.custom_minimum_size.y = 42
+    var history: Array = store.food_search_history()
+    if not history.is_empty():
+        var history_head = _row(quick_lists)
+        var history_title = _label(history_head, "История поиска", 14, TEXT_ACCENT)
+        history_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        var clear = _button(history_head, "Очистить", func():
+            if store.clear_food_search_history():
+                _render()
+        , true)
+        clear.name = "FoodSearchHistoryClear"
+        clear.size_flags_horizontal = Control.SIZE_SHRINK_END
+        clear.custom_minimum_size.y = 34
+        var history_box = GridContainer.new()
+        history_box.name = "FoodSearchHistory"
+        history_box.columns = 2
+        quick_lists.add_child(history_box)
+        for term in history.slice(0, 6):
+            var history_button = _button(history_box, str(term), func():
+                search.text = str(term)
+                search.text_changed.emit(search.text)
+            , true)
+            history_button.clip_text = true
+            history_button.custom_minimum_size.y = 34
     var recents: Array = store.recent_food_entries(4)
     if not recents.is_empty():
         _label(quick_lists, "Недавние продукты", 15, TEXT_ACCENT)
@@ -6016,6 +6007,17 @@ func _food_form(parent: VBoxContainer) -> void:
             var edit = _button(shortcut, "Порция", func(): _quick_food_sheet(food), true)
             edit.custom_minimum_size.y = 37
             edit.add_theme_font_size_override("font_size", 12)
+            if _meal_entry_locked:
+                var repeat = _button(shortcut, "↻ " + last_amount, func():
+                    if store.add_food_entry(food, float(record["grams"]), selected_meal, _selected_food_date(), str(record.get("portion_label","")), float(record.get("portion_count",0)), str(record.get("portion_id",""))):
+                        _navigate_to_tab("day")
+                        _notify_saved("Продукт добавлен")
+                    else:
+                        _message("Не удалось сохранить запись.")
+                , true)
+                repeat.name = "RepeatRecentMealPortion"
+                repeat.custom_minimum_size.y = 37
+                repeat.add_theme_font_size_override("font_size", 11)
     else:
         _label(quick_lists, "Недавние продукты появятся после добавления еды.", 12, MUTED)
     var common: Array = store.frequent_foods(3, 2)
@@ -6052,6 +6054,9 @@ func _food_form(parent: VBoxContainer) -> void:
         favorite_count += 1
     search.text_changed.connect(func(_value: String):
         quick_lists.visible = search.text.strip_edges().is_empty() and category.selected == 0
+    )
+    search.focus_exited.connect(func():
+        store.remember_food_search(search.text)
     )
     # One compact sorter for local results; online Open Food Facts search keeps
     # its own result ordering and label-review workflow.

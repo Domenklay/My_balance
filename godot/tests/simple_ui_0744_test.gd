@@ -68,12 +68,9 @@ func _test() -> void:
         return
     plus.pressed.emit()
     await process_frame
-    if app.tab != "day" or app.get_node_or_null("ProductSheet") == null:
-        _fail("plus button stopped offering fast repeats")
+    if app.tab != "search" or app.get_node_or_null("ProductSheet") != null or app.find_child("FoodRecentFavorites",true,false) == null:
+        _fail("plus must open search with recent food shortcuts")
         return
-    var sheet: Node = app.get_node_or_null("ProductSheet")
-    sheet.queue_free()
-    await process_frame
     app.tab_buttons["search"].pressed.emit()
     await process_frame
     if app.tab != "recipes" or app._meal_entry_locked:

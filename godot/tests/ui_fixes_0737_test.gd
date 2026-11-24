@@ -179,10 +179,9 @@ func _run() -> void:
     app._render()
     app._show_meal_add_actions("Обед")
     await process_frame
-    sheet = app.get_node_or_null("ProductSheet")
-    var recipe_link = sheet.find_child("MealChooseRecipe", true, false) as Button if sheet != null else null
-    if recipe_link == null:
-        _fail("direct recipe choice missing from meal sheet")
+    var recipe_link = app.find_child("ProductsOpenRecipes", true, false) as Button
+    if recipe_link == null or app.tab != "search":
+        _fail("direct recipe choice missing from product search")
         return
     recipe_link.pressed.emit()
     await process_frame

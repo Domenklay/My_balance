@@ -140,7 +140,7 @@ func default_data() -> Dictionary:
             "meal_shares": DEFAULT_MEAL_SHARES.duplicate(), "home_widgets": DEFAULT_HOME_WIDGETS.duplicate(), "water_goal_ml": DEFAULT_WATER_GOAL_ML, "onboarding_complete": false,
             "personal": {}, "macro_goals": MacroGoals.defaults(), "reminders": Reminders.defaults(), "language":"ru"},
         "foods": [], "entries": [], "activities": [], "steps": {}, "weights": [], "body_measurements": [], "water_entries": [], "notes": {}, "favorites": [],
-        "recipes": [], "meal_templates": [], "planned_meals": [], "shopping_checked": {}, "day_copy_undo": {}, "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
+        "food_search_history": [], "recipes": [], "meal_templates": [], "planned_meals": [], "shopping_checked": {}, "day_copy_undo": {}, "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
             "photo": "", "frame": "plain"}
     }
 
@@ -718,6 +718,13 @@ func import_json(raw: String, persist: bool = true) -> bool:
         if ids.has(recipe_id):
             return false
         ids[recipe_id] = true
+    if not obj.has("food_search_history"):
+        obj["food_search_history"] = []
+    if not obj["food_search_history"] is Array or obj["food_search_history"].size() > 20:
+        return false
+    for query in obj["food_search_history"]:
+        if not query is String or query.strip_edges().length() < 2 or query.length() > 120:
+            return false
     var settings: Dictionary = obj["settings"]
     if not settings.has("language"):
         settings["language"] = "ru"
@@ -878,6 +885,34 @@ func recent_foods(limit: int = 8) -> Array:
 
 # Last distinct products with the actual portion last logged. Derived from the
 # journal itself, so upgrades require no new storage fields or migration.
+func food_search_history() -> Array:
+    return data.get("food_search_history", []).duplicate()
+
+func remember_food_search(raw: String) -> bool:
+    var query = raw.strip_edges().left(120)
+    if query.length() < 2:
+        return true
+    var old = food_search_history()
+    var next: Array = [query]
+    for item in old:
+        if str(item).nocasecmp_to(query) != 0 and next.size() < 20:
+            next.append(item)
+    if next == old:
+        return true
+    data["food_search_history"] = next
+    if save():
+        return true
+    data["food_search_history"] = old
+    return false
+
+func clear_food_search_history() -> bool:
+    var old = food_search_history()
+    data["food_search_history"] = []
+    if save():
+        return true
+    data["food_search_history"] = old
+    return false
+
 func recent_food_entries(limit: int = 6) -> Array:
     var result: Array = []
     if limit <= 0:

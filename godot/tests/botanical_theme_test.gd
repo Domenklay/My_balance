@@ -76,10 +76,10 @@ func _run() -> void:
     var add = app.find_child("MealQuickAdd_1", true, false) as Button
     add.pressed.emit()
     await process_frame
-    if app.get_node_or_null("ProductSheet") == null or app.selected_meal != "Обед":
+    if app.get_node_or_null("ProductSheet") != null or app.tab != "search" or app.selected_meal != "Обед" or app.find_child("FoodNameSearch",true,false) == null:
         _fail("lunch button lost the barcode/search action")
         return
-    app.get_node("ProductSheet").queue_free()
+    app._navigate_to_tab("day")
     await process_frame
     var stored = StoreScript.new()
     if str(stored.data["settings"]["theme"]) != "botanical":

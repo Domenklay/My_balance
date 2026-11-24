@@ -57,13 +57,6 @@ func _run() -> void:
         return
     expand_button.pressed.emit()
     await process_frame
-    var search_from_meal = _find_button(app, "⌕ Найти продукт")
-    if search_from_meal == null:
-        push_error("FAILED: meal chooser is missing product search")
-        quit(1)
-        return
-    search_from_meal.pressed.emit()
-    await process_frame
     if app.tab != "search" or app.selected_meal != "Завтрак" or not app._meal_entry_locked:
         push_error("FAILED: meal-specific catalog failed to lock breakfast")
         quit(1)

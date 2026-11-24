@@ -89,10 +89,11 @@ func _run() -> void:
     var first = app.find_child("MealQuickAdd_0", true, false) as Button
     first.pressed.emit()
     await process_frame
-    if app.get_node_or_null("ProductSheet") == null:
-        _fail("compact plus control no longer opens meal-specific search/scan menu")
+    if app.tab != "search" or app.get_node_or_null("ProductSheet") != null or app.find_child("FoodNameSearch",true,false) == null:
+        _fail("compact plus must open direct meal search")
         return
-    app.get_node("ProductSheet").queue_free()
+    app._navigate_to_tab("day")
+    await process_frame
     app.find_child("MealExpand_1", true, false).pressed.emit()
     await process_frame
     if app.find_child("MealDetails_1", true, false) == null:

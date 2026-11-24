@@ -62,23 +62,10 @@ func _run() -> void:
             add.pressed.emit()
         await process_frame
         var sheet = app.get_node_or_null("ProductSheet")
-        if i % 2 == 0:
-            # Meal headings jump straight to search, without a chooser.
-            if sheet != null or not _check_locked(app, names[i], "2026-11-20"):
-                _fail("meal heading did not open direct search: " + names[i])
-                return
-        else:
-            # Plus retains the extra scan/quick-repeat actions.
-            if sheet == null or app.selected_meal != names[i] or \
-                    _button(sheet, "▣ Сканировать штрихкод") == null or \
-                    _button(sheet, "Ввести штрихкод вручную") == null or \
-                    _button(sheet, "⌕ Найти продукт") == null:
-                _fail("quick-add chooser missing: " + names[i])
-                return
+        if sheet != null or not _check_locked(app, names[i], "2026-11-20") or app.find_child("FoodNameSearch",true,false) == null:
+            _fail("meal heading and plus must both open direct search: " + names[i])
+            return
         if i == 0 or i == 3:
-            if sheet != null:
-                _button(sheet, "⌕ Найти продукт").pressed.emit()
-                await process_frame
             if not _check_locked(app, names[i], "2026-11-20"):
                 _fail("search did not preserve meal/date: " + names[i])
                 return
@@ -98,7 +85,7 @@ func _run() -> void:
             await process_frame
         elif i == 1:
             # Desktop test has no scanner, so button opens manual EAN search.
-            _button(sheet, "▣ Сканировать штрихкод").pressed.emit()
+            (app.find_child("FoodCameraQuick",true,false) as Button).pressed.emit()
             await process_frame
             if not _check_locked(app, names[i], "2026-11-20"):
                 _fail("camera fallback did not keep lunch context")

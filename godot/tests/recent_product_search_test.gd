@@ -52,14 +52,11 @@ func _run() -> void:
     var plus = app.find_child("MealQuickAdd_1", true, false) as Button
     plus.pressed.emit()
     await process_frame
-    var sheet = app.get_node_or_null("ProductSheet")
-    if sheet == null or _button(sheet, "↻ 150 г") == null or \
-            _button(sheet, "★ " + str(second["name"])) == null or \
-            _button(sheet, "⌕ Найти продукт") == null or \
-            _button(sheet, "▣ Сканировать штрихкод") == null:
-        _fail("meal sheet missing recents, favorites or original catalog and barcode actions")
+    var quick_area = app.find_child("FoodRecentFavorites",true,false)
+    if app.tab != "search" or quick_area == null or app.get_node_or_null("ProductSheet") != null or _button(quick_area, "↻ 150 г") == null or _button(quick_area, "★ " + str(second["name"])) == null or app.find_child("FoodCameraQuick",true,false) == null:
+        _fail("direct search missing recents, favorites or barcode")
         return
-    _button(sheet, "↻ 150 г").pressed.emit()
+    _button(quick_area, "↻ 150 г").pressed.emit()
     await process_frame
     var entries = app.store.day_entries("2026-11-21")
     if entries.size() != 1 or str(entries[0]["meal"]) != "Обед" or \
