@@ -27,7 +27,7 @@ func _run() -> void:
         if avatar == null or avatar.size.x < 88 or settings == null or grid == null or grid.get_child_count() != Rewards.AWARDS.size():
             _fail("profile visual controls missing " + id)
             return
-        if grid.columns != 2 or app.body.get_child_count() > 4:
+        if grid.columns != 2 or app.body.get_child_count() > 5:
             _fail("profile layout is not compact")
             return
         var first = app.find_child("Achievement_first", true, false)

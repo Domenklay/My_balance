@@ -38,7 +38,8 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.61"
+const APP_VERSION = "0.7.62"
+const InterfaceLanguage = preload("res://src/interface_language.gd")
 const Reminders = preload("res://src/reminders.gd")
 const MacroGoals = preload("res://src/macro_goals.gd")
 
@@ -154,6 +155,8 @@ var home_progress_view: String = "week"
 var stats_detail_tab: String = "nutrition"
 var onboarding_step: int = 0
 var onboarding_edit: bool = false
+var onboarding_return_tab: String = "settings"
+var english_translation: Translation
 var onboarding_draft: Dictionary = {}
 var recipe_draft: Dictionary = {}
 var recipe_search_text: String = ""
@@ -352,6 +355,9 @@ func _activate_botanical_default_once() -> void:
 
 
 func _ready() -> void:
+    english_translation = InterfaceLanguage.english()
+    TranslationServer.add_translation(english_translation)
+    _apply_interface_language()
     _activate_botanical_default_once()
     _apply_palette()
     month_shown = date.substr(0, 7)
@@ -1188,11 +1194,19 @@ func _avatar_character(id: String) -> String:
     return {"leaf":"❧", "star":"✦", "moon":"☾", "sun":"☀", "flower":"✿", "heart":"♥"}.get(id, "❧")
 
 func _begin_onboarding(from_settings: bool = false) -> void:
+    if from_settings and tab != "onboarding":
+        onboarding_return_tab = "profile" if tab == "profile" else "settings"
     onboarding_edit = from_settings
     onboarding_step = 0
     var previous = store.data["settings"].get("personal", {})
     if previous is Dictionary and not previous.is_empty():
         onboarding_draft = previous.duplicate(true)
+        if from_settings:
+            onboarding_draft["name"] = str(store.data.get("profile", {}).get("name", onboarding_draft["name"]))
+            var snapshot: Dictionary = ProfileProgressScript.summarize(store.data["settings"], store.data["weights"])
+            if bool(snapshot["has_records"]):
+                onboarding_draft["weight"] = float(snapshot["latest"])
+            onboarding_draft["goal_weight"] = float(store.data["settings"]["goal"])
     else:
         var saved_name = str(store.data.get("profile", {}).get("name", ""))
         # Unknown age/height/weight must never be silently pre-filled from examples.
@@ -1212,8 +1226,8 @@ func _show_onboarding() -> void:
     _label(intro, "Два коротких шага для личного ориентира по калориям.", 14, HERO_MUTED)
     _label(intro, "Шаг " + str(onboarding_step + 1) + " из 2", 13, SOFT_GOLD)
     if onboarding_edit:
-        _button(intro, "← Отмена и назад к настройкам", func():
-            tab = "settings"
+        _button(intro, "← Отмена и назад", func():
+            tab = onboarding_return_tab
             _render(true)
         , true)
     if onboarding_draft.is_empty():
@@ -1221,7 +1235,7 @@ func _show_onboarding() -> void:
         return
     if onboarding_step == 0:
         var personal = _card("О тебе")
-        _label(personal, "Возраст, рост и текущий вес обязательно введи сама. Примерные числа больше не подставляются.", 12, MUTED)
+        _label(personal, "Укажи возраст, рост и текущий вес. Примерные числа не подставляются.", 12, MUTED)
         _label(personal, "Имя", 14, MUTED)
         var name = _text_input(personal, "Как к тебе обращаться", str(onboarding_draft.get("name", "")))
         name.name = "OnboardingName"
@@ -1346,10 +1360,10 @@ func _show_onboarding() -> void:
             if manual_kcal < 0:
                 _message("Введи суточную норму от 1000 до 5000 ккал.")
                 return
-            if store.complete_onboarding(details, float(manual_kcal)):
+            if store.complete_onboarding(details, float(manual_kcal), onboarding_edit):
                 onboarding_draft.clear()
                 onboarding_step = 0
-                var return_tab = "settings" if onboarding_edit else "day"
+                var return_tab = onboarding_return_tab if onboarding_edit else "day"
                 onboarding_edit = false
                 tab = return_tab
                 _hide_keyboard_and_focus()
@@ -1583,14 +1597,11 @@ func _show_profile() -> void:
     intro.add_child(identity)
     _label(identity, str(profile.get("name", "Мой профиль")), 23, WHITE)
     _label(identity, str(profile.get("motto", "")), 13, HERO_MUTED)
-    var profile_settings = _button(identity, "⚙ Настройки и анкета", func():
-        settings_page = "main"
-        _navigate_to_tab("settings")
-    , true)
-    profile_settings.name = "ProfileSettingsShortcut"
-    profile_settings.custom_minimum_size.y = 37
-    profile_settings.add_theme_font_size_override("font_size", 12)
-    profile_settings.clip_text = true
+    var questionnaire = _button(identity, "✎ Моя анкета", func(): _begin_onboarding(true), true)
+    questionnaire.name = "ProfileQuestionnaire"
+    questionnaire.custom_minimum_size.y = 39
+    questionnaire.add_theme_font_size_override("font_size", 13)
+    questionnaire.clip_text = true
 
     var settings: Dictionary = store.data["settings"]
     var progress: Dictionary = ProfileProgressScript.summarize(settings, store.data["weights"])
@@ -1647,8 +1658,17 @@ func _show_profile() -> void:
     measure_link.custom_minimum_size.y = 39
     measure_link.add_theme_font_size_override("font_size", 13)
     measure_link.clip_text = true
-    var overview = _card("Мои ориентиры")
+    var overview = _card("Мои данные и цели")
+    overview.get_parent().name = "ProfilePersonalSummary"
     _compact_card(overview, 12, 7)
+    var personal: Dictionary = settings.get("personal", {})
+    if personal.is_empty():
+        _label(overview, "Анкета ещё не заполнена. Укажи рост, возраст, вес и уровень активности.", 12, MUTED)
+    else:
+        var personal_row = _row(overview)
+        _profile_counter(personal_row, "Возраст, лет", str(int(personal["age"])), CARBS_BG, MACRO_CARBS)
+        _profile_counter(personal_row, "Рост, см", str(snappedf(float(personal["height"]), 0.1)), PROTEIN_BG, MACRO_PROTEIN)
+        _label(overview, str(OnboardingMath.ACTIVITY_LABELS[int(personal["activity"])]) + " · " + str(OnboardingMath.GOALS[int(personal["goal"])]), 12, MUTED)
     var change: float = float(progress["change"])
     _label(overview, str(roundi(float(settings["kcal"]))) +
         " ккал в сутки · Изменение с начала: " +
@@ -1656,6 +1676,8 @@ func _show_profile() -> void:
     var kcal_button = _button(overview, "✎ Изменить норму калорий",
         func(): _show_calorie_goal_editor(), true)
     kcal_button.custom_minimum_size.y = 39
+    var macro_button = _button(overview, "Нормы БЖУ", func(): _show_macro_goal_editor(), true)
+    macro_button.custom_minimum_size.y = 39
 
     var summary: Dictionary = store.reward_summary()
     var awards = _card("Звёзды и награды", "tint")
@@ -1781,6 +1803,21 @@ func _show_profile() -> void:
             else:
                 _message("Проверь имя и подпись или свободное место.")
         )
+
+    # Personal details and avatar settings precede optional rewards.
+    body.move_child(edit.get_parent(), 2)
+    var system_card = _card("Приложение")
+    system_card.get_parent().name = "ProfileSystemSettings"
+    _compact_card(system_card, 11, 5)
+    var profile_settings = _button(system_card, "⚙ Настройки", func():
+        settings_page = "main"
+        settings_section_open = ""
+        _navigate_to_tab("settings")
+    , true)
+    profile_settings.name = "ProfileSettingsShortcut"
+    profile_settings.custom_minimum_size.y = 44
+    profile_settings.alignment = HORIZONTAL_ALIGNMENT_LEFT
+    _label(system_card, "Язык, темы, уведомления, аккаунт Google и резервные копии", 12, MUTED)
 
 func _pick_avatar_photo() -> void:
     var supported = PackedStringArray([
@@ -6572,7 +6609,8 @@ func _show_google_backup_settings() -> void:
         ("Доступно только на Android" if google_plugin == null else "Не подключено"))
     if google_busy:
         state = "Обращение к Google Диску…"
-    var card = _settings_section("Google Диск · резервные копии", "google", state)
+    var card = _settings_section("Аккаунт Google и синхронизация", "google", state)
+    _label(card, "Локальный профиль работает без регистрации. Google — только для резервных копий.", 12, MUTED)
     if google_plugin == null:
         var notice = _label(card,
             "Подключение к Google доступно в Android-сборке с Google Play Services. " +
@@ -6688,6 +6726,28 @@ func _show_reminder_settings() -> void:
     save.name = "ReminderSave"
 
 
+func _apply_interface_language() -> void:
+    TranslationServer.set_locale(str(store.data["settings"].get("language", "ru")))
+
+
+func _show_language_settings() -> void:
+    var language: String = str(store.data["settings"].get("language", "ru"))
+    var card = _settings_section("Язык приложения", "language", "Русский" if language == "ru" else "English (beta)")
+    var picker = _choice(card, ["Русский", "English (beta)"])
+    picker.name = "InterfaceLanguagePicker"
+    picker.select(1 if language == "en" else 0)
+    _label(card, "English beta: основные разделы и настройки переведены частично. Названия продуктов, часть сообщений и системные уведомления остаются на русском.", 12, MUTED)
+    var apply = _button(card, "Применить язык", func():
+        var locale = "en" if picker.selected == 1 else "ru"
+        if not store.set_interface_language(locale):
+            _message("Не удалось сохранить язык.")
+            return
+        _apply_interface_language()
+        _render()
+    )
+    apply.name = "InterfaceLanguageApply"
+
+
 func _show_settings() -> void:
     if settings_page == "foods":
         var nav = _card("Мои продукты")
@@ -6698,11 +6758,14 @@ func _show_settings() -> void:
         _show_my_foods()
         return
     var back_to_profile = _card("Настройки приложения")
+    back_to_profile.get_parent().name = "SettingsHeader"
     _compact_card(back_to_profile, 11, 6)
     var version_label = _label(back_to_profile,
         "Версия " + APP_VERSION + " · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
     version_label.name = "AppVersionLabel"
     _button(back_to_profile, "← К личной странице", func(): _navigate_to_tab("profile"), true)
+    _label(back_to_profile, "Система и аккаунт", 14, TEXT_ACCENT)
+    _show_language_settings()
     var card = _settings_section("Мои цели и параметры", "personal",
         str(roundi(float(store.data["settings"]["kcal"]))) + " ккал/день · Цель: " +
         str(snappedf(float(store.data["settings"]["goal"]), 0.1)) + " кг")
@@ -6854,6 +6917,12 @@ func _show_settings() -> void:
         _confirm_restore_json(DisplayServer.clipboard_get(), "буфера обмена")
     )
     _label(backup, "Записи хранятся в памяти приложения без регистрации и интернета. При удалении приложения данные могут исчезнуть.", 13, MUTED)
+    # Keep stable section IDs for existing navigation and regression tests.
+    var order = ["language", "appearance", "google", "reminders", "backup", "personal", "shares"]
+    for i in range(order.size()):
+        var section = body.get_node_or_null("SettingsSection_" + order[i])
+        if section != null:
+            body.move_child(section, i + 1)
 
 func _show_my_foods() -> void:
     var foods_card = _card("Добавить свой продукт · на 100 г")
@@ -7037,6 +7106,7 @@ func _confirm_restore_json(raw: String, source: String) -> void:
     add_child(confirmation)
     confirmation.confirmed.connect(func():
         if store.import_json(raw):
+            _apply_interface_language()
             _sync_reminders()
             date = Time.get_date_string_from_system()
             month_shown = date.substr(0, 7)

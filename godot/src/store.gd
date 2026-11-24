@@ -138,7 +138,7 @@ func default_data() -> Dictionary:
     return {
         "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true, "high_contrast": false, "animations": true,
             "meal_shares": DEFAULT_MEAL_SHARES.duplicate(), "home_widgets": DEFAULT_HOME_WIDGETS.duplicate(), "water_goal_ml": DEFAULT_WATER_GOAL_ML, "onboarding_complete": false,
-            "personal": {}, "macro_goals": MacroGoals.defaults(), "reminders": Reminders.defaults()},
+            "personal": {}, "macro_goals": MacroGoals.defaults(), "reminders": Reminders.defaults(), "language":"ru"},
         "foods": [], "entries": [], "activities": [], "steps": {}, "weights": [], "body_measurements": [], "water_entries": [], "notes": {}, "favorites": [],
         "recipes": [], "meal_templates": [], "planned_meals": [], "shopping_checked": {}, "day_copy_undo": {}, "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
             "photo": "", "frame": "plain"}
@@ -225,6 +225,17 @@ func set_daily_calorie_goal(calories: int) -> bool:
     data["settings"] = previous
     return false
 
+func set_interface_language(language: String) -> bool:
+    if language not in ["ru", "en"]:
+        return false
+    var previous: Dictionary = data["settings"].duplicate(true)
+    data["settings"]["language"] = language
+    if save():
+        return true
+    data["settings"] = previous
+    return false
+
+
 func reminder_settings() -> Dictionary:
     return data["settings"].get("reminders", Reminders.defaults()).duplicate(true)
 
@@ -258,7 +269,7 @@ func set_macro_goals(value: Dictionary) -> bool:
 func needs_onboarding() -> bool:
     return not bool(data.get("settings", {}).get("onboarding_complete", false))
 
-func complete_onboarding(personal: Dictionary, calories: float) -> bool:
+func complete_onboarding(personal: Dictionary, calories: float, preserve_start: bool = false) -> bool:
     if not OnboardingMath.valid_details(personal):
         return false
     if not is_finite(calories) or calories < 1000.0 or calories > 5000.0:
@@ -269,7 +280,8 @@ func complete_onboarding(personal: Dictionary, calories: float) -> bool:
     settings["personal"] = personal.duplicate(true)
     settings["onboarding_complete"] = true
     settings["kcal"] = roundi(calories)
-    settings["start"] = float(personal["weight"])
+    if not preserve_start:
+        settings["start"] = float(personal["weight"])
     settings["goal"] = float(personal["goal_weight"])
     data["profile"]["name"] = str(personal["name"]).strip_edges()
     if save():
@@ -657,6 +669,10 @@ func import_json(raw: String, persist: bool = true) -> bool:
             return false
         ids[recipe_id] = true
     var settings: Dictionary = obj["settings"]
+    if not settings.has("language"):
+        settings["language"] = "ru"
+    if not settings["language"] is String or settings["language"] not in ["ru", "en"]:
+        return false
     if not settings.has("reminders"):
         settings["reminders"] = Reminders.defaults()
     if not Reminders.valid(settings["reminders"]):

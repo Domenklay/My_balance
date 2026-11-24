@@ -80,7 +80,7 @@ func _run() -> void:
             _fail("initial profile summary incorrect in " + theme)
             return
         for caption in ["＋ Записать вес", "✎ Изменить норму калорий",
-                "⚙ Настройки и анкета", "📷 Выбрать фото для аватара"]:
+                "⚙ Настройки", "📷 Выбрать фото для аватара"]:
             if _find_button(app, caption) == null:
                 _fail("important profile action missing: " + caption + " in " + theme)
                 return
@@ -102,7 +102,7 @@ func _run() -> void:
         return
     app._navigate_to_tab("profile")
     await process_frame
-    _find_button(app, "⚙ Настройки и анкета").pressed.emit()
+    _find_button(app, "⚙ Настройки").pressed.emit()
     await process_frame
     if app.tab != "settings" or \
             _find_button(app, "Моя анкета · пересчитать норму") == null:

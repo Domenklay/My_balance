@@ -178,6 +178,8 @@ jobs:
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/body_measurements_0745_test.gd
       - name: Test 0.7.44 five-tab layout, direct meal search and combined progress
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/simple_ui_0744_test.gd
+      - name: Test 0.7.62 profile questionnaire, bottom system settings and language
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/profile_system_0762_test.gd
       - name: Test 0.7.61 reminder settings, opt-in schedule and migration
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/reminders_0761_test.gd
       - name: Test 0.7.60 optional macro targets, calculation, editor and migration
