@@ -32,19 +32,19 @@ func _run() -> void:
         return
     var food: Dictionary = store.all_foods()[0]
     var food_id: String = str(food["id"])
-    if not store.add_planned_meal("recipe", "r_planner", monday, "Завтрак", 250.0) or
-            not store.add_planned_meal("food", food_id, monday, "Перекус", 100.0) or
+    if not store.add_planned_meal("recipe", "r_planner", monday, "Завтрак", 250.0) or \
+            not store.add_planned_meal("food", food_id, monday, "Перекус", 100.0) or \
             not store.add_planned_meal("recipe", "r_planner", tuesday, "Завтрак", 500.0):
         _fail("recipe and product portions did not save for the correct dates")
         return
     var monday_items: Array = store.planned_meals_on(monday)
     var tuesday_items: Array = store.planned_meals_on(tuesday)
-    if monday_items.size() != 2 or tuesday_items.size() != 1 or
+    if monday_items.size() != 2 or tuesday_items.size() != 1 or \
             monday_items[0]["source"] != "recipe":
         _fail("weekly meal and date isolation broken")
         return
     var calories: float = store.planned_day_kcal(monday)
-    if absf(calories - (445.0 + 370.0)) > 0.01 or
+    if absf(calories - (445.0 + 370.0)) > 0.01 or \
             store.day_entries(monday).size() != 0:
         _fail("planned Kcal wrong or plan improperly logged into actual diary")
         return
@@ -59,14 +59,14 @@ func _run() -> void:
             oats = element
         elif str(element["name"]) == "Молоко":
             milk = element
-    if oats.is_empty() or milk.is_empty() or
-            absf(float(oats["grams"]) - 400.0) > 0.01 or
-            absf(float(milk["grams"]) - 450.0) > 0.01 or
+    if oats.is_empty() or milk.is_empty() or \
+            absf(float(oats["grams"]) - 400.0) > 0.01 or \
+            absf(float(milk["grams"]) - 450.0) > 0.01 or \
             oats["unit"] != "г" or milk["unit"] != "мл":
         _fail("raw ingredients did not aggregate by matching name and unit")
         return
     var key: String = str(milk["key"])
-    if not store.toggle_shopping_item(monday, key) or
+    if not store.toggle_shopping_item(monday, key) or \
             store.week_planned_shopping(monday).filter(
                 func(item): return item["key"] == key and item["bought"]).size() != 1:
         _fail("shopping checklist not saved")
@@ -75,42 +75,42 @@ func _run() -> void:
         _fail("shopping toggled an ingredient absent from the week")
         return
     var saved_recipe_snapshot: Dictionary = monday_items[0].duplicate(true)
-    if not store.delete_recipe("r_planner") or
+    if not store.delete_recipe("r_planner") or \
             store.planned_meals_on(monday)[0] != saved_recipe_snapshot:
         _fail("editing/deleting recipe changed immutable planned nutrition snapshot")
         return
-    if store.apply_planned_day(monday) != 2 or
-            store.apply_planned_day(monday) != 0 or
-            store.day_entries(monday).size() != 2 or
+    if store.apply_planned_day(monday) != 2 or \
+            store.apply_planned_day(monday) != 0 or \
+            store.day_entries(monday).size() != 2 or \
             not is_equal_approx(store.day_calories(monday), calories):
         _fail("moving day to actual diary duplicated items or broke kcal")
         return
-    if store.data["notes"][monday] != "Существующая заметка" or
+    if store.data["notes"][monday] != "Существующая заметка" or \
             store.day_entries(tuesday).size() != 0:
         _fail("moving planned day changed unrelated diary data")
         return
-    if not store.delete_planned_meal(str(monday_items[1]["id"])) or
-            store.planned_meals_on(monday).size() != 1 or
+    if not store.delete_planned_meal(str(monday_items[1]["id"])) or \
+            store.planned_meals_on(monday).size() != 1 or \
             store.day_entries(monday).size() != 2:
         _fail("removing planned product affected diary or wrong item")
         return
     var restarted = Store.new()
-    if restarted.planned_meals_on(monday).size() != 1 or
+    if restarted.planned_meals_on(monday).size() != 1 or \
             restarted.data["shopping_checked"].is_empty():
         _fail("plan or checked groceries not persisted across app restart")
         return
     var backup = restarted.export_json()
     var imported = Store.new()
     imported.data = imported.default_data()
-    if not imported.import_json(backup, false) or
+    if not imported.import_json(backup, false) or \
             imported.planned_meals_on(tuesday).size() != 1:
         _fail("full JSON backup import lost meal plans")
         return
     var old = imported.data.duplicate(true)
     old.erase("planned_meals")
     old.erase("shopping_checked")
-    if not imported.import_json(JSON.stringify(old), false) or
-            not imported.data["planned_meals"].is_empty() or
+    if not imported.import_json(JSON.stringify(old), false) or \
+            not imported.data["planned_meals"].is_empty() or \
             imported.data["notes"][monday] != "Существующая заметка":
         _fail("legacy backup did not receive empty planner without losing diary")
         return
@@ -132,9 +132,9 @@ func _run() -> void:
     var broken = FailingStore.new()
     broken.data = store.data.duplicate(true)
     var previous = JSON.stringify(broken.data)
-    if broken.add_planned_meal("food", food_id, monday, "Ужин", 100.0) or
-            broken.toggle_shopping_item(monday, key) or
-            broken.apply_planned_day(tuesday) != 0 or
+    if broken.add_planned_meal("food", food_id, monday, "Ужин", 100.0) or \
+            broken.toggle_shopping_item(monday, key) or \
+            broken.apply_planned_day(tuesday) != 0 or \
             JSON.stringify(broken.data) != previous:
         _fail("failed storage writes did not revert plan and shopping")
         return
@@ -154,8 +154,8 @@ func _run() -> void:
         return
     (app.find_child("DayOpenPlanner", true, false) as Button).pressed.emit()
     await process_frame
-    if app.tab != "planner" or app.find_child("PlannerWeekDates", true, false) == null or
-            app.find_child("PlannerAddRecipe", true, false) == null or
+    if app.tab != "planner" or app.find_child("PlannerWeekDates", true, false) == null or \
+            app.find_child("PlannerAddRecipe", true, false) == null or \
             app.find_child("PlannerShoppingCount", true, false) == null:
         _fail("weekly planner screen missing buttons or shopping section")
         return
@@ -165,7 +165,7 @@ func _run() -> void:
     var portion = app.find_child("PlannerPortion", true, false) as SpinBox
     var meal = app.find_child("PlannerMeal", true, false) as OptionButton
     var confirm = app.find_child("PlannerConfirmAdd", true, false) as Button
-    if picker == null or picker.item_count == 0 or
+    if picker == null or picker.item_count == 0 or \
             portion == null or meal == null or confirm == null:
         _fail("planner search/serving modal missing")
         return
@@ -173,8 +173,8 @@ func _run() -> void:
     meal.select(0)
     confirm.pressed.emit()
     await process_frame
-    if app.store.planned_meals_on(monday).size() != 1 or
-            app.find_child("PlannerApplyDay", true, false) == null or
+    if app.store.planned_meals_on(monday).size() != 1 or \
+            app.find_child("PlannerApplyDay", true, false) == null or \
             app.find_child("PlannerBuy_0", true, false) == null:
         _fail("planner form did not create day plan and shopping list")
         return
@@ -195,13 +195,13 @@ func _run() -> void:
         return
     confirm_dialog.confirmed.emit()
     await process_frame
-    if app.store.day_entries(monday).size() != 1 or
+    if app.store.day_entries(monday).size() != 1 or \
             app.find_child("PlannerApplyDay", true, false) != null:
         _fail("confirmed day transfer not recorded or allows duplicates")
         return
     (app.find_child("PlannerNextWeek", true, false) as Button).pressed.emit()
     await process_frame
-    if app.planner_day != "2026-11-30" or
+    if app.planner_day != "2026-11-30" or \
             app.store.planned_meals_on(monday).size() != 1:
         _fail("week navigation modified saved plan")
         return

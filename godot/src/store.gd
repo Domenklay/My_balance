@@ -1741,13 +1741,13 @@ func planned_preview(kind: String, source_id: String, day: String,
 
 func add_planned_meal(kind: String, source_id: String, day: String,
         meal: String, grams: float) -> bool:
-    if data["planned_meals"].size() >= MealPlanner.MAX_ITEMS or
+    if data["planned_meals"].size() >= MealPlanner.MAX_ITEMS or \
             planned_meals_on(day).size() >= MealPlanner.MAX_DAY_ITEMS:
         return false
     var planned: Dictionary = planned_preview(kind, source_id, day, meal, grams)
     if planned.is_empty():
         return false
-    planned["id"] = "plan_" + str(Time.get_ticks_usec()) + "_" +
+    planned["id"] = "plan_" + str(Time.get_ticks_usec()) + "_" + \
         str(data["planned_meals"].size())
     data["planned_meals"].append(planned)
     if save():
@@ -1804,7 +1804,7 @@ func apply_planned_day(day: String) -> int:
         if known.has(str(planned["id"])):
             continue
         var entry: Dictionary = {
-            "id": "plan_entry_" + str(Time.get_ticks_usec()) + "_" +
+            "id": "plan_entry_" + str(Time.get_ticks_usec()) + "_" + \
                 str(data["entries"].size() + pending.size()),
             "plan_id": str(planned["id"]), "date": day,
             "meal": str(planned["meal"]), "food": ("recipe:" if

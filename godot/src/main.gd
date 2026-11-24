@@ -2705,7 +2705,7 @@ func _planner_add_sheet(kind: String) -> void:
         if kind == "recipe" else "Порция продукта. Вес и объём считаются в своих единицах.")
     var sheet = _mobile_sheet(title, detail, "Добавить в план", 555.0)
     var fields: VBoxContainer = sheet["fields"]
-    _label(fields, "Дата: " + planner_day.substr(8, 2) + "." +
+    _label(fields, "Дата: " + planner_day.substr(8, 2) + "." + \
         planner_day.substr(5, 2) + "." + planner_day.substr(0, 4), 13, TEXT_ACCENT)
     _label(fields, "Приём пищи", 13, MUTED)
     var meal_picker = _choice(fields, MealPlannerScript.MEALS)
@@ -2753,10 +2753,10 @@ func _planner_add_sheet(kind: String) -> void:
             return
         var nutrition: Dictionary = planned["nutrition"]
         var factor: float = float(planned["grams"]) / 100.0
-        preview.text = (str(roundi(float(nutrition["kcal"]) * factor)) +
-            " ккал · Б " + str(snappedf(float(nutrition["p"]) * factor, 0.1)) +
-            " · Ж " + str(snappedf(float(nutrition["f"]) * factor, 0.1)) +
-            " · У " + str(snappedf(float(nutrition["c"]) * factor, 0.1)) +
+        preview.text = (str(roundi(float(nutrition["kcal"]) * factor)) + \
+            " ккал · Б " + str(snappedf(float(nutrition["p"]) * factor, 0.1)) + \
+            " · Ж " + str(snappedf(float(nutrition["f"]) * factor, 0.1)) + \
+            " · У " + str(snappedf(float(nutrition["c"]) * factor, 0.1)) + \
             " · " + str(planned["grams"]) + " " + str(planned["unit"]))
     refresh_options.call("")
     update_preview.call()
@@ -2790,7 +2790,7 @@ func _planner_commit_day() -> void:
         _message("Всё запланированное уже перенесено в дневник.")
         return
     _confirm_action("Перенести план в дневник",
-        "Добавить " + str(pending) + " блюд за " + planner_day +
+        "Добавить " + str(pending) + " блюд за " + planner_day + \
         "? Ранее перенесённые блюда не будут добавлены повторно.",
         func():
             var count: int = store.apply_planned_day(planner_day)
@@ -2815,7 +2815,7 @@ func _show_week_planner() -> void:
     var previous = _button(navigation, "‹", func(): _planner_shift_week(-1), true)
     previous.name = "PlannerPreviousWeek"
     var week_label = _nowrap(navigation,
-        first.substr(8, 2) + "." + first.substr(5, 2) + " — " +
+        first.substr(8, 2) + "." + first.substr(5, 2) + " — " + \
         last.substr(8, 2) + "." + last.substr(5, 2), 14, WHITE)
     week_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     week_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -2849,11 +2849,11 @@ func _show_week_planner() -> void:
         choose.add_theme_font_size_override("font_size", 11)
         choose.clip_text = true
     var total: float = store.planned_day_kcal(planner_day)
-    var day_card = _card("Блюда на " + planner_day.substr(8, 2) + "." +
+    var day_card = _card("Блюда на " + planner_day.substr(8, 2) + "." + \
         planner_day.substr(5, 2))
     _compact_card(day_card, 11, 8)
-    var daily_total = _label(day_card, str(roundi(total)) + " ккал в плане · " +
-        str(roundi(float(store.data["settings"]["kcal"]))) +
+    var daily_total = _label(day_card, str(roundi(total)) + " ккал в плане · " + \
+        str(roundi(float(store.data["settings"]["kcal"]))) + \
         " ккал дневной ориентир", 14, TEXT_ACCENT)
     daily_total.name = "PlannerDayCalories"
     _label(day_card, "Калории плана не учитываются в дневнике до переноса.", 11, MUTED)
@@ -2876,9 +2876,9 @@ func _show_week_planner() -> void:
         _label(meal_col, str(meal) + " · " + str(meal_items.size()) + " блюд", 13, INK)
         for item in meal_items:
             var row = _row(meal_col)
-            var amount: String = str(snappedf(float(item["grams"]), 0.1)) + " " +
+            var amount: String = str(snappedf(float(item["grams"]), 0.1)) + " " + \
                 str(item["unit"])
-            var meal_label = _label(row, str(item["name"]) + " · " + amount +
+            var meal_label = _label(row, str(item["name"]) + " · " + amount + \
                 " · " + str(roundi(MealPlannerScript.item_kcal(item))) + " ккал", 12, MUTED)
             meal_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
             var pid: String = str(item["id"])
@@ -2915,7 +2915,7 @@ func _show_week_planner() -> void:
     for item in shopping_items:
         if bool(item["bought"]):
             purchased += 1
-    var count = _label(shopping, "Отмечено " + str(purchased) + " из " +
+    var count = _label(shopping, "Отмечено " + str(purchased) + " из " + \
         str(shopping_items.size()) + " продуктов", 13, TEXT_ACCENT)
     count.name = "PlannerShoppingCount"
     _label(shopping, "Одинаковые ингредиенты объединены. Граммы и миллилитры считаются отдельно.", 11, MUTED)
@@ -2937,7 +2937,7 @@ func _show_week_planner() -> void:
         check.tooltip_text = "Отметить купленным" if not bought else "Вернуть в список"
         check.custom_minimum_size = Vector2(40, 40)
         check.size_flags_horizontal = Control.SIZE_SHRINK_START
-        var caption = _label(shopping_row, str(item["name"]) + " · " +
+        var caption = _label(shopping_row, str(item["name"]) + " · " + \
             str(snappedf(float(item["grams"]), 0.1)) + " " + str(item["unit"]), 13,
             MUTED if bought else INK)
         caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
