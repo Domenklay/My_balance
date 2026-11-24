@@ -76,9 +76,15 @@ func _test() -> void:
     await process_frame
     app.tab_buttons["search"].pressed.emit()
     await process_frame
-    if app.tab != "search" or app._meal_entry_locked:
-        _fail("main Products navigation retained a locked meal")
+    if app.tab != "recipes" or app._meal_entry_locked:
+        _fail("main Recipes navigation retained a locked meal")
         return
+    var products = app.find_child("RecipesOpenProducts", true, false) as Button
+    if products == null:
+        _fail("food search inaccessible from recipes")
+        return
+    products.pressed.emit()
+    await process_frame
     if app.find_child("ProductsOpenMyFoods", true, false) == null:
         _fail("my-products management is inaccessible")
         return

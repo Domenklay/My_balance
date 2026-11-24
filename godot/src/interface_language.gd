@@ -210,6 +210,7 @@ static func english() -> Translation:
         "▴ Резервная копия и перенос": "▴ Backup and transfer"
     }
     messages.merge({"Моя анкета":"My questionnaire","📷 Выбрать фото":"📷 Choose photo","Убрать фото":"Remove photo","Фото выбрано":"Photo selected","Фото необязательно":"Photo is optional","Короткая подпись (необязательно)":"Short bio (optional)"}, true)
+    messages.merge({"Рецепты":"Recipes","Категория":"Category","Категория блюда":"Dish category","Все блюда":"All dishes","Без категории":"Uncategorized","Первые блюда":"Soups","Вторые блюда":"Main dishes","Салаты":"Salads","Завтраки":"Breakfasts","Десерты":"Desserts","Закуски":"Snacks","Выпечка":"Baking","Напитки":"Drinks","Соусы":"Sauces","Калорийность на порцию":"Calories per serving","Любая калорийность":"Any calories","До 200 ккал":"Up to 200 kcal","До 350 ккал":"Up to 350 kcal","До 500 ккал":"Up to 500 kcal","До 750 ккал":"Up to 750 kcal","Свыше 750 ккал":"Over 750 kcal","Способ приготовления":"Cooking instructions","Импорт рецепта":"Import recipe"}, true)
     for source in messages:
         result.add_message(source, messages[source])
     return result

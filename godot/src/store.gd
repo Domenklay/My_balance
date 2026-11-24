@@ -376,6 +376,32 @@ func recipe_by_id(recipe_id: String) -> Dictionary:
             return recipe
     return {}
 
+# Share only one recipe; never include profile, diary or credentials.
+func export_shared_recipe(id: String) -> String:
+    var recipe = recipe_by_id(id)
+    if recipe.is_empty():
+        return ""
+    var result: Dictionary = {}
+    for key in ["name","cooked_weight","servings","ingredients","photo","category","instructions"]:
+        if recipe.has(key):
+            result[key] = recipe[key]
+    return JSON.stringify({"format":"mybalance.recipe.v1","recipe":result})
+
+
+func import_shared_recipe(raw: String) -> String:
+    if raw.length() > 1000000:
+        return ""
+    var decoded = JSON.parse_string(raw)
+    if not decoded is Dictionary or decoded.get("format") != "mybalance.recipe.v1" or not decoded.get("recipe") is Dictionary:
+        return ""
+    var source: Dictionary = decoded["recipe"]
+    var result: Dictionary = {"id":"", "favorite":false}
+    for key in ["name","cooked_weight","servings","ingredients","photo","category","instructions"]:
+        if source.has(key):
+            result[key] = source[key]
+    return save_recipe(result)
+
+
 func save_recipe(recipe_data: Dictionary) -> String:
     var recipe = recipe_data.duplicate(true)
     var recipe_id = str(recipe.get("id", "")).strip_edges()

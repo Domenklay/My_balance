@@ -5,6 +5,19 @@ const RecipePhoto = preload("res://src/profile_photo.gd")
 # All nutrients in an ingredient are per 100 g of that raw ingredient.
 # Finished mass (water loss/gain) changes nutrients per 100 g but never total.
 const NUTRIENTS = ["kcal", "p", "f", "c"]
+const CATEGORY_IDS = ["other", "soups", "mains", "salads", "breakfast", "desserts", "snacks", "baking", "drinks", "sauces"]
+const CATEGORY_LABELS = ["Без категории", "Первые блюда", "Вторые блюда", "Салаты", "Завтраки", "Десерты", "Закуски", "Выпечка", "Напитки", "Соусы"]
+
+static func matches_calorie_filter(kcal: float, filter: int) -> bool:
+    # Use the same rounded kcal displayed on recipe cards.
+    var shown = roundi(kcal)
+    match filter:
+        1: return shown <= 200
+        2: return shown <= 350
+        3: return shown <= 500
+        4: return shown <= 750
+        5: return shown > 750
+        _: return true
 
 static func valid_ingredient(value: Variant) -> bool:
     if not (value is Dictionary):
@@ -59,6 +72,10 @@ static func validate_recipe(recipe: Variant) -> bool:
         return false
     var name = str(recipe.get("name", "")).strip_edges()
     if name.is_empty() or name.length() > 160:
+        return false
+    if recipe.has("category") and (not recipe["category"] is String or recipe["category"] not in CATEGORY_IDS):
+        return false
+    if recipe.has("instructions") and (not recipe["instructions"] is String or recipe["instructions"].length() > 8000):
         return false
     if recipe.has("favorite") and not (recipe["favorite"] is bool):
         return false

@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.63"
+const APP_VERSION = "0.7.64"
 const InterfaceLanguage = preload("res://src/interface_language.gd")
 const Reminders = preload("res://src/reminders.gd")
 const MacroGoals = preload("res://src/macro_goals.gd")
@@ -166,6 +166,8 @@ var recipe_search_text: String = ""
 var recipe_list_query: String = ""
 var recipe_list_filter: String = "all"
 var recipe_grid_view: bool = false
+var recipe_category_filter: int = 0
+var recipe_calorie_filter: int = 0
 var recipe_manual_open: bool = false
 var recipe_actions_expanded: Dictionary = {}
 var _rendered_view: String = ""
@@ -942,7 +944,7 @@ func _make_tabs() -> void:
     row.add_theme_constant_override("separation", 2)
     bar.add_child(row)
     var tabs = [
-        ["День", "day"], ["Продукты", "search"], ["Спорт", "activity"],
+        ["День", "day"], ["Рецепты", "search"], ["Спорт", "activity"],
         ["Прогресс", "progress"], ["Профиль", "profile"]
     ]
     for item in tabs:
@@ -950,7 +952,9 @@ func _make_tabs() -> void:
         var title: String = item[0]
         var button = _button(row, "", func():
             if target == "search":
-                _navigate_to_products()
+                _meal_entry_locked = false
+                _meal_entry_date = ""
+                _navigate_to_tab("recipes")
             else:
                 _navigate_to_tab(target)
         , true)
@@ -968,7 +972,7 @@ func _make_tabs() -> void:
         content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
         var icon = TextureRect.new()
         icon.name = "NavIcon_" + target
-        icon.texture = NAV_TEXTURES[target]
+        icon.texture = NAV_TEXTURES["recipes" if target == "search" else target]
         icon.custom_minimum_size = Vector2(27, 27)
         icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
         icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -1984,7 +1988,7 @@ func _begin_recipe_editor(recipe: Dictionary = {}) -> void:
     if recipe.is_empty():
         recipe_draft = {
             "id": "", "name": "", "cooked_weight": 500.0,
-            "servings": 4.0, "ingredients": [], "photo": ""
+            "servings": 4.0, "ingredients": [], "photo": "", "category": "other", "instructions": ""
         }
     else:
         recipe_draft = recipe.duplicate(true)
@@ -2057,6 +2061,21 @@ func _show_recipe_editor() -> void:
     _label(toolbar, "Для каждого ингредиента КБЖУ берётся на 100 г или 100 мл. Укажи съедобный вес готового блюда: выпаривание воды меняет калорийность 100 г, но не общие КБЖУ.", 13, MUTED)
     var name = _text_input(toolbar, "Название блюда", str(recipe_draft.get("name", "")))
     name.max_length = 160
+    _label(toolbar, "Категория блюда", 13, MUTED)
+    var category = _choice(toolbar, RecipeMath.CATEGORY_LABELS)
+    category.name = "RecipeEditCategory"
+    category.select(maxi(0, RecipeMath.CATEGORY_IDS.find(str(recipe_draft.get("category", "other")))))
+    category.item_selected.connect(func(index: int): recipe_draft["category"] = RecipeMath.CATEGORY_IDS[index])
+    _label(toolbar, "Способ приготовления (необязательно)", 13, MUTED)
+    var instructions = TextEdit.new()
+    instructions.name = "RecipeInstructions"
+    instructions.custom_minimum_size = Vector2(0, 100)
+    instructions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    instructions.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+    instructions.placeholder_text = "Опиши шаги приготовления…"
+    instructions.text = str(recipe_draft.get("instructions", ""))
+    instructions.text_changed.connect(func(): recipe_draft["instructions"] = instructions.text)
+    toolbar.add_child(instructions)
     _label(toolbar, "Вес после приготовления, г (съедобная часть, без посуды)", 13, MUTED)
     var cooked = _number(toolbar, float(recipe_draft.get("cooked_weight", 500)), 1, 50000, 1)
     _label(toolbar, "На сколько порций разделить", 13, MUTED)
@@ -2373,13 +2392,17 @@ func _show_recipes() -> void:
     if recipe_editor_open:
         _show_recipe_editor()
         return
-    var intro = _card("Мои рецепты", "hero")
+    var intro = _card("Рецепты", "hero")
     _compact_card(intro, 10, 5)
-    _label(intro, "Домашние блюда · КБЖУ и порции", 12, HERO_MUTED)
+    _label(intro, "Личная коллекция блюд · КБЖУ на порцию", 12, HERO_MUTED)
     if _meal_entry_locked:
         var destination: String = selected_meal
         _button(intro, "← Назад к " + destination.to_lower(), func():
             _navigate_to_tab("day")
+        , true)
+        _button(intro, "← К поиску продуктов", func():
+            tab = "search"
+            _render(true)
         , true)
     var recipe_toolbar = _row(intro)
     var create_recipe = _button(recipe_toolbar, "+ Создать рецепт", func(): _begin_recipe_editor())
@@ -2387,8 +2410,28 @@ func _show_recipes() -> void:
     create_recipe.add_theme_font_size_override("font_size", 13)
     if not _meal_entry_locked:
         var search_products = _button(recipe_toolbar, "⌕ Продукты", func(): _navigate_to_tab("search"), true)
+        search_products.name = "RecipesOpenProducts"
         search_products.custom_minimum_size.y = 40
         search_products.add_theme_font_size_override("font_size", 13)
+        var tools_row = _row(intro)
+        var import_recipe = _button(tools_row, "Импорт рецепта", func():
+            var imported = store.import_shared_recipe(DisplayServer.clipboard_get())
+            if imported.is_empty():
+                _message("Скопируй код рецепта из «Мой баланс» и повтори импорт.")
+                return
+            recipe_list_filter = "all"
+            recipe_category_filter = 0
+            recipe_calorie_filter = 0
+            recipe_list_query = ""
+            _render()
+            _notify_saved("Рецепт добавлен в коллекцию")
+        , true)
+        import_recipe.name = "RecipeImport"
+        import_recipe.custom_minimum_size.y = 35
+        import_recipe.add_theme_font_size_override("font_size", 12)
+        var planner = _button(tools_row, "План недели", func(): _open_week_planner(), true)
+        planner.custom_minimum_size.y = 35
+        planner.add_theme_font_size_override("font_size", 12)
     var recipes: Array = store.data.get("recipes", []).duplicate()
     recipes.sort_custom(func(a, b):
         var a_favorite: bool = bool(a.get("favorite", false))
@@ -2403,9 +2446,31 @@ func _show_recipes() -> void:
     var recipe_search_cards: Array = []
     for logged_recipe in store.recent_recipe_portions(100):
         recently_logged[str(logged_recipe["recipe_id"])] = true
-    if not recipes.is_empty():
+    if true:
         var filter_card = _card("")
         _compact_card(filter_card, 9, 5)
+        recipe_search_field = _text_input(filter_card, "Поиск блюда или ингредиента", recipe_list_query)
+        recipe_search_field.name = "RecipeLiveSearch"
+        recipe_search_field.clear_button_enabled = true
+        # Search remains available even if no recipes are saved yet.
+        recipe_search_field.text_changed.connect(func(value: String): recipe_list_query = value)
+        _label(filter_card, "Категория", 12, MUTED)
+        var category_options = ["Все блюда"] + RecipeMath.CATEGORY_LABELS
+        var category_picker = _choice(filter_card, category_options)
+        category_picker.name = "RecipeCategoryFilter"
+        category_picker.select(recipe_category_filter)
+        category_picker.item_selected.connect(func(index: int):
+            recipe_category_filter = index
+            _render()
+        )
+        _label(filter_card, "Калорийность на порцию", 12, MUTED)
+        var kcal_picker = _choice(filter_card, ["Любая калорийность", "До 200 ккал", "До 350 ккал", "До 500 ккал", "До 750 ккал", "Свыше 750 ккал"])
+        kcal_picker.name = "RecipeCalorieFilter"
+        kcal_picker.select(recipe_calorie_filter)
+        kcal_picker.item_selected.connect(func(index: int):
+            recipe_calorie_filter = index
+            _render()
+        )
         var layout_row = _row(filter_card)
         var layout_caption = _nowrap(layout_row, "Вид рецептов", 12, MUTED)
         layout_caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2428,10 +2493,6 @@ func _show_recipes() -> void:
             tab_button.custom_minimum_size.y = 38
             tab_button.add_theme_font_size_override("font_size", 12)
             tab_button.clip_text = true
-        recipe_search_field = _text_input(filter_card,
-            "Поиск блюда или ингредиента", recipe_list_query)
-        recipe_search_field.name = "RecipeLiveSearch"
-        recipe_search_field.clear_button_enabled = true
         recipe_search_count = _label(filter_card, "", 12, MUTED)
         recipe_search_count.name = "RecipeSearchCount"
     if recipes.is_empty():
@@ -2453,10 +2514,16 @@ func _show_recipes() -> void:
             continue
         if recipe_list_filter == "recent" and not recently_logged.has(str(recipe.get("id", ""))):
             continue
-        matched += 1
         var details = RecipeMath.calculate(recipe["ingredients"], float(recipe["cooked_weight"]))
         if details.is_empty():
             continue
+        var category_id: String = str(recipe.get("category", "other"))
+        if recipe_category_filter > 0 and category_id != RecipeMath.CATEGORY_IDS[recipe_category_filter - 1]:
+            continue
+        var energy_per_serving: float = float(details["total_kcal"]) / maxf(1.0, float(recipe.get("servings", 1.0)))
+        if not RecipeMath.matches_calorie_filter(energy_per_serving, recipe_calorie_filter):
+            continue
+        matched += 1
         var recipe_id: String = str(recipe.get("id", ""))
         var card = _card("", "plain", recipe_grid)
         card.get_parent().name = "RecipeCard_" + recipe_id
@@ -2481,6 +2548,7 @@ func _show_recipes() -> void:
         var title = _label(summary, str(recipe.get("name", "Блюдо")), 16, INK)
         title.name = "RecipeCardTitle"
         title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        _label(summary, RecipeMath.CATEGORY_LABELS[maxi(0, RecipeMath.CATEGORY_IDS.find(category_id))], 11, MUTED)
         var star_button = _button(photo_row,
             "★" if bool(recipe.get("favorite", false)) else "☆", func():
                 if store.toggle_recipe_favorite(recipe_id):
@@ -2509,6 +2577,17 @@ func _show_recipes() -> void:
         _catalog_nutrient(macros, "Ж", float(details["total_f"]) / serving_count, FAT_BG, MACRO_FAT)
         _catalog_nutrient(macros, "У", float(details["total_c"]) / serving_count, CARBS_BG, MACRO_CARBS)
         macros.tooltip_text = "Белки, жиры и углеводы в граммах на порцию"
+        if not str(recipe.get("instructions", "")).strip_edges().is_empty():
+            var read_recipe = _button(card, "Способ приготовления", func():
+                var sheet = _mobile_sheet(str(recipe["name"]), "Способ приготовления", "Готово", 480.0)
+                var fields: VBoxContainer = sheet["fields"]
+                for ingredient in recipe["ingredients"]:
+                    _label(fields, str(ingredient["name"]) + " · " + str(snappedf(float(ingredient["grams"]), 0.1)) + " " + str(ingredient.get("unit", "г")), 13, INK)
+                _label(fields, str(recipe["instructions"]), 14, INK)
+                sheet["confirm"].pressed.connect(func(): sheet["root"].queue_free())
+            , true)
+            read_recipe.custom_minimum_size.y = 34
+            read_recipe.add_theme_font_size_override("font_size", 12)
         var actions = _row(card)
         actions.add_theme_constant_override("separation", 6)
         var add_portion = _button(actions, "+ Порция" if recipe_grid_view else "+ Добавить порцию в дневник",
@@ -2563,6 +2642,13 @@ func _show_recipes() -> void:
                         _message("Не удалось удалить рецепт.")
                 )
             , true)
+            var share = _button(card, "Поделиться рецептом · копировать", func():
+                DisplayServer.clipboard_set(store.export_shared_recipe(recipe_id))
+                _notify_saved("Код рецепта скопирован. Его можно отправить другому пользователю.")
+            , true)
+            share.name = "RecipeShare_" + recipe_id
+            share.custom_minimum_size.y = 36
+            share.add_theme_font_size_override("font_size", 12)
     if not recipes.is_empty():
         var no_results = _card("Ничего не найдено")
         no_results.get_parent().name = "RecipeNoMatches"
@@ -2581,7 +2667,7 @@ func _show_recipes() -> void:
                     visible_count += 1
             no_results.get_parent().visible = visible_count == 0
             no_results_text.text = (
-                "В этом разделе пока нет блюд. Выбери «Все»." if matched == 0
+                "Нет блюд по этим фильтрам. Измени категорию или калорийность." if matched == 0
                 else "Попробуй другое блюдо или ингредиент либо очисти поиск."
             )
             if recipe_search_count != null:
@@ -2874,6 +2960,9 @@ func _show_online_search_results(records: Array) -> void:
 func _open_recipes_from_products() -> void:
     # Keep the selected meal and date when opening saved dishes from catalog.
     recipe_list_filter = "all"
+    recipe_category_filter = 0
+    recipe_calorie_filter = 0
+    recipe_list_query = ""
     tab = "recipes"
     _render(true)
 

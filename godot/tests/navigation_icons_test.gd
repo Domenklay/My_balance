@@ -17,7 +17,7 @@ func _run() -> void:
     app.tab = "day"
     app._render()
     await process_frame
-    var titles = {"day":"День", "search":"Продукты", "activity":"Спорт",
+    var titles = {"day":"День", "search":"Рецепты", "activity":"Спорт",
         "progress":"Прогресс", "profile":"Профиль"}
     var navigation = app.shell.get_node_or_null("BottomNavigation")
     if navigation == null or app.nav_icons.size() != 5 or \
@@ -56,7 +56,7 @@ func _run() -> void:
     for target in ["search", "activity", "progress", "profile", "day"]:
         app.tab_buttons[target].pressed.emit()
         await process_frame
-        if app.tab != target or app.nav_icons[target].modulate != app.WHITE:
+        if app.tab != ("recipes" if target == "search" else target) or app.nav_icons[target].modulate != app.WHITE:
             _fail("press or active icon broken: " + target)
             return
     # Legacy internal destinations remain reachable via old profile and day links.
