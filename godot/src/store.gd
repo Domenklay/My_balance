@@ -504,6 +504,23 @@ func delete_recipe(recipe_id: String) -> bool:
             return false
     return false
 
+func add_suggested_recipe_portion(recipe: Dictionary, grams: float, meal: String, day: String) -> bool:
+    if not RecipeMath.validate_recipe(recipe):
+        return false
+    var id = str(recipe["id"])
+    var existing = recipe_by_id(id)
+    if not existing.is_empty():
+        return add_recipe_portion(id, grams, meal, day)
+    if data["recipes"].size() >= 300:
+        return false
+    var copy = recipe.duplicate(true)
+    data["recipes"].append(copy)
+    if add_recipe_portion(id, grams, meal, day):
+        return true
+    data["recipes"].erase(copy)
+    return false
+
+
 func add_recipe_portion(recipe_id: String, grams: float, meal: String, day: String) -> bool:
     if not is_finite(grams) or grams <= 0.0 or grams > 5000.0:
         return false

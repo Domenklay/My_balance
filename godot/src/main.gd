@@ -38,7 +38,8 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.71.1"
+const APP_VERSION = "0.7.72"
+const RecipeSuggest = preload("res://src/recipe_suggest.gd")
 const ReadyRecipes = preload("res://src/ready_recipes.gd")
 const CommunityClient = preload("res://src/community_client.gd")
 const InterfaceLanguage = preload("res://src/interface_language.gd")
@@ -2338,14 +2339,75 @@ func _show_recipe_editor() -> void:
         _notify_saved("Рецепт сохранён")
     )
 
-func _recipe_portion_sheet(recipe: Dictionary) -> void:
+func _recipe_suggest_sheet(day: String) -> void:
+    var budget = RecipeSuggest.remaining(float(store.data["settings"]["kcal"]), store.day_calories(day),
+        store.macro_targets(), {"p":store.day_macro(day,"p"),"f":store.day_macro(day,"f"),"c":store.day_macro(day,"c")})
+    var recipes: Array = store.data.get("recipes", []).duplicate(true)
+    var existing: Dictionary = {}
+    for saved in recipes:
+        existing[str(saved["id"])] = true
+    for ready in ReadyRecipes.all():
+        if not existing.has("saved_" + str(ready["id"])):
+            recipes.append(ReadyRecipes.personal_copy(ready))
+    var sheet = _mobile_sheet("Подбор блюд", "На " + day.substr(8,2) + "." + day.substr(5,2) + " · ориентировочные значения", "Готово", 700.0)
+    var fields: VBoxContainer = sheet["fields"]
+    var budget_line: String = "Осталось по цели: " + str(roundi(float(budget["kcal"]))) + " ккал"
+    for key in ["p","f","c"]:
+        if budget.has(key):
+            budget_line += " · " + {"p":"Б","f":"Ж","c":"У"}[key] + " " + str(snappedf(float(budget[key]),0.1)) + " г"
+    _label(fields, budget_line, 15, TEXT_ACCENT).name = "SuggestBudget"
+    _label(fields, "Подбор необязателен. Если цель достигнута, это не означает, что нужно отказываться от еды. КБЖУ готовых рецептов приблизительные.", 12, MUTED)
+    _label(fields, "Категория", 12, MUTED)
+    var category = _choice(fields, ["Все блюда"] + RecipeMath.CATEGORY_LABELS)
+    category.name = "SuggestCategory"
+    _label(fields, "Размер порции", 12, MUTED)
+    var portion = _choice(fields, ["½ порции", "1 порция", "1½ порции", "2 порции"])
+    portion.name = "SuggestPortion"
+    portion.select(1)
+    var results = VBoxContainer.new()
+    results.name = "SuggestResults"
+    results.add_theme_constant_override("separation", 7)
+    fields.add_child(results)
+    var refresh = func(_unused: int):
+        for child in results.get_children():
+            results.remove_child(child)
+            child.queue_free()
+        var cat: String = "" if category.selected == 0 else RecipeMath.CATEGORY_IDS[category.selected-1]
+        var matches: Array = RecipeSuggest.recommend(recipes, budget, [0.5,1.0,1.5,2.0][portion.selected], cat)
+        _label(results, "Подходит: " + str(matches.size()) + " · показано до 20", 12, MUTED)
+        if matches.is_empty():
+            _label(results, "Нет блюд, совпадающих со всеми выбранными условиями. Можно открыть обычный каталог или изменить категорию и размер порции.", 13, INK)
+        for i in range(mini(20,matches.size())):
+            var candidate: Dictionary = matches[i]
+            var recipe: Dictionary = candidate["recipe"]
+            var values: Dictionary = candidate["portion"]
+            var card = _card("", "plain", results)
+            card.get_parent().name = "SuggestRecipe_" + str(recipe["id"])
+            _compact_card(card, 8, 5)
+            _label(card, str(recipe["name"]), 15, INK)
+            _label(card, str(roundi(float(candidate["grams"]))) + " г · ≈ " + str(roundi(float(values["kcal"]))) + " ккал", 13, TEXT_ACCENT)
+            _label(card, "Б " + str(snappedf(float(values["p"]),0.1)) + " · Ж " + str(snappedf(float(values["f"]),0.1)) + " · У " + str(snappedf(float(values["c"]),0.1)) + " г", 12, MUTED)
+            var open = _button(card, "Выбрать порцию →", func():
+                sheet["root"].queue_free()
+                await get_tree().process_frame
+                _recipe_portion_sheet(recipe, float(candidate["grams"]), day, true)
+            , true)
+            open.name = "SuggestChoose_" + str(recipe["id"])
+            open.custom_minimum_size.y = 38
+    category.item_selected.connect(refresh)
+    portion.item_selected.connect(refresh)
+    refresh.call(0)
+    sheet["confirm"].pressed.connect(func(): sheet["root"].queue_free())
+
+
+func _recipe_portion_sheet(recipe: Dictionary, suggested_weight: float = 0.0, suggested_day: String = "", save_on_confirm: bool = false) -> void:
     var values = RecipeMath.calculate(recipe.get("ingredients", []), float(recipe.get("cooked_weight", 0)))
     if values.is_empty():
         _message("Не удалось рассчитать пищевую ценность рецепта.")
         return
     var last: Dictionary = store.last_recipe_portion(str(recipe.get("id", "")))
     var normal_weight: float = float(recipe["cooked_weight"]) / maxf(1.0, float(recipe["servings"]))
-    var initial_weight: float = float(last.get("grams", normal_weight))
+    var initial_weight: float = suggested_weight if suggested_weight > 0 else float(last.get("grams", normal_weight))
     var sheet = _mobile_sheet(str(recipe.get("name", "Рецепт")),
         "Для готовых рецептов выход и КБЖУ приблизительные. Уточни фактический вес в редакторе." if recipe.has("source_url") else "Выбери съеденный вес готового блюда. Расчёт КБЖУ ведётся по фактическому весу после готовки.",
         "Добавить порцию", 425.0)
@@ -2390,8 +2452,14 @@ func _recipe_portion_sheet(recipe: Dictionary) -> void:
     refresh.call(weight.value)
     var confirm: Button = sheet["confirm"]
     confirm.pressed.connect(func():
-        if store.add_recipe_portion(str(recipe["id"]), weight.value,
-                meal.get_item_text(meal.selected), _selected_food_date()):
+        var target_day: String = suggested_day if not suggested_day.is_empty() else _selected_food_date()
+        var success: bool = false
+        if save_on_confirm:
+            success = store.add_suggested_recipe_portion(recipe, weight.value, meal.get_item_text(meal.selected), target_day)
+        else:
+            success = store.add_recipe_portion(str(recipe["id"]), weight.value, meal.get_item_text(meal.selected), target_day)
+        if success:
+            date = target_day
             sheet["root"].queue_free()
             _meal_entry_locked = false
             _meal_entry_date = ""
@@ -2760,6 +2828,9 @@ func _show_ready_recipes() -> void:
         ready_recipes_open = false
         _begin_recipe_editor()
     )
+    var suggest = _button(intro, "Подобрать по остаткам КБЖУ", func(): _recipe_suggest_sheet(date), true)
+    suggest.name = "ReadyRecipeSuggest"
+    suggest.custom_minimum_size.y = 38
     var filters = _card("")
     _compact_card(filters, 9, 5)
     var query = _text_input(filters, "Поиск блюда или ингредиента", ready_query)
@@ -4179,6 +4250,10 @@ func _show_day() -> void:
     var planner_shortcut = _card("", "tint")
     _compact_card(planner_shortcut, 8, 4)
     planner_shortcut.get_parent().name = "DayPlannerShortcut"
+    var suggest = _button(planner_shortcut, "Подобрать блюдо по КБЖУ", func(): _recipe_suggest_sheet(date), true)
+    suggest.name = "DayRecipeSuggest"
+    suggest.custom_minimum_size.y = 38
+    suggest.add_theme_font_size_override("font_size", 13)
     var action_row = _row(planner_shortcut)
     action_row.add_theme_constant_override("separation", 5)
     var plan_shortcut = _button(action_row, "▦ План недели и покупки",
