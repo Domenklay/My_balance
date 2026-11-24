@@ -13,10 +13,12 @@ const ProfilePhotoScript = preload("res://src/profile_photo.gd")
 const OnboardingMath = preload("res://src/onboarding_math.gd")
 const ActivityMath = preload("res://src/activity_math.gd")
 const BodyMeasurements = preload("res://src/body_measurements.gd")
+const WaterMath = preload("res://src/water_tracker.gd")
 
 const MEAL_NAMES = ["Завтрак", "Обед", "Ужин", "Перекус"]
 const DEFAULT_MEAL_SHARES = [25, 35, 30, 10]
 const DEFAULT_HOME_WIDGETS = {"week": false, "weight": false}
+const DEFAULT_WATER_GOAL_ML = 2000
 
 const DEFAULT_PRODUCTS = [
     ["Овсяные хлопья (сухие)",370,13,7,62],
@@ -132,9 +134,9 @@ func _is_barcode(code: String) -> bool:
 func default_data() -> Dictionary:
     return {
         "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true, "high_contrast": false,
-            "meal_shares": DEFAULT_MEAL_SHARES.duplicate(), "home_widgets": DEFAULT_HOME_WIDGETS.duplicate(), "onboarding_complete": false,
+            "meal_shares": DEFAULT_MEAL_SHARES.duplicate(), "home_widgets": DEFAULT_HOME_WIDGETS.duplicate(), "water_goal_ml": DEFAULT_WATER_GOAL_ML, "onboarding_complete": false,
             "personal": {}},
-        "foods": [], "entries": [], "activities": [], "steps": {}, "weights": [], "body_measurements": [], "notes": {}, "favorites": [],
+        "foods": [], "entries": [], "activities": [], "steps": {}, "weights": [], "body_measurements": [], "water_entries": [], "notes": {}, "favorites": [],
         "recipes": [], "meal_templates": [], "day_copy_undo": {}, "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
             "photo": "", "frame": "plain"}
     }
@@ -476,6 +478,25 @@ func import_json(raw: String, persist: bool = true) -> bool:
         if measurement_dates.has(measurement_day):
             return false
         measurement_dates[measurement_day] = true
+    # v0.7.49 water entries are optional in older journals. Always check
+    # them before replacing the active diary during JSON restoration.
+    if not obj.has("water_entries"):
+        obj["water_entries"] = []
+    if not (obj["water_entries"] is Array) or obj["water_entries"].size() > 50000:
+        return false
+    var water_ids: Dictionary = {}
+    var water_daily_totals: Dictionary = {}
+    for water in obj["water_entries"]:
+        if not WaterMath.valid_entry(water):
+            return false
+        var water_id: String = str(water["id"])
+        if water_ids.has(water_id):
+            return false
+        water_ids[water_id] = true
+        var water_day: String = str(water["date"])
+        water_daily_totals[water_day] = int(water_daily_totals.get(water_day, 0)) + int(water["ml"])
+        if int(water_daily_totals[water_day]) > WaterMath.MAX_DAY_ML:
+            return false
     # Favorites were introduced in 0.5.3; older exports have no such field.
     if not obj.has("recipes"):
         obj["recipes"] = []
@@ -580,6 +601,13 @@ func import_json(raw: String, persist: bool = true) -> bool:
             return false
         ids[recipe_id] = true
     var settings: Dictionary = obj["settings"]
+    # Older JSON backups lack a water goal; set a neutral editable starting
+    # value rather than inferring hydration needs from weight or activity.
+    if not settings.has("water_goal_ml"):
+        settings["water_goal_ml"] = DEFAULT_WATER_GOAL_ML
+    if not WaterMath.valid_goal(settings["water_goal_ml"]):
+        return false
+    settings["water_goal_ml"] = roundi(float(settings["water_goal_ml"]))
     # Backups created before 0.7.9 already represent an established diary.
     # Never show a first-run form to people installing an update.
     if not settings.has("onboarding_complete"):
@@ -1593,6 +1621,84 @@ func update_activity(record: Dictionary, changes: Dictionary) -> bool:
     record.clear()
     record.merge(previous, true)
     return false
+
+func water_goal_ml() -> int:
+    return int(data.get("settings", {}).get("water_goal_ml", DEFAULT_WATER_GOAL_ML))
+
+
+func set_water_goal_ml(ml: int) -> bool:
+    if not WaterMath.valid_goal(ml):
+        return false
+    var previous: Dictionary = data["settings"].duplicate(true)
+    data["settings"]["water_goal_ml"] = ml
+    if save():
+        return true
+    data["settings"] = previous
+    return false
+
+
+func day_water_entries(day: String) -> Array:
+    return data.get("water_entries", []).filter(func(e):
+        return e is Dictionary and str(e.get("date", "")) == day)
+
+
+func day_water_ml(day: String) -> int:
+    return WaterMath.daily_total(data.get("water_entries", []), day)
+
+
+func day_water_summary(day: String) -> Dictionary:
+    return WaterMath.daily_summary(data.get("water_entries", []), day, water_goal_ml())
+
+
+func week_water_summary(day: String) -> Dictionary:
+    var result: Dictionary = {"ml": 0, "days_logged": 0, "records": 0}
+    for date_in_week in week_dates(day):
+        var day_value: String = str(date_in_week)
+        var portions: Array = day_water_entries(day_value)
+        var total: int = day_water_ml(day_value)
+        result["ml"] = int(result["ml"]) + total
+        result["records"] = int(result["records"]) + portions.size()
+        if total > 0:
+            result["days_logged"] = int(result["days_logged"]) + 1
+    return result
+
+
+func add_water(day: String, ml: int) -> bool:
+    if not WaterMath.Dates.valid_date(day) or not WaterMath.valid_amount(ml):
+        return false
+    if day_water_ml(day) + ml > WaterMath.MAX_DAY_ML:
+        return false
+    var entry: Dictionary = {
+        "id": "h" + str(Time.get_ticks_usec()) + "_" + str(data["water_entries"].size()),
+        "date": day, "ml": ml
+    }
+    if not WaterMath.valid_entry(entry):
+        return false
+    data["water_entries"].append(entry)
+    if save():
+        return true
+    data["water_entries"].erase(entry)
+    return false
+
+
+func delete_water(entry_id: String) -> bool:
+    if entry_id.is_empty():
+        return false
+    var original: Array = data["water_entries"].duplicate(true)
+    var found = false
+    for entry in original:
+        if str(entry.get("id", "")) == entry_id:
+            found = true
+            break
+    if not found:
+        return false
+    data["water_entries"] = original.filter(func(e):
+        return str(e.get("id", "")) != entry_id)
+    if save():
+        return true
+    data["water_entries"] = original
+    return false
+
 
 func day_activity_summary(day: String) -> Dictionary:
     return ActivityMath.summarize(day_activities(day), weight_prefill(day), day_steps(day))

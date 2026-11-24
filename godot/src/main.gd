@@ -37,7 +37,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.48"
+const APP_VERSION = "0.7.49"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -109,6 +109,8 @@ var body_chart_period: String = "quarter"
 var weight_chart_period: String = "quarter"
 var weight_history_expanded: bool = false
 var body_history_expanded: bool = false
+var water_details_expanded: bool = false
+var water_history_expanded: bool = false
 var stats_period: String = "week"
 var stats_anchor: String = ""
 var month_shown: String = ""
@@ -2532,6 +2534,125 @@ func _set_home_progress_view(view: String) -> void:
     _render()
 
 
+func _show_water_card() -> void:
+    # A single compact block in the existing Day tab; nothing changes in
+    # food calories, activity targets or the five-tab navigation.
+    var info: Dictionary = store.day_water_summary(date)
+    var water_card = _card("", "plain")
+    water_card.get_parent().name = "DayWaterCard"
+    _compact_card(water_card, 10, 6)
+    var heading = _row(water_card)
+    var water_title = _label(heading, "💧 Вода", 15, INK)
+    water_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    var amount_label = _nowrap(heading, str(info["ml"]) + " / " +
+        str(info["goal"]) + " мл", 14, TEXT_ACCENT)
+    amount_label.name = "WaterDailyAmount"
+    amount_label.size_flags_horizontal = Control.SIZE_SHRINK_END
+    amount_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+    var water_progress = ProgressBar.new()
+    water_progress.name = "WaterDailyProgress"
+    water_progress.min_value = 0
+    water_progress.max_value = maxi(1, int(info["goal"]))
+    water_progress.value = mini(int(info["ml"]), int(info["goal"]))
+    water_progress.show_percentage = false
+    water_progress.custom_minimum_size.y = 8
+    _style_progress(water_progress)
+    var fill = StyleBoxFlat.new()
+    fill.bg_color = Color("#80C1C3") if DARK_MODE else Color("#479CAD")
+    fill.set_corner_radius_all(9)
+    water_progress.add_theme_stylebox_override("fill", fill)
+    water_card.add_child(water_progress)
+    var buttons = _row(water_card)
+    buttons.name = "WaterQuickAmounts"
+    buttons.add_theme_constant_override("separation", 5)
+    for ml in [150, 250, 500]:
+        var serving: int = ml
+        var button = _button(buttons, "+" + str(serving) + " мл", func():
+            if store.add_water(date, serving):
+                _render()
+                _notify_saved("Добавлено " + str(serving) + " мл воды")
+            else:
+                _message("Не удалось сохранить воду. Проверь объём или память устройства.")
+        , true)
+        button.name = "WaterQuickAdd_" + str(serving)
+        button.custom_minimum_size.y = 41
+        button.add_theme_font_size_override("font_size", 12)
+    var expanded = _button(water_card,
+        "▴ Скрыть воду" if water_details_expanded else
+        "▾ Своя порция, цель и история", func():
+            water_details_expanded = not water_details_expanded
+            _render()
+    , true)
+    expanded.name = "WaterDetailsToggle"
+    expanded.custom_minimum_size.y = 37
+    expanded.add_theme_font_size_override("font_size", 12)
+    if not water_details_expanded:
+        return
+    _label(water_card, "Добавить свою порцию", 13, INK)
+    var custom_row = _row(water_card)
+    var custom_amount = _number(custom_row, 300, 25, 2000, 25)
+    custom_amount.name = "WaterCustomAmount"
+    custom_amount.custom_minimum_size.x = 100
+    var custom_save = _button(custom_row, "Добавить, мл", func():
+        if store.add_water(date, roundi(custom_amount.value)):
+            _render()
+            _notify_saved("Вода записана")
+        else:
+            _message("Не удалось сохранить порцию воды.")
+    )
+    custom_save.name = "WaterCustomSave"
+    custom_save.custom_minimum_size.y = 42
+    _label(water_card, "Дневная цель, мл", 13, INK)
+    var goal_row = _row(water_card)
+    var goal_field = _number(goal_row, store.water_goal_ml(), 250, 6000, 50)
+    goal_field.name = "WaterDailyGoal"
+    goal_field.custom_minimum_size.x = 100
+    var goal_save = _button(goal_row, "Сохранить цель", func():
+        if store.set_water_goal_ml(roundi(goal_field.value)):
+            _render()
+            _notify_saved("Цель воды сохранена")
+        else:
+            _message("Не удалось сохранить цель воды.")
+    , true)
+    goal_save.name = "WaterSaveGoal"
+    goal_save.custom_minimum_size.y = 42
+    _label(water_card, "Цель настраивается вручную и не зависит от калорий. " +
+        "Это личный ориентир, не медицинская рекомендация.", 11, MUTED)
+    var week: Dictionary = store.week_water_summary(date)
+    _label(water_card, "За неделю: " + str(week["ml"]) + " мл · " +
+        str(week["days_logged"]) + " дней с записями", 12, MUTED)
+
+    var history: Array = store.day_water_entries(date)
+    history.reverse()
+    _label(water_card, "Записи за выбранный день: " + str(history.size()), 13, INK)
+    if history.is_empty():
+        _label(water_card, "В этот день вода ещё не записана.", 12, MUTED)
+    var limit: int = history.size() if water_history_expanded else mini(history.size(), 6)
+    for i in range(limit):
+        var item: Dictionary = history[i]
+        var water_line = _soft_list_row(water_card)
+        var label = _label(water_line, "Вода · " + str(item["ml"]) + " мл", 13, INK)
+        label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        var id: String = str(item["id"])
+        var remove = _button(water_line, "×", func():
+            if store.delete_water(id):
+                _render()
+                _notify_saved("Запись воды удалена")
+            else:
+                _message("Не удалось удалить запись воды.")
+        , true)
+        remove.name = "WaterDelete_" + id
+        remove.tooltip_text = "Удалить эту порцию воды"
+    if history.size() > 6:
+        var toggle = _button(water_card,
+            "Скрыть старые порции" if water_history_expanded else
+            "Показать все порции (" + str(history.size()) + ")", func():
+                water_history_expanded = not water_history_expanded
+                _render()
+        , true)
+        toggle.name = "WaterHistoryToggle"
+
+
 func _show_day() -> void:
     var overview = _card("", "overview")
     _compact_card(overview, 5, 2)
@@ -2631,6 +2752,8 @@ func _show_day() -> void:
             undo.name = "DayCopyUndo"
             undo.custom_minimum_size.y = 39
             undo.add_theme_font_size_override("font_size", 12)
+
+    _show_water_card()
 
     # Compact sections are always present. Only the selected meal unfolds.
     # Expansion state is in-memory, keyed by date: diary records are untouched.

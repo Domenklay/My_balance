@@ -75,6 +75,23 @@ func _capture() -> void:
     app.store.data["notes"][app.date] = "Вечером захотелось сладкого после прогулки."
     app._render()
     await _snapshot(app, "02-day-filled-top")
+    # 0.7.49 phone preview for the compact water tracker.
+    app.store.data["water_entries"] = [
+        {"id":"w1","date":app.date,"ml":250},
+        {"id":"w2","date":app.date,"ml":500},
+        {"id":"w3","date":app.date,"ml":500}
+    ]
+    app._render()
+    await _snapshot(app, "02-day-water")
+    app.water_details_expanded = true
+    app._render()
+    await process_frame
+    var water = app.find_child("WaterDailyAmount", true, false)
+    if water != null:
+        app.scroll.ensure_control_visible(water)
+        await _snapshot(app, "02-day-water-expanded")
+    app.water_details_expanded = false
+    app._render()
     # Dedicated reference shots for the new smart-diary actions.
     app.date = "2026-11-20"
     app.day_tools_expanded = true
