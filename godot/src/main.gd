@@ -5956,7 +5956,8 @@ func _google_download() -> void:
 
 
 func _google_delete() -> void:
-    if google_plugin == null or not google_connected or not google_exists or google_busy:
+    if google_plugin == null or not google_connected or not google_checked or \
+            not google_exists or google_busy:
         return
     var expected_id: String = google_file_id
     var expected_md5: String = google_checksum
@@ -6022,7 +6023,7 @@ func _show_google_backup_settings() -> void:
     if google_exists:
         var remove = _button(card, "Удалить облачную копию", func(): _google_delete(), true)
         remove.name = "GoogleCloudDelete"
-        remove.disabled = google_busy
+        remove.disabled = google_busy or not google_checked
     var disconnect_button = _button(card, "Отключить Google Диск", func(): _google_revoke(), true)
     disconnect_button.name = "GoogleCloudDisconnect"
     disconnect_button.disabled = google_busy

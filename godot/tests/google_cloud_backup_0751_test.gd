@@ -36,6 +36,10 @@ func _run() -> void:
             app.google_checksum != "md5-expected":
         _fail("remote file id/checksum not stored together")
         return
+    app._on_google_error("Облачная копия изменилась на другом устройстве.")
+    if app.google_checked:
+        _fail("conflict did not invalidate the remote revision")
+        return
     app._on_google_disconnected()
     if app.google_checked or not app.google_file_id.is_empty() or \
             not app.google_checksum.is_empty():
