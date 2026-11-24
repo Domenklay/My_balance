@@ -261,7 +261,11 @@ public final class MyBalanceGoogleDrive extends GodotPlugin {
         final String token = accessToken;
         if (token == null || token.isEmpty()) throw new Exception("Сначала подключи Google Диск.");
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-        connection.setRequestMethod(method);
+        // Android HttpURLConnection does not support PATCH on all devices.
+        // Google Drive accepts a POST with X-HTTP-Method-Override: PATCH.
+        connection.setRequestMethod("PATCH".equals(method) ? "POST" : method);
+        if ("PATCH".equals(method))
+            connection.setRequestProperty("X-HTTP-Method-Override", "PATCH");
         connection.setConnectTimeout(14000);
         connection.setReadTimeout(16000);
         connection.setRequestProperty("Authorization", "Bearer " + token);
