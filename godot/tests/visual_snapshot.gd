@@ -407,5 +407,23 @@ func _capture() -> void:
     if shop_list != null:
         app.scroll.ensure_control_visible(shop_list)
         await _snapshot(app, "24-planner-shopping-list")
+    # 0.7.50.1: inspect five genuinely different theme families on a real
+    # phone viewport, including the color-strip previews in Settings.
+    for id in ["forest","mint","sand","dark","botanical"]:
+        app.store.data["settings"]["theme"] = id
+        app.store.data["settings"]["patterns"] = true
+        app._refresh_appearance()
+        app.tab = "day"
+        app._render(true)
+        await process_frame
+        await _snapshot(app, "25-theme-" + id + "-day")
+    app.tab = "settings"
+    app.settings_page = "main"
+    app._render(true)
+    await process_frame
+    var swatch = app.find_child("ThemeSwatch_botanical", true, false)
+    if swatch != null:
+        app.scroll.ensure_control_visible(swatch)
+        await _snapshot(app, "26-new-theme-chooser")
     app.queue_free()
     quit(0)

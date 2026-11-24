@@ -6,8 +6,8 @@ const NAMES = {
     "forest": "Лесная светлая",
     "mint": "Мятная нежность",
     "sand": "Тёплый беж",
-    "dark": "Тёмная лесная",
-    "botanical": "Ботанический контраст"
+    "dark": "Ночной синий",
+    "botanical": "Сливовый уют"
 }
 const ORDER = ["forest", "mint", "sand", "dark", "botanical"]
 
@@ -70,80 +70,23 @@ const HIGH_OVERRIDES = {
 
 # A richer, themed color system: neutral surfaces, contrasting section cards,
 # and distinctly colored nutrition tiles. Kept separate from contrast settings.
+# Each complete palette overrides the historical base tokens. Stored theme ids
+# intentionally remain unchanged so users keep their selected theme on update.
 const COLOR_VARIANTS = {
-    "botanical": {
-        "background":"#FAF8F3", "surface":"#FFFEFA", "row":"#F2F6F0",
-        "header":"#123F35", "hero":"#123F35", "hero_muted":"#DAEDE0",
-        "overview":"#F7F4EC", "activity":"#E5F0E8", "tile":"#EDF4EC",
-        "tint":"#EDF5ED", "secondary":"#E4F0E7", "border":"#C7D9C8",
-        "chip":"#1D614A", "track":"#477D6B", "fill":"#E3F3BB",
-        "nav_active":"#125842", "activity_text":"#275B49",
-        "protein_bg":"#D8F2DD", "fat_bg":"#FFE5B5",
-        "carbs_bg":"#E1DFFB", "protein_text":"#175E39",
-        "fat_text":"#805322", "carbs_text":"#493F88",
-        "accent":"#D59A52", "pattern":"botanical",
-        "pattern_color":"#7EAA8D", "nav_bg":"#FAF8F3"
-    },
-    "forest": {
-        "background":"#F5F8F4", "surface":"#FFFFFF", "row":"#EEF5EF",
-        "header":"#153F33", "hero":"#19513F", "hero_muted":"#D8EBDD",
-        "overview":"#F5F7EF", "activity":"#E5F1E9", "tile":"#EDF5EE",
-        "tint":"#E9F4EC", "secondary":"#E2F0E5", "border":"#CADACC",
-        "chip":"#246049", "track":"#4D8067", "fill":"#D8EFAE",
-        "nav_active":"#185840", "activity_text":"#2B644B",
-        "protein_bg":"#d9f0e5", "fat_bg":"#ffead0",
-        "carbs_bg":"#e5e1fc", "protein_text":"#225944",
-        "fat_text":"#77501e", "carbs_text":"#484180",
-        "accent":"#C99354", "pattern_color":"#91B49B"
-    },
-    "mint": {
-        "background":"#F2FAF7", "surface":"#FFFFFF", "row":"#EAF5F1",
-        "header":"#15574E", "hero":"#20665B", "hero_muted":"#E0F4E8",
-        "overview":"#F4F9F3", "activity":"#E3F3EE", "tile":"#EBF8F3",
-        "tint":"#E7F7F0", "secondary":"#DDF1E9", "border":"#BED9D0",
-        "chip":"#277263", "track":"#4F9682", "fill":"#C9EFCB",
-        "nav_active":"#246C5D", "activity_text":"#226254",
-        "protein_bg":"#d9f3e8", "fat_bg":"#ffe5c9",
-        "carbs_bg":"#e0e5ff", "protein_text":"#20604f",
-        "fat_text":"#80511d", "carbs_text":"#414a8b",
-        "accent":"#D7A16F", "pattern_color":"#7FB29F"
-    },
-    "sand": {
-        "background":"#FAF4EA", "surface":"#FFFCF6", "row":"#F6EEDF",
-        "header":"#514A32", "hero":"#61553A", "hero_muted":"#F8ECDC",
-        "overview":"#FFF8E9", "activity":"#F1E9DA", "tile":"#F8F0E3",
-        "tint":"#F7EEDD", "secondary":"#F1E6D1", "border":"#DBCCB3",
-        "chip":"#766546", "track":"#998363", "fill":"#F5DE9E",
-        "nav_active":"#6C5C3B", "activity_text":"#66583D",
-        "protein_bg":"#e2f2df", "fat_bg":"#ffe7c7",
-        "carbs_bg":"#e8def5", "protein_text":"#3e6034",
-        "fat_text":"#87501d", "carbs_text":"#624481",
-        "accent":"#B98557", "pattern_color":"#B8AA8A"
-    },
-    "dark": {
-        "background":"#101B17", "surface":"#1B3027", "row":"#294237",
-        "header":"#0E221B", "hero":"#204333", "hero_muted":"#E0EEDF",
-        "overview":"#253B30", "activity":"#294A39", "tile":"#2B483A",
-        "tint":"#233D31", "secondary":"#315040", "border":"#587865",
-        "chip":"#315744", "track":"#4F8068", "fill":"#D4EDAD",
-        "nav_active":"#387E60", "activity_text":"#E6F3E7",
-        "protein_bg":"#234c4c", "fat_bg":"#5d413c",
-        "carbs_bg":"#403e69", "protein_text":"#b1f4df",
-        "fat_text":"#ffdcac", "carbs_text":"#d3ccff",
-        "accent":"#E9B77D", "pattern_color":"#759989",
-        "muted":"#C6DCCB", "head_muted":"#DCEBDF",
-        "ink":"#EFF7F0", "input":"#264134",
-        "green":"#397D60", "text_accent":"#C1EACB"
-    }
+    "forest": {"protein_bg": "#D9F2DE", "fat_bg": "#FFE4B9", "carbs_bg": "#E4E1FB", "protein_text": "#235D3A", "fat_text": "#865521", "carbs_text": "#4B4880", "gold": "#FAE6C6", "logo_text": "#F9E7CB", "protein": "#D9F2DE", "fat": "#FFE4B9", "carbs": "#E4E1FB", "green": "#195C47", "deep": "#124232", "ink": "#203B30", "muted": "#50675A", "pale": "#EEF6EE", "accent": "#B78249", "input": "#FFFFFF", "border": "#BCD2C2", "secondary": "#E0EFE5", "background": "#F3F7F1", "surface": "#FFFFFF", "tint": "#E9F3E8", "row": "#F1F7F0", "header": "#153E30", "head_muted": "#DDF0E2", "icon": "#2D7054", "hero": "#194B38", "hero_muted": "#E9F6E9", "chip": "#27624A", "track": "#48816A", "fill": "#D9EDB6", "text_accent": "#195C47", "grid": "#C9DED1", "area": "#DFEEE0", "pattern": "leaves", "pattern_color": "#73A489", "nav_bg": "#F3F7F1", "overview": "#F8F4EC", "activity": "#E9F1E9", "tile": "#EDF5EA", "nav_active": "#195C47", "activity_text": "#35674B"},
+    "mint": {"protein_bg": "#DDF5E9", "fat_bg": "#FFE5D7", "carbs_bg": "#E3E7FB", "protein_text": "#22664D", "fat_text": "#86512D", "carbs_text": "#4D5491", "gold": "#FAE6C6", "logo_text": "#F9E7CB", "protein": "#D9F2DE", "fat": "#FFE4B9", "carbs": "#E4E1FB", "green": "#116F8A", "deep": "#075267", "ink": "#173F50", "muted": "#4E6C77", "pale": "#EAF8FB", "accent": "#C57F63", "input": "#FFFFFF", "border": "#A7D0DC", "secondary": "#D5F0F5", "background": "#EDF9FB", "surface": "#FFFFFF", "tint": "#E0F4F8", "row": "#EAF6FA", "header": "#13556C", "head_muted": "#DAF3F9", "icon": "#1B7A93", "hero": "#126882", "hero_muted": "#E2F8FC", "chip": "#26768D", "track": "#58A1B2", "fill": "#CBE9EF", "text_accent": "#126C84", "grid": "#C7E7EC", "area": "#D7EFF4", "pattern": "dots", "pattern_color": "#7CB9CD", "nav_bg": "#EDF9FB", "overview": "#F5F9FF", "activity": "#DFF1F7", "tile": "#E8F4FA", "nav_active": "#116F8A", "activity_text": "#246D84"},
+    "sand": {"protein_bg": "#E5F0DA", "fat_bg": "#FDE3C4", "carbs_bg": "#EFE4F4", "protein_text": "#49653B", "fat_text": "#8B572D", "carbs_text": "#70557D", "gold": "#FAE6C6", "logo_text": "#F9E7CB", "protein": "#D9F2DE", "fat": "#FFE4B9", "carbs": "#E4E1FB", "green": "#98603D", "deep": "#674128", "ink": "#4A3426", "muted": "#796456", "pale": "#FBF2E6", "accent": "#C48058", "input": "#FFFCF7", "border": "#DEC7AD", "secondary": "#F2E3D0", "background": "#FCF7EF", "surface": "#FFFEFA", "tint": "#F5E9D9", "row": "#F8F0E5", "header": "#795236", "head_muted": "#FFF1D9", "icon": "#9C714A", "hero": "#8C5C3B", "hero_muted": "#FFF1DE", "chip": "#A27251", "track": "#B58C6C", "fill": "#F6DDA9", "text_accent": "#915B37", "grid": "#ECDCC9", "area": "#F2E1CB", "pattern": "grid", "pattern_color": "#BC9E7B", "nav_bg": "#FCF7EF", "overview": "#FFF9EA", "activity": "#F4E9DB", "tile": "#F8EDDE", "nav_active": "#94603C", "activity_text": "#845536"},
+    "dark": {"protein_bg": "#224D55", "fat_bg": "#624B45", "carbs_bg": "#3C4576", "protein_text": "#C4F2E4", "fat_text": "#FBE0BF", "carbs_text": "#D4DCFC", "gold": "#F6E2C7", "logo_text": "#F6DABA", "protein": "#D9F2DE", "fat": "#FFE4B9", "carbs": "#E4E1FB", "green": "#3E709E", "deep": "#13273F", "ink": "#F3F7FF", "muted": "#BCCBDE", "pale": "#263D56", "accent": "#E5B57B", "input": "#24364C", "border": "#58738E", "secondary": "#2A4662", "background": "#101B2B", "surface": "#1C2C41", "tint": "#233A53", "row": "#283D57", "header": "#101E31", "head_muted": "#D8E6F4", "icon": "#31577A", "hero": "#223D5D", "hero_muted": "#E3EFFA", "chip": "#31557A", "track": "#507EAA", "fill": "#C6E1F7", "text_accent": "#B7DFFA", "grid": "#4F6681", "area": "#2F4C69", "pattern": "stars", "pattern_color": "#7298C4", "nav_bg": "#172538", "overview": "#263950", "activity": "#2B405A", "tile": "#304A65", "nav_active": "#3E709E", "activity_text": "#D7E8FA"},
+    "botanical": {"protein_bg": "#374957", "fat_bg": "#634350", "carbs_bg": "#514569", "protein_text": "#CDF0E6", "fat_text": "#FFE0CC", "carbs_text": "#E7D4FB", "gold": "#F6DFE9", "logo_text": "#F9E2F1", "protein": "#D9F2DE", "fat": "#FFE4B9", "carbs": "#E4E1FB", "green": "#7F4D77", "deep": "#3C243F", "ink": "#F9F1F8", "muted": "#DBC8DA", "pale": "#46354D", "accent": "#E6ABC4", "input": "#423249", "border": "#806589", "secondary": "#513B59", "background": "#241C2A", "surface": "#34283B", "tint": "#403048", "row": "#46344D", "header": "#2B2031", "head_muted": "#F2DCEB", "icon": "#6E486E", "hero": "#543456", "hero_muted": "#F2DAEE", "chip": "#724B76", "track": "#A678A7", "fill": "#EAC7DE", "text_accent": "#F2C7E2", "grid": "#765D7E", "area": "#533D5C", "pattern": "botanical", "pattern_color": "#BB91B7", "nav_bg": "#2C2232", "overview": "#3D2E44", "activity": "#4A3650", "tile": "#513F59", "nav_active": "#86537F", "activity_text": "#F4E5F2"}
 }
 
+# High contrast preserves each theme's own hue (not a shared green tint).
 const COLOR_HIGH_ADJUSTMENTS = {
-    "botanical": {"border":"#729E84", "background":"#F0F4ED",
-        "tint":"#DDEFE2", "activity":"#D6EBDD", "nav_active":"#075039"},
-    "forest": {"border":"#88A994", "background":"#ECF3EC", "activity":"#D7EBDD", "nav_active":"#104A36"},
-    "mint": {"border":"#84AEA0", "background":"#E8F4EF", "activity":"#D4EFE2", "nav_active":"#185747"},
-    "sand": {"border":"#BDA98B", "background":"#F4EBDC", "activity":"#E9DCC7", "nav_active":"#5A4C31"},
-    "dark": {"border":"#83A393", "background":"#0C1712", "overview":"#2A4535", "activity":"#315442", "nav_active":"#43896D"}
+    "forest": {"background": "#E7F0E7", "border": "#769D84", "secondary": "#D4E7D8", "activity": "#DCEADC", "tint": "#D8EBDB", "nav_active": "#0E4B36"},
+    "mint": {"background": "#DFEFF5", "border": "#5D9FB5", "secondary": "#C6E6ED", "activity": "#CEEAF2", "tint": "#CFEAEF", "nav_active": "#075A74"},
+    "sand": {"background": "#F3E7D7", "border": "#AF8E71", "secondary": "#EAD8C4", "activity": "#EADAC6", "tint": "#F1DFC9", "nav_active": "#79472B"},
+    "dark": {"background": "#0B1421", "border": "#97ADC5", "secondary": "#314E6E", "activity": "#354C68", "tint": "#2B405B", "nav_active": "#5188B9"},
+    "botanical": {"background": "#1D1523", "border": "#AE88AD", "secondary": "#654A6B", "activity": "#58415D", "tint": "#4A3652", "nav_active": "#A467A0"}
 }
 
 static func palette(id: String, high_contrast: bool = false) -> Dictionary:

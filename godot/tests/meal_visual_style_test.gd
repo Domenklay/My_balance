@@ -16,7 +16,7 @@ func _run() -> void:
     app.date = "2026-11-21"
     app.tab = "day"
     var titles = ["Завтрак", "Обед", "Ужин", "Перекус"]
-    var expected_bg = ["#FFF2DE", "#E9F5E9", "#E9EEFC", "#FFF0F2"]
+    var expected_bg = ["#423046", "#3B354F", "#40334F", "#503348"]
     var themes = ["forest", "mint", "sand", "dark", "botanical"]
     for theme in themes:
         app.store.data["settings"]["theme"] = theme

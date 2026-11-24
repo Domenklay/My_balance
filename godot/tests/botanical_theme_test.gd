@@ -20,7 +20,7 @@ func _has_text(node: Node, phrase: String) -> bool:
 
 func _run() -> void:
     if not AppearanceScript.is_valid_theme("botanical") or \
-            AppearanceScript.name_for("botanical") != "Ботанический контраст":
+            AppearanceScript.name_for("botanical") != "Сливовый уют":
         _fail("new theme missing from appearance registry")
         return
     var app = load("res://main.tscn").instantiate()
@@ -51,7 +51,7 @@ func _run() -> void:
         _fail("ornament must not overlap calorie totals in botanical day hero")
         return
     # Each meal has a real rounded-line icon instead of device-specific emoji.
-    var colors = ["#FFF2DE", "#E9F5E9", "#E9EEFC", "#FFF0F2"]
+    var colors = ["#423046", "#3B354F", "#40334F", "#503348"]
     for i in range(4):
         var meal = app.find_child("DailyMeal_" + str(i), true, false) as PanelContainer
         var art = app.find_child("MealArt_" + str(i), true, false) as TextureRect

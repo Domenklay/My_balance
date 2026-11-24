@@ -26,13 +26,13 @@ func _run() -> void:
 
     var app = _start_app()
     await process_frame
-    if app.current_theme != "botanical" or app.PATTERN_STYLE != "botanical":
-        _fail("existing forest theme was not promoted on app launch")
+    if app.current_theme != "forest" or app.PATTERN_STYLE == "botanical":
+        _fail("update unexpectedly changed the user's forest theme")
         return
     var promoted = StoreScript.new()
-    if str(promoted.data["settings"].get("theme", "")) != "botanical" or \
+    if str(promoted.data["settings"].get("theme", "")) != "forest" or \
             not bool(promoted.data["settings"].get("botanical_default_applied", false)):
-        _fail("migration marker or selected theme not persisted")
+        _fail("migration should mark the schema but preserve forest selection")
         return
     if int(promoted.data["settings"]["kcal"]) != 1760 or \
             str(promoted.data["notes"].get("2026-11-21", "")) != "Записи должны сохраниться":

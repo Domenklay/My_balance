@@ -40,7 +40,7 @@ func _run() -> void:
                 hero_style.shadow_size > 3 or motion_style.shadow_size > 2:
             _fail("main kcal card is not visually distinguished: " + id)
             return
-        if id != "dark" and motion_style.bg_color.get_luminance() < 0.5:
+        if id not in ["dark", "botanical"] and motion_style.bg_color.get_luminance() < 0.5:
             _fail("movement card competes with dark calorie hero: " + id)
             return
         var energy = app.find_child("DailyEnergyValue", true, false) as Label

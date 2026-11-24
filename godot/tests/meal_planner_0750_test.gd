@@ -59,11 +59,21 @@ func _run() -> void:
             oats = element
         elif str(element["name"]) == "Молоко":
             milk = element
+    var expected_oats: float = 300.0
+    var expected_milk: float = 450.0
+    # The additional standalone food can share a name with one of the
+    # recipe ingredients, and must then contribute to grocery totals too.
+    if str(food["name"]).strip_edges().to_lower() == "овсяные хлопья (сухие)" and \
+            str(food.get("unit", "г")) == "г":
+        expected_oats += 100.0
+    if str(food["name"]).strip_edges().to_lower() == "молоко" and \
+            str(food.get("unit", "г")) == "мл":
+        expected_milk += 100.0
     if oats.is_empty() or milk.is_empty() or \
-            absf(float(oats["grams"]) - 300.0) > 0.01 or \
-            absf(float(milk["grams"]) - 450.0) > 0.01 or \
+            absf(float(oats["grams"]) - expected_oats) > 0.01 or \
+            absf(float(milk["grams"]) - expected_milk) > 0.01 or \
             oats["unit"] != "г" or milk["unit"] != "мл":
-        _fail("raw ingredients did not aggregate by matching name and unit")
+        _fail("raw ingredients did not aggregate by name/unit: " + JSON.stringify(shopping))
         return
     var key: String = str(milk["key"])
     if not store.toggle_shopping_item(monday, key) or \

@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.50"
+const APP_VERSION = "0.7.50.1"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -184,7 +184,7 @@ func _apply_palette() -> void:
         current_theme = "forest"
     PATTERNS = bool(config.get("patterns", true))
     HIGH_CONTRAST = bool(config.get("high_contrast", false))
-    DARK_MODE = current_theme == "dark"
+    DARK_MODE = current_theme in ["dark", "botanical"]
     var palette: Dictionary = AppearanceScript.palette(current_theme, HIGH_CONTRAST)
     GREEN = Color(str(palette["green"]))
     DEEP = Color(str(palette["deep"]))
@@ -308,8 +308,8 @@ func _activate_botanical_default_once() -> void:
         return
     var previous: Dictionary = settings.duplicate(true)
     settings["botanical_default_applied"] = true
-    if str(settings.get("theme", "forest")) == "forest":
-        settings["theme"] = "botanical"
+    # Preserve the selected light forest theme. The historical automatic
+    # switch to botanical is no longer appropriate now that it is dark plum.
     store.data["settings"] = settings
     if not store.save():
         store.data["settings"] = previous
@@ -694,7 +694,7 @@ func _card(title: String, variant: String = "plain") -> VBoxContainer:
     style.set_corner_radius_all(18)
     style.border_color = BORDER if variant == "plain" or HIGH_CONTRAST else style.bg_color
     if current_theme == "botanical":
-        style.border_color = Color("#BDD4C2") if variant == "hero" else BORDER
+        style.border_color = BORDER
     style.set_border_width_all(2 if HIGH_CONTRAST else 1)
     # Quiet elevation: the calorie card has visual priority.
     style.shadow_color = Color(0.0, 0.0, 0.0, 0.12 if DARK_MODE else 0.048)
@@ -716,7 +716,7 @@ func _card(title: String, variant: String = "plain") -> VBoxContainer:
     if PATTERNS and variant == "activity" and current_theme == "botanical" and tab == "day":
         var mountain_art = PatternScript.new()
         mountain_art.name = "BotanicalActivityLandscape"
-        mountain_art.configure("hills", Color("#A7D9BB"), true, 0.13)
+        mountain_art.configure("hills", PATTERN_COLOR, true, 0.13)
         panel.add_child(mountain_art)
     var content = VBoxContainer.new()
     content.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -3089,12 +3089,12 @@ func _show_day() -> void:
         meal_card.get_parent().name = "DailyMeal_" + str(section_index)
         if current_theme == "botanical":
             var botanical_colors = [
-                Color("#FFF2DE"), Color("#E9F5E9"),
-                Color("#E9EEFC"), Color("#FFF0F2")
+                Color("#423046"), Color("#3B354F"),
+                Color("#40334F"), Color("#503348")
             ]
             var botanical_edges = [
-                Color("#ECA14A"), Color("#51A46C"),
-                Color("#6F89CF"), Color("#D77893")
+                Color("#B87B9E"), Color("#8D88B4"),
+                Color("#9B82C0"), Color("#D08DA8")
             ]
             var meal_style = meal_card.get_parent().get_theme_stylebox("panel") as StyleBoxFlat
             meal_style.bg_color = botanical_colors[section_index]
@@ -3109,7 +3109,7 @@ func _show_day() -> void:
         title_row.add_theme_constant_override("separation", 4)
         var accent = ColorRect.new()
         accent.name = "MealAccent_" + str(section_index)
-        accent.color = Color(str(["#ECA14A", "#51A46C", "#6F89CF", "#D77893"][section_index])) if current_theme == "botanical" else section_info["accent"]
+        accent.color = Color(str(["#D59BB9", "#9FA3D3", "#A98BD3", "#E4A2B9"][section_index])) if current_theme == "botanical" else section_info["accent"]
         accent.custom_minimum_size = Vector2(4, 28)
         accent.mouse_filter = Control.MOUSE_FILTER_IGNORE
         title_row.add_child(accent)
@@ -3127,8 +3127,8 @@ func _show_day() -> void:
         food_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
         if current_theme == "botanical":
             var icon_colors = [
-                Color("#9F6424"), Color("#2D7650"),
-                Color("#4C66AA"), Color("#AD4A6C")
+                Color("#F2C6DF"), Color("#CED0FF"),
+                Color("#DCC9FF"), Color("#F8C9DB")
             ]
             food_art.modulate = icon_colors[section_index]
         else:
@@ -5717,7 +5717,7 @@ func _show_stats() -> void:
             var movement = _card("Движение", "activity")
             movement.get_parent().name = "StatsActivityCard"
             _compact_card(movement, 12, 8)
-            var contrast_text = WHITE if current_theme == "botanical" else INK
+            var contrast_text = INK
             var activity_stats = _row(movement)
             _metric_tile(activity_stats, str(int(report["walking"])) + " мин", "Прогулки")
             _metric_tile(activity_stats, str(int(report["exercise"])) + " мин", "Тренировки")
@@ -5727,7 +5727,7 @@ func _show_stats() -> void:
             movement.add_child(activity_chart)
             activity_chart.setup(report["columns"], "activity", 0.0,
                 TEXT_ACCENT, ACCENT, MUTED, CHART_GRID)
-            _label(movement, "Зелёный — ходьба · оранжевый — тренировки · Сеансов: " +
+            _label(movement, "Линия 1 — ходьба · линия 2 — тренировки · Сеансов: " +
                 str(int(report["workouts"])), 12, contrast_text)
             if (int(report["walking"]) + int(report["exercise"]) +
                     int(previous_report["walking"]) + int(previous_report["exercise"]) > 0):
@@ -5934,11 +5934,17 @@ func _show_settings() -> void:
         var theme_id: String = str(id)
         var sample: Dictionary = AppearanceScript.palette(theme_id, HIGH_CONTRAST)
         var sample_row = _soft_list_row(appearance)
-        var color_preview = ColorRect.new()
+        var color_preview = HBoxContainer.new()
         color_preview.name = "ThemeSwatch_" + theme_id
-        color_preview.color = Color(str(sample["hero"]))
+        color_preview.add_theme_constant_override("separation", 0)
         color_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
-        color_preview.custom_minimum_size = Vector2(34, 34)
+        color_preview.custom_minimum_size = Vector2(54, 36)
+        for token in ["background", "hero", "accent"]:
+            var strip = ColorRect.new()
+            strip.color = Color(str(sample[token]))
+            strip.custom_minimum_size = Vector2(18, 36)
+            strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+            color_preview.add_child(strip)
         sample_row.add_child(color_preview)
         var name_label = _label(sample_row, AppearanceScript.name_for(theme_id), 13, INK)
         name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
