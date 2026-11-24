@@ -93,7 +93,10 @@ jobs:
           python3 android_scanner/patch_template.py
           find godot/android/build -maxdepth 3 -name build.gradle -o -name AndroidManifest.xml
       - name: Bundle offline recipe photographs
-        run: python3 tools/bundle_recipe_photos.py
+        run: |
+          python3 -m venv /tmp/mybalance-photo-venv
+          /tmp/mybalance-photo-venv/bin/pip install --disable-pip-version-check Pillow==11.3.0
+          /tmp/mybalance-photo-venv/bin/python tools/bundle_recipe_photos.py
       - name: Validate project scripts and import resources
         shell: bash
         run: |

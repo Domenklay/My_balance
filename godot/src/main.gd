@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.70"
+const APP_VERSION = "0.7.71"
 const ReadyRecipes = preload("res://src/ready_recipes.gd")
 const CommunityClient = preload("res://src/community_client.gd")
 const InterfaceLanguage = preload("res://src/interface_language.gd")
@@ -177,6 +177,9 @@ var ready_recipes_open: bool = false
 var ready_query: String = ""
 var ready_category: int = 0
 var ready_calorie: int = 0
+const READY_PAGE_SIZE: int = 20
+var ready_visible_limit: int = READY_PAGE_SIZE
+var ready_index: Array = []
 var community_mine: bool = false
 var community_items: Array = []
 var community_more: bool = false
@@ -2768,6 +2771,7 @@ func _show_ready_recipes() -> void:
     category.select(ready_category)
     category.item_selected.connect(func(index: int):
         ready_category = index
+        ready_visible_limit = READY_PAGE_SIZE
         _render()
     )
     _label(filters, "Калорийность на порцию", 12, MUTED)
@@ -2776,6 +2780,7 @@ func _show_ready_recipes() -> void:
     kcal.select(ready_calorie)
     kcal.item_selected.connect(func(index: int):
         ready_calorie = index
+        ready_visible_limit = READY_PAGE_SIZE
         _render()
     )
     var count = _label(filters, "", 12, MUTED)
@@ -2787,70 +2792,96 @@ func _show_ready_recipes() -> void:
     grid.add_theme_constant_override("h_separation", 8)
     grid.add_theme_constant_override("v_separation", 8)
     body.add_child(grid)
-    var cards: Array = []
-    for recipe in ReadyRecipes.all():
-        if ready_category > 0 and recipe["category"] != RecipeMath.CATEGORY_IDS[ready_category-1]:
-            continue
-        var data = RecipeMath.calculate(recipe["ingredients"],float(recipe["cooked_weight"]))
-        var servings: float = float(recipe["servings"])
-        if not RecipeMath.matches_calorie_filter(float(data["total_kcal"])/servings,ready_calorie):
-            continue
-        var card = _card("", "plain", grid)
-        card.get_parent().name = "ReadyRecipe_" + str(recipe["id"])
-        _compact_card(card, 8, 5)
-        _ready_recipe_art(card, recipe)
-        var heading = _label(card, str(recipe["name"]), 15, INK)
-        heading.custom_minimum_size.y = 38
-        _label(card, RecipeMath.CATEGORY_LABELS[RecipeMath.CATEGORY_IDS.find(recipe["category"])], 11, MUTED)
-        _label(card, "≈ " + str(roundi(float(data["total_kcal"])/servings)) + " ккал / порция", 13, TEXT_ACCENT)
-        _label(card, "Б " + str(snappedf(float(data["total_p"])/servings, 0.1)) + " · Ж " + str(snappedf(float(data["total_f"])/servings, 0.1)) + " · У " + str(snappedf(float(data["total_c"])/servings, 0.1)), 11, MUTED)
-        var details = _button(card, "Рецепт →", func(): _ready_recipe_details(recipe), true)
-        details.custom_minimum_size.y = 36
-        details.clip_text = true
-        var saved = not store.recipe_by_id("saved_" + str(recipe["id"])).is_empty()
-        var save = _button(card, "В коллекции ✓" if saved else "+ Сохранить", func():
-            var id = _save_ready_recipe(recipe)
-            if id.is_empty():
-                _message("Не удалось сохранить рецепт.")
-            else:
-                _render()
-                _notify_saved("Рецепт в личной коллекции")
-        )
-        save.name = "ReadySave_" + str(recipe["id"])
-        save.disabled = saved
-        save.custom_minimum_size.y = 36
-        save.clip_text = true
-        var quick_add = _button(card, "+ В дневник", func():
-            var id = _save_ready_recipe(recipe)
-            if id.is_empty():
-                _message("Не удалось сохранить рецепт.")
-                return
-            _recipe_portion_sheet(store.recipe_by_id(id))
-        , true)
-        quick_add.name = "ReadyDiary_" + str(recipe["id"])
-        quick_add.custom_minimum_size.y = 36
-        quick_add.clip_text = true
-        var terms: String = str(recipe["name"]).to_lower()
-        for ingredient in recipe["ingredients"]:
-            terms += " " + str(ingredient["name"]).to_lower()
-        cards.append({"panel":card.get_parent(),"terms":terms})
     var empty = _card("Нет подходящих блюд")
     _label(empty,"Измени фильтры или поисковый запрос.",12,MUTED)
-    var refresh = func(value: String):
+    var more = _button(body, "Показать ещё 20", Callable(), true)
+    more.name = "ReadyRecipeMore"
+    # Build lightweight search records once; instantiate only the visible page.
+    if ready_index.is_empty():
+        for recipe in ReadyRecipes.all():
+            var data = RecipeMath.calculate(recipe["ingredients"], float(recipe["cooked_weight"]))
+            var terms: String = str(recipe["name"]).to_lower()
+            for ingredient in recipe["ingredients"]:
+                terms += " " + str(ingredient["name"]).to_lower()
+            ready_index.append({"recipe": recipe, "data": data, "terms": terms})
+    var refresh = func(value: String, append_only: bool):
         ready_query = value
-        var shown = 0
-        for item in cards:
-            var visible: bool = str(item["terms"]).contains(value.strip_edges().to_lower())
-            item["panel"].visible = visible
-            if visible:
-                shown += 1
-        count.text = "Найдено: " + str(shown)
+        if not append_only:
+            for child in grid.get_children():
+                grid.remove_child(child)
+                child.queue_free()
+        var filtered: Array = []
+        var needle = value.strip_edges().to_lower()
+        for item in ready_index:
+            var recipe: Dictionary = item["recipe"]
+            if ready_category > 0 and recipe["category"] != RecipeMath.CATEGORY_IDS[ready_category-1]:
+                continue
+            if not RecipeMath.matches_calorie_filter(float(item["data"]["total_kcal"]) / float(recipe["servings"]), ready_calorie):
+                continue
+            if not str(item["terms"]).contains(needle):
+                continue
+            filtered.append(item)
+        var shown: int = mini(ready_visible_limit, filtered.size())
+        for i in range(grid.get_child_count(), shown):
+            var item: Dictionary = filtered[i]
+            _ready_recipe_card(grid, item["recipe"], item["data"])
+        count.text = "Найдено: " + str(filtered.size()) + " · показано " + str(shown)
         empty.get_parent().visible = shown == 0
-    query.text_changed.connect(refresh)
-    refresh.call(ready_query)
+        more.visible = shown < filtered.size()
+        more.text = "Показать ещё " + str(mini(READY_PAGE_SIZE, filtered.size() - shown))
+    query.text_changed.connect(func(value: String):
+        ready_visible_limit = READY_PAGE_SIZE
+        refresh.call(value, false)
+    )
+    more.pressed.connect(func():
+        if _swipe_dragging or _swipe_ignore_button_release:
+            return
+        ready_visible_limit += READY_PAGE_SIZE
+        refresh.call(ready_query, true)
+    )
+    refresh.call(ready_query, false)
     var sources = _card("Больше рецептов в интернете")
     _label(sources,"Викиучебник · CC BY-SA. Внешние рецепты открываются в браузере; их КБЖУ не импортируются автоматически.",12,MUTED)
     _button(sources,"Открыть кулинарную книгу",func(): OS.shell_open(ReadyRecipes.SOURCE_HOME),true)
+
+
+func _ready_recipe_card(grid: GridContainer, recipe: Dictionary, data: Dictionary) -> void:
+    var servings: float = float(recipe["servings"])
+    var card = _card("", "plain", grid)
+    card.get_parent().name = "ReadyRecipe_" + str(recipe["id"])
+    _compact_card(card, 8, 5)
+    _ready_recipe_art(card, recipe)
+    var heading = _label(card, str(recipe["name"]), 15, INK)
+    heading.custom_minimum_size.y = 38
+    _label(card, RecipeMath.CATEGORY_LABELS[RecipeMath.CATEGORY_IDS.find(recipe["category"])], 11, MUTED)
+    _label(card, "≈ " + str(roundi(float(data["total_kcal"])/servings)) + " ккал / порция", 13, TEXT_ACCENT)
+    _label(card, "Б " + str(snappedf(float(data["total_p"])/servings, 0.1)) + " · Ж " + str(snappedf(float(data["total_f"])/servings, 0.1)) + " · У " + str(snappedf(float(data["total_c"])/servings, 0.1)), 11, MUTED)
+    var details = _button(card, "Рецепт →", func(): _ready_recipe_details(recipe), true)
+    details.custom_minimum_size.y = 36
+    details.clip_text = true
+    var saved = not store.recipe_by_id("saved_" + str(recipe["id"])).is_empty()
+    var save = _button(card, "В коллекции ✓" if saved else "+ Сохранить", func():
+        var id = _save_ready_recipe(recipe)
+        if id.is_empty():
+            _message("Не удалось сохранить рецепт.")
+        else:
+            _render()
+            _notify_saved("Рецепт в личной коллекции")
+    )
+    save.name = "ReadySave_" + str(recipe["id"])
+    save.disabled = saved
+    save.custom_minimum_size.y = 36
+    save.clip_text = true
+    var quick_add = _button(card, "+ В дневник", func():
+        var id = _save_ready_recipe(recipe)
+        if id.is_empty():
+            _message("Не удалось сохранить рецепт.")
+            return
+        _recipe_portion_sheet(store.recipe_by_id(id))
+    , true)
+    quick_add.name = "ReadyDiary_" + str(recipe["id"])
+    quick_add.custom_minimum_size.y = 36
+    quick_add.clip_text = true
 
 
 func _ready_recipe_details(recipe: Dictionary) -> void:

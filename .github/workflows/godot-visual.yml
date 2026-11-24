@@ -32,7 +32,10 @@ jobs:
           mv /tmp/bin/Godot_v4.6.3-stable_linux.x86_64 /tmp/godot
           chmod +x /tmp/godot
       - name: Bundle offline recipe photographs
-        run: python3 tools/bundle_recipe_photos.py
+        run: |
+          python3 -m venv /tmp/mybalance-photo-venv
+          /tmp/mybalance-photo-venv/bin/pip install --disable-pip-version-check Pillow==11.3.0
+          /tmp/mybalance-photo-venv/bin/python tools/bundle_recipe_photos.py
       - name: Capture actual Godot screens
         shell: bash
         run: |

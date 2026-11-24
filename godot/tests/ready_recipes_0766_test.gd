@@ -28,8 +28,30 @@ func _run() -> void:
         _fail("empty diary does not show ready catalog or modified data")
         return
     var grid = app.find_child("ReadyRecipeGrid", true, false) as GridContainer
-    if grid == null or grid.get_child_count() != 100:
-        _fail("catalog grid does not contain all entries")
+    if grid == null or grid.get_child_count() != 20:
+        _fail("initial page must contain 20 entries")
+        return
+    var more = app.find_child("ReadyRecipeMore", true, false) as Button
+    if more == null or not more.visible:
+        _fail("missing pagination button")
+        return
+    more.pressed.emit()
+    await process_frame
+    if grid.get_child_count() != 40:
+        _fail("next page did not append 20 entries")
+        return
+    var search = app.find_child("ReadyRecipeSearch", true, false) as LineEdit
+    search.text = str(Catalog.all().back()["name"])
+    search.text_changed.emit(search.text)
+    await process_frame
+    if grid.get_child_count() != 1 or app.find_child("ReadyRecipe_" + str(Catalog.all().back()["id"]), true, false) == null or more.visible:
+        _fail("search must include recipes outside initial pages")
+        return
+    search.text = ""
+    search.text_changed.emit("")
+    await process_frame
+    if grid.get_child_count() != 20:
+        _fail("clearing search must reset pagination")
         return
     var cat = app.find_child("ReadyRecipeCategory",true,false) as OptionButton
     cat.select(Math.CATEGORY_IDS.find("soups")+1)

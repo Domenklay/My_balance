@@ -3,6 +3,8 @@ The APK never contacts Commons. Credits accompany each successfully bundled phot
 """
 import concurrent.futures
 import html
+import io
+from PIL import Image, ImageOps
 import json
 import re
 import urllib.parse
@@ -31,8 +33,8 @@ FILES = {
     "catalog_apple_muffins": "Allison's Fine Baked Goods Apple Muffin 2010.jpg",
     "catalog_berry_yogurt": "Yogurt fruit bowl.jpg",
 }
-UA = "MyBalance/0.7.70 (https://github.com/Domenklay/My_balance; offline recipe photo attribution)"
-def get(url, max_bytes=12_000_000):
+UA = "MyBalance/0.7.71 (https://github.com/Domenklay/My_balance; offline recipe photo attribution)"
+def get(url, max_bytes=32_000_000):
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     with urllib.request.urlopen(req, timeout=12) as response:
         content = response.read(max_bytes + 1)
@@ -68,22 +70,32 @@ def work(item):
             if parsed.scheme == "https" and parsed.netloc == "upload.wikimedia.org":
                 return url
             return None
-        raw = None
+        optimized = None
         for candidate in (info.get("thumburl", ""), info.get("url", "")):
             url = trusted_image_url(candidate)
             if not url or not candidate:
                 continue
             try:
                 raw = get(url)
-                break
+                with Image.open(io.BytesIO(raw)) as original:
+                    if original.width * original.height > 50_000_000:
+                        raise ValueError("image exceeds pixel limit")
+                    image = ImageOps.exif_transpose(original).convert("RGB")
+                    image.thumbnail((640, 640), Image.Resampling.LANCZOS)
+                    for quality in (82, 72, 62, 50):
+                        buffer = io.BytesIO()
+                        image.save(buffer, format="JPEG", quality=quality, optimize=True, progressive=False)
+                        if buffer.tell() <= 180_000:
+                            optimized = buffer.getvalue()
+                            break
+                if optimized is not None:
+                    break
             except Exception:
                 continue
-        if raw is None:
-            raise ValueError("no downloadable trusted Wikimedia image")
-        if not raw.startswith(b"\xff\xd8") or not raw.endswith(b"\xff\xd9"):
-            raise ValueError("not a complete JPEG")
-        (OUT / (key + ".jpg")).write_bytes(raw)
-        print("PHOTO", key, license_name, flush=True)
+        if optimized is None:
+            raise ValueError("no downloadable trusted decodable image within size limit")
+        (OUT / (key + ".jpg")).write_bytes(optimized)
+        print("PHOTO", key, license_name, len(optimized), "bytes", flush=True)
         return key, {"author": author, "license": license_name, "license_url":license_url.replace("http://","https://",1), "source":info["descriptionurl"], "title":title}
     except Exception as exc:
         print("PHOTO FALLBACK", key, str(exc), flush=True)
@@ -94,6 +106,8 @@ def main():
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
         credits = {key:credit for key,credit in pool.map(work, FILES.items()) if credit}
     CREDITS.write_text(json.dumps(credits, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"Bundled {len(credits)}/{len(FILES)} licensed images")
+    total = sum(p.stat().st_size for p in OUT.glob("*.jpg"))
+    print(f"Bundled {len(credits)}/{len(FILES)} licensed images; total JPEG bytes: {total}")
+    assert total <= len(FILES) * 180_000
 if __name__ == "__main__":
     main()
