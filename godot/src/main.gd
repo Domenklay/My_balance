@@ -38,7 +38,8 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.59"
+const APP_VERSION = "0.7.60"
+const MacroGoals = preload("res://src/macro_goals.gd")
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -1386,6 +1387,82 @@ func _show_calorie_goal_editor() -> void:
         sheet["root"].queue_free()
         _render()
         _notify_saved("Норма изменена: " + str(value) + " ккал")
+    )
+
+
+# Optional macro targets can be edited independently of calorie goals.
+func _show_macro_goal_editor() -> void:
+    var sheet = _mobile_sheet("Нормы БЖУ", "Выбери способ отображения. Цели — ориентиры, а не обязательные ограничения.", "Сохранить", 490.0)
+    sheet["root"].name = "MacroGoalSheet"
+    var fields: VBoxContainer = sheet["fields"]
+    var choice: Dictionary = store.data["settings"].get("macro_goals", MacroGoals.defaults()).duplicate(true)
+    var modes = ["off", "auto", "manual"]
+    var picker = _choice(fields, ["Без целей · доли энергии", "Автоматически по калориям", "Свои значения в граммах"])
+    picker.name = "MacroGoalMode"
+    picker.select(modes.find(str(choice["mode"])))
+    var recommended: Dictionary = MacroGoals.automatic(float(store.data["settings"]["kcal"]))
+    var automatic_hint = _label(fields, "Пример распределения для взрослых: 20% белки, 30% жиры, 50% углеводы. " +
+        str(recommended["p"]) + " / " + str(recommended["f"]) + " / " + str(recommended["c"]) + " г. Это не индивидуальное медицинское назначение.", 12, MUTED)
+    var manual_box = VBoxContainer.new()
+    fields.add_child(manual_box)
+    manual_box.add_theme_constant_override("separation", 5)
+    var inputs: Dictionary = {}
+    for item in [["p","Белки, г"],["f","Жиры, г"],["c","Углеводы, г"]]:
+        var key: String = item[0]
+        var line = _row(manual_box)
+        var title = _label(line, str(item[1]), 13, INK)
+        title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        var field = _text_input(line, "г", str(int(choice["manual"][key])))
+        field.name = "MacroGoalInput_" + key
+        field.max_length = 4
+        field.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+        inputs[key] = field
+    var hint = _label(manual_box, "", 12, MUTED)
+    hint.name = "MacroGoalEnergyHint"
+    var refresh = func():
+        automatic_hint.visible = picker.selected == 1
+        manual_box.visible = picker.selected == 2
+        var values: Dictionary = {}
+        for key in MacroGoals.KEYS:
+            var input: LineEdit = inputs[key]
+            if not input.text.strip_edges().is_valid_int():
+                hint.text = "Введи целые числа от 1 до 1000 г."
+                return
+            values[key] = input.text.strip_edges().to_int()
+        if not MacroGoals.valid({"mode":"manual","manual":values}):
+            hint.text = "Введи целые числа от 1 до 1000 г."
+            return
+        var kcal: int = MacroGoals.energy(values)
+        var target: int = int(store.data["settings"]["kcal"])
+        hint.text = "Энергия по БЖУ: " + str(kcal) + " ккал · цель: " + str(target) + " ккал"
+        if absi(kcal - target) > 10:
+            hint.text += "\nНормы БЖУ не совпадают с целью калорий. Можно сохранить независимо."
+    picker.item_selected.connect(func(_index: int): refresh.call())
+    for key in inputs:
+        var input: LineEdit = inputs[key]
+        input.text_changed.connect(func(_value: String): refresh.call())
+    refresh.call()
+    var confirm: Button = sheet["confirm"]
+    confirm.name = "MacroGoalSave"
+    confirm.pressed.connect(func():
+        choice["mode"] = modes[picker.selected]
+        if picker.selected == 2:
+            for key in MacroGoals.KEYS:
+                var input: LineEdit = inputs[key]
+                if not input.text.strip_edges().is_valid_int():
+                    _sheet_error(sheet, "Укажи целые числа от 1 до 1000 г.")
+                    return
+                choice["manual"][key] = input.text.strip_edges().to_int()
+        if not MacroGoals.valid(choice):
+            _sheet_error(sheet, "Укажи целые числа от 1 до 1000 г.")
+            return
+        if not store.set_macro_goals(choice):
+            _sheet_error(sheet, "Не удалось сохранить нормы БЖУ.")
+            return
+        _hide_keyboard_and_focus()
+        sheet["root"].queue_free()
+        _render()
+        _notify_saved("Настройки БЖУ сохранены")
     )
 
 
@@ -2832,7 +2909,7 @@ func _semantic_button(button: Button, background: Color, foreground: Color) -> v
 
 
 func _daily_macro_tile(parent: Node, caption: String, grams: float, share: float,
-        background: Color, foreground: Color, key: String) -> void:
+        background: Color, foreground: Color, key: String, target: float = 0.0) -> void:
     var panel = PanelContainer.new()
     panel.name = "DayMacro_" + key
     panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2851,12 +2928,13 @@ func _daily_macro_tile(parent: Node, caption: String, grams: float, share: float
     panel.add_child(stack)
     var name_label = _nowrap(stack, caption, 11, foreground)
     name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    var amount = _nowrap(stack, str(roundi(grams)) + " г", 17, foreground)
+    var amount = _nowrap(stack, str(roundi(grams)) + (" / " + str(roundi(target)) if target > 0.0 else "") + " г", 13 if target > 0.0 else 17, foreground)
+    amount.name = "DayMacroAmount_" + key
     amount.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     var bar = ProgressBar.new()
-    bar.name = "DayMacroShare_" + key
+    bar.name = ("DayMacroTarget_" if target > 0.0 else "DayMacroShare_") + key
     bar.max_value = 100.0
-    bar.value = clampf(share, 0.0, 100.0)
+    bar.value = clampf(100.0 * grams / target if target > 0.0 else share, 0.0, 100.0)
     bar.show_percentage = false
     bar.custom_minimum_size.y = 4
     bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2868,8 +2946,13 @@ func _daily_macro_tile(parent: Node, caption: String, grams: float, share: float
     fill.set_corner_radius_all(4)
     bar.add_theme_stylebox_override("background", track)
     bar.add_theme_stylebox_override("fill", fill)
-    bar.tooltip_text = "Доля энергии БЖУ, не персональная норма"
+    bar.tooltip_text = "Выполнение выбранной нормы" if target > 0.0 else "Доля энергии БЖУ, не персональная норма"
     stack.add_child(bar)
+    if target > 0.0:
+        var difference = roundi(target - grams)
+        var remaining = _nowrap(stack, ("Ещё " + str(difference) if difference >= 0 else "Сверх " + str(-difference)) + " г", 10, foreground)
+        remaining.name = "DayMacroRemaining_" + key
+        remaining.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 
 func _show_water_card() -> void:
@@ -3363,11 +3446,26 @@ func _show_day() -> void:
     var fat_g: float = store.day_macro(date, "f")
     var carb_g: float = store.day_macro(date, "c")
     var macro_energy: float = maxf(1.0, protein_g * 4.0 + fat_g * 9.0 + carb_g * 4.0)
-    _daily_macro_tile(macros, "Белки", protein_g, 400.0 * protein_g / macro_energy, PROTEIN_BG, MACRO_PROTEIN, "p")
-    _daily_macro_tile(macros, "Жиры", fat_g, 900.0 * fat_g / macro_energy, FAT_BG, MACRO_FAT, "f")
-    _daily_macro_tile(macros, "Углеводы", carb_g, 400.0 * carb_g / macro_energy, CARBS_BG, MACRO_CARBS, "c")
-    var macro_caption = _nowrap(hero, "Полоски — доля энергии БЖУ", 10, HERO_MUTED)
+    var macro_targets: Dictionary = store.macro_targets()
+    _daily_macro_tile(macros, "Белки", protein_g, 400.0 * protein_g / macro_energy, PROTEIN_BG, MACRO_PROTEIN, "p", float(macro_targets.get("p",0)))
+    _daily_macro_tile(macros, "Жиры", fat_g, 900.0 * fat_g / macro_energy, FAT_BG, MACRO_FAT, "f", float(macro_targets.get("f",0)))
+    _daily_macro_tile(macros, "Углеводы", carb_g, 400.0 * carb_g / macro_energy, CARBS_BG, MACRO_CARBS, "c", float(macro_targets.get("c",0)))
+    var macro_footer = _row(hero)
+    var macro_caption = _nowrap(macro_footer, "Доли энергии БЖУ" if macro_targets.is_empty() else "Съедено / цель, г", 10, HERO_MUTED)
     macro_caption.name = "DayMacroShareCaption"
+    macro_caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    macro_caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    var macro_edit = Button.new()
+    macro_edit.text = "Нормы БЖУ"
+    macro_edit.name = "EditDailyMacroGoals"
+    macro_edit.flat = true
+    macro_edit.mouse_filter = Control.MOUSE_FILTER_PASS
+    macro_edit.custom_minimum_size = Vector2(96, 28)
+    macro_edit.add_theme_font_size_override("font_size", 12)
+    for state in ["font_color","font_hover_color","font_pressed_color","font_focus_color"]:
+        macro_edit.add_theme_color_override(state, WHITE)
+    macro_edit.pressed.connect(_show_macro_goal_editor)
+    macro_footer.add_child(macro_edit)
     # Show movement beside the journal without altering its calorie target.
     var movement: Dictionary = store.day_activity_summary(date)
     if int(movement["steps"]) > 0 or int(movement["count"]) > 0:
@@ -6530,6 +6628,8 @@ func _show_settings() -> void:
         str(roundi(float(store.data["settings"]["kcal"]))) + " ккал/день · Цель: " +
         str(snappedf(float(store.data["settings"]["goal"]), 0.1)) + " кг")
     _button(card, "Моя анкета · пересчитать норму", func(): _begin_onboarding(true), true)
+    var macro_link = _button(card, "Нормы белков, жиров и углеводов", func(): _show_macro_goal_editor(), true)
+    macro_link.name = "SettingsMacroGoals"
     _label(card, "Калории в сутки")
     var kcal = _text_input(card, "Например, 1800", str(roundi(float(store.data["settings"]["kcal"]))))
     kcal.name = "DailyCalorieTarget"
