@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.58"
+const APP_VERSION = "0.7.59"
 
 var GREEN: Color = Color("#195b4a")
 var DEEP: Color = Color("#123f36")
@@ -3377,8 +3377,6 @@ func _show_day() -> void:
         hint.name = "DayActivitySummary"
         hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
-    _show_water_card()
-
     var planner_shortcut = _card("", "tint")
     _compact_card(planner_shortcut, 8, 4)
     planner_shortcut.get_parent().name = "DayPlannerShortcut"
@@ -3651,6 +3649,9 @@ func _show_day() -> void:
                         _message("Не удалось удалить набор.")
                 )
             , true)
+
+    # Hydration follows all four meal cards, before movement and progress.
+    _show_water_card()
 
     var activity = _card("Движение сегодня", "activity")
     activity.get_parent().name = "DailyActivity"
