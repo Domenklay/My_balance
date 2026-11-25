@@ -35,6 +35,20 @@ func _run() -> void:
     if app.tab != "settings" or app.body.get_child(1).name != "SettingsSection_language" or app.body.get_child(2).name != "SettingsSection_appearance":
         _fail("system settings order")
         return
+    var before_privacy = JSON.stringify(app.store.data)
+    app.settings_section_open = "privacy"
+    app._render()
+    await process_frame
+    var privacy = app.find_child("SettingsSectionContent_privacy", true, false) as Control
+    var cloud = app.find_child("PrivacyCloud", true, false) as Button
+    if privacy == null or not privacy.visible or cloud == null or app.find_child("PrivacyEraseLocal", true, false) == null or app.find_child("PrivacyAndroidSettings", true, false) == null:
+        _fail("privacy controls missing")
+        return
+    cloud.pressed.emit()
+    await process_frame
+    if app.settings_section_open != "google" or JSON.stringify(app.store.data) != before_privacy:
+        _fail("privacy navigation must not change user data")
+        return
     app.settings_section_open = "language"
     app._render()
     await process_frame

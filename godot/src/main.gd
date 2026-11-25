@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.87"
+const APP_VERSION = "0.7.88"
 const ProgressPhotos = preload("res://src/progress_photos.gd")
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
@@ -8418,7 +8418,8 @@ func _filter_settings(query: String) -> void:
         "personal": "мои цели параметры анкета вес калории ккал кбжу бжу белки жиры углеводы норма calorie goals protein",
         "shares": "калории приемы пищи распределение завтрак обед ужин перекус доли meal calories",
         "android_widgets": "виджеты android рабочий стол приватность widgets privacy",
-        "products": "мои продукты штрихкоды каталог еда barcode products food"
+        "products": "мои продукты штрихкоды каталог еда barcode products food",
+        "privacy": "конфиденциальность личные данные удаление разрешения безопасность privacy delete data permissions"
     }
     var matches = 0
     for id in keywords:
@@ -8436,6 +8437,46 @@ func _filter_settings(query: String) -> void:
     var empty = body.find_child("SettingsNoMatches", true, false) as Label
     if empty != null:
         empty.visible = matches == 0
+
+func _open_privacy_section(section: String) -> void:
+    settings_query = ""
+    settings_section_open = section
+    _render(true)
+
+
+func _show_privacy_settings() -> void:
+    var card = _settings_section("Конфиденциальность и данные", "privacy", "Хранение, разрешения, удаление и экспорт")
+    _label(card, "Твои данные", 15, INK)
+    _label(card, "Дневник, цели, вес, замеры, шаги, рецепты и фотографии хранятся на устройстве. Для личного дневника регистрация не нужна. Фотографии прогресса не входят в обычную JSON-копию.", 13, MUTED)
+    _label(card, "Интернет и облако", 15, INK)
+    _label(card, "Поиск товаров передаёт название или штрихкод в Open Food Facts. Обновление каталога загружается с GitHub. Google Диск получает JSON-копию только по твоей команде. Сторонние сервисы могут получать технические данные соединения.", 13, MUTED)
+    _label(card, "При подключении отдельного сервера сообщества отправляются запросы, идентификатор сообщества, выбранные для публикации рецепты, оценки и жалобы. Опубликованные рецепты могут быть общедоступны.", 13, MUTED)
+    _label(card, "Разрешения Android", 15, INK)
+    _label(card, "Камера или системный выбор фото — для штрихкодов, этикеток и фотографий; физическая активность — для шагомера; уведомления — для напоминаний и работы шагомера. OCR выполняется на устройстве. Разрешения можно отозвать в Android.", 13, MUTED)
+    var permission = _button(card, "Разрешения и хранилище Android", func():
+        if steps_plugin != null:
+            steps_plugin.openStepSettings()
+        else:
+            _message("На Android: Настройки устройства → Приложения → Мой баланс → Разрешения или Хранилище.")
+    , true)
+    permission.name = "PrivacyAndroidSettings"
+    var backup = _button(card, "Экспорт и восстановление", func(): _open_privacy_section("backup"), true)
+    backup.name = "PrivacyBackup"
+    var cloud = _button(card, "Управление облачной копией", func(): _open_privacy_section("google"), true)
+    cloud.name = "PrivacyCloud"
+    _label(card, "Удаление данных", 15, INK)
+    _label(card, "Чтобы полностью удалить данные на Android, открой хранилище приложения и выбери «Очистить данные». Это удалит локальный дневник, фотографии и настройки. Сначала сохрани нужные копии. Облачные, экспортированные и опубликованные данные удаляются отдельно; отключение Google само по себе копию не удаляет.", 13, MUTED)
+    var remove = _button(card, "Как удалить данные с телефона", func():
+        _confirm_action("Удаление локальных данных", "После очистки хранилища Android восстановление без резервной копии невозможно. Облачная копия, экспортированные файлы и публикации останутся. Открыть настройки приложения?", func():
+            if steps_plugin != null:
+                steps_plugin.openStepSettings()
+            else:
+                _message("Настройки Android → Приложения → Мой баланс → Хранилище → Очистить данные.")
+        , "Открыть настройки")
+    , true)
+    remove.name = "PrivacyEraseLocal"
+    _label(card, "Приложение предназначено для самостоятельного ведения дневника питания и активности, не для диагностики или лечения. Расчёты приблизительные и не заменяют медицинскую консультацию.", 12, MUTED)
+
 
 func _show_settings() -> void:
     if settings_page == "foods":
@@ -8598,6 +8639,7 @@ func _show_settings() -> void:
         _render()
     , true)
     _show_google_backup_settings()
+    _show_privacy_settings()
     var backup = _settings_section("Резервная копия и перенос", "backup",
         "Сохранить или восстановить JSON")
     _label(backup, "Сохрани файл JSON вне приложения, чтобы восстановить данные после удаления или переустановки.", 13, MUTED)
@@ -8613,7 +8655,7 @@ func _show_settings() -> void:
     )
     _label(backup, "Записи хранятся в памяти приложения без регистрации и интернета. При удалении приложения данные могут исчезнуть.", 13, MUTED)
     # Keep stable section IDs for existing navigation and regression tests.
-    var order = ["language", "appearance", "reminders", "android_widgets", "google", "backup", "personal", "shares", "products"]
+    var order = ["language", "appearance", "reminders", "android_widgets", "google", "privacy", "backup", "personal", "shares", "products"]
     for i in range(order.size()):
         var section = body.get_node_or_null("SettingsSection_" + order[i])
         if section != null:
