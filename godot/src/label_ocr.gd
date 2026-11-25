@@ -5,9 +5,52 @@ static func _regex(pattern: String) -> RegEx:
     r.compile("(*UCP)" + pattern)
     return r
 
+# Only explicit table separators and a uniquely labelled 100-unit column.
+# Whitespace-only OCR layouts are not assumed to have reliable alignment.
+static func _table_column(normalized: String) -> String:
+    var lines = normalized.split("\n")
+    var basis = _regex("^\\s*(?:(?:на|в|per|w)\\s+)?100\\s*(г|g|мл|ml)\\s*$")
+    var portion = _regex("^\\s*(?:на\\s+порци[юи]|в\\s+порции|per\\s+(?:serving|portion)|w\\s+porcji|na\\s+porcję)(?:\\s*\\(?[0-9]+(?:[.,][0-9]+)?\\s*(?:г|g|мл|ml)\\)?)?\\s*$")
+    var header = -1
+    var selected = -1
+    var unit = ""
+    for i in range(lines.size()):
+        var cells = lines[i].split("|",true)
+        if cells.size() != 3:
+            continue
+        var a = basis.search(cells[1])
+        var b = basis.search(cells[2])
+        if a != null and b == null and portion.search(cells[2]) != null:
+            if header >= 0:
+                return ""
+            header = i
+            selected = 1
+            unit = a.get_string(1)
+        elif b != null and a == null and portion.search(cells[1]) != null:
+            if header >= 0:
+                return ""
+            header = i
+            selected = 2
+            unit = b.get_string(1)
+    if header < 0:
+        return ""
+    var rows: Array[String] = ["100 " + unit]
+    for i in range(header+1,lines.size()):
+        if lines[i].strip_edges().is_empty():
+            continue
+        var cells = lines[i].split("|",true)
+        if cells.size()!=3 or cells[0].strip_edges().is_empty():
+            break
+        rows.append(cells[0].strip_edges()+" "+cells[selected].strip_edges())
+    return "\n".join(rows)
+
 static func parse(raw: String) -> Dictionary:
     var result: Dictionary = {"name":"","source":"Фото этикетки","ocr_review":true,"nutrition_unit":"г"}
     var normalized = raw.left(12000).to_lower().replace("ё","е").replace("\u00a0"," ").replace("\u202f"," ")
+    if normalized.contains("|"):
+        var extracted = _table_column(normalized)
+        if not extracted.is_empty():
+            return parse(extracted)
     var ml = _regex("\\b100\\s*(?:мл|ml)\\b").search(normalized)
     var gram = _regex("\\b100\\s*(?:г|g)\\b").search(normalized)
     if ml != null and gram == null:

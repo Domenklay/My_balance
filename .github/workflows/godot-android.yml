@@ -24,6 +24,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Test native step delta across midnight
+        run: |
+          mkdir -p /tmp/mybalance-step-test
+          javac -d /tmp/mybalance-step-test android_scanner/src/main/java/com/domenklay/mybalance/steps/StepDelta.java android_scanner/tests/StepDeltaTest.java
+          java -cp /tmp/mybalance-step-test com.domenklay.mybalance.steps.StepDeltaTest
       - name: Restore Gradle dependencies
         uses: actions/cache@v4
         with:

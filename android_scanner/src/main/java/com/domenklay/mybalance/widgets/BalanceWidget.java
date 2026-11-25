@@ -1,6 +1,8 @@
 package com.domenklay.mybalance.widgets;
 
 import android.app.PendingIntent;
+import android.app.AlarmManager;
+import java.util.Calendar;
 import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetProvider;
 import android.content.*;
@@ -14,6 +16,7 @@ import java.util.Locale;
 
 public class BalanceWidget extends AppWidgetProvider {
     static final String PREFS="mybalance_widget_v1";
+    static final String ROLLOVER="com.domenklay.mybalance.WIDGET_ROLLOVER";
     static SharedPreferences prefs(Context c){return c.getSharedPreferences(PREFS,Context.MODE_PRIVATE);}
     static String today(){return new SimpleDateFormat("yyyy-MM-dd",Locale.US).format(new Date());}
     static int resource(Context c,String type,String name){return c.getResources().getIdentifier(name,type,c.getPackageName());}
@@ -25,6 +28,21 @@ public class BalanceWidget extends AppWidgetProvider {
         Intent i=new Intent(c,WidgetOpenActivity.class).putExtra("widget_action",action);
         i.setData(android.net.Uri.parse("mybalance-widget://"+widget+"/"+action));
         return PendingIntent.getActivity(c,0,i,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+    }
+    // Inexact alarm avoids requesting special exact-alarm access.
+    static void scheduleRollover(Context c){
+        AppWidgetManager manager=AppWidgetManager.getInstance(c);
+        AlarmManager alarms=(AlarmManager)c.getSystemService(Context.ALARM_SERVICE);
+        if(alarms==null)return;
+        Intent intent=new Intent(c,CompactWidget.class).setAction(ROLLOVER);
+        PendingIntent pending=PendingIntent.getBroadcast(c,731,intent,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+        if(manager.getAppWidgetIds(new ComponentName(c,CompactWidget.class)).length==0&&manager.getAppWidgetIds(new ComponentName(c,ExpandedWidget.class)).length==0){
+            alarms.cancel(pending);return;
+        }
+        Calendar next=Calendar.getInstance();
+        next.add(Calendar.DAY_OF_YEAR,1);
+        next.set(Calendar.HOUR_OF_DAY,0);next.set(Calendar.MINUTE,0);next.set(Calendar.SECOND,0);next.set(Calendar.MILLISECOND,0);
+        alarms.setWindow(AlarmManager.RTC,next.getTimeInMillis(),15*60000L,pending);
     }
     public static void refresh(Context c){
         AppWidgetManager manager=AppWidgetManager.getInstance(c);
@@ -40,6 +58,13 @@ public class BalanceWidget extends AppWidgetProvider {
     static void render(Context c,AppWidgetManager manager,int widget,boolean expanded){
         JSONObject data;
         try{data=new JSONObject(prefs(c).getString("snapshot","{}"));}catch(Exception e){data=new JSONObject();}
+        JSONObject days=data.optJSONObject("days");
+        if(days!=null){
+            JSONObject current=days.optJSONObject(today());
+            JSONObject fallback=days.optJSONObject(data.optString("date"));
+            if(current!=null)data=current;
+            else if(fallback!=null)data=fallback;
+        }
         boolean en="en".equals(data.optString("language"));
         boolean allowed=prefs(c).getBoolean("visible",false);
         boolean valid=allowed&&data.optBoolean("ready")&&today().equals(data.optString("date"));
@@ -91,13 +116,15 @@ public class BalanceWidget extends AppWidgetProvider {
     }
     @Override public void onUpdate(Context c,AppWidgetManager manager,int[] ids){
         for(int widget:ids)render(c,manager,widget,this instanceof ExpandedWidget);
+        scheduleRollover(c);
     }
+    @Override public void onDisabled(Context c){scheduleRollover(c);}
     @Override public void onAppWidgetOptionsChanged(Context c,AppWidgetManager manager,int id,android.os.Bundle options){
         render(c,manager,id,this instanceof ExpandedWidget);
     }
     @Override public void onReceive(Context c,Intent intent){
         super.onReceive(c,intent);
         String action=intent.getAction();
-        if(Intent.ACTION_DATE_CHANGED.equals(action)||Intent.ACTION_TIME_CHANGED.equals(action)||Intent.ACTION_TIMEZONE_CHANGED.equals(action)||Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)||Intent.ACTION_BOOT_COMPLETED.equals(action))refresh(c);
+        if(ROLLOVER.equals(action)||Intent.ACTION_DATE_CHANGED.equals(action)||Intent.ACTION_TIME_CHANGED.equals(action)||Intent.ACTION_TIMEZONE_CHANGED.equals(action)||Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)||Intent.ACTION_BOOT_COMPLETED.equals(action)){refresh(c);scheduleRollover(c);}
     }
 }

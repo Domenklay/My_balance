@@ -34,6 +34,10 @@ func _run() -> void:
     if next["eaten"]!=0 or next["water"]!=0 or next["steps"]!=0:
         _fail("date isolation")
         return
+    var window = Snapshot.window(s,day)
+    if window["days"].size()!=3 or window["days"][day]["eaten"]!=200 or window["days"]["2026-11-26"]["eaten"]!=0 or not Snapshot.window(s,"2026-12-31")["days"].has("2027-01-01"):
+        _fail("rolling snapshot and year boundary")
+        return
     var app = load("res://main.tscn").instantiate()
     root.add_child(app)
     await process_frame

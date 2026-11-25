@@ -15,3 +15,12 @@ static func make(store: Object, day: String) -> Dictionary:
         "steps":store.day_steps(day),"step_source":store.step_source(day),
         "theme":str(settings.get("theme","forest")),"language":str(settings.get("language","ru")),
         "ready":not store.needs_onboarding()}
+
+# Cache today's and the next two dates, including any already-entered diary rows.
+static func window(store: Object, day: String) -> Dictionary:
+    var start = Time.get_unix_time_from_datetime_string(day+"T00:00:00")
+    var days: Dictionary = {}
+    for offset in range(3):
+        var key = Time.get_date_string_from_unix_time(start + offset*86400)
+        days[key] = make(store,key)
+    return {"date":day,"days":days}

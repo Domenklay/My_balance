@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.77"
+const APP_VERSION = "0.7.77.1"
 const ProgressPhotos = preload("res://src/progress_photos.gd")
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
@@ -2513,9 +2513,10 @@ func _pantry_sheet() -> void:
             recipes.append(copy)
     var sheet = _mobile_sheet("Что есть дома?", "Укажи продукты, которые уже есть. Совпадение по названию не гарантирует достаточное количество.", "Готово", 710.0)
     var fields: VBoxContainer = sheet["fields"]
-    var entry = _text_input(fields, "Например: яйцо, молоко, рис")
+    var entry = _text_input(fields, "Например: яйцо; молоко 2,5%; рис")
     entry.name = "PantryInput"
     entry.max_length = 600
+    _label(fields,"Разделяй продукты запятой или точкой с запятой. Десятичная запятая в названии сохраняется.",11,MUTED)
     var add = _button(fields, "+ Добавить продукты", Callable())
     add.name = "PantryAdd"
     var stock = VBoxContainer.new()
@@ -2590,7 +2591,7 @@ func _pantry_sheet() -> void:
             remove.size_flags_horizontal = Control.SIZE_SHRINK_END
         refresh_results.call(0)
     var save_names = func():
-        if store.add_pantry_names(Array(entry.text.replace("; ",",").replace(";",",").split(",",false))):
+        if store.add_pantry_names(PantryMath.parse_names(entry.text)):
             entry.text = ""
             refresh_stock.call()
         else:

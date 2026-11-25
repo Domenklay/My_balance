@@ -22,6 +22,24 @@ static func key(raw: String) -> String:
     }
     return str(aliases.get(value,value))
 
+# A comma between digits belongs to a product name (e.g. 2,5%).
+static func parse_names(raw: String) -> Array:
+    var result: Array = []
+    var current = ""
+    var digits = "0123456789"
+    for i in range(raw.length()):
+        var ch = raw[i]
+        var decimal = ch == "," and i > 0 and i + 1 < raw.length() and digits.contains(raw[i-1]) and digits.contains(raw[i+1])
+        if ch in [";", "\n", "\r"] or (ch == "," and not decimal):
+            if not current.strip_edges().is_empty():
+                result.append(current.strip_edges())
+            current = ""
+        else:
+            current += ch
+    if not current.strip_edges().is_empty():
+        result.append(current.strip_edges())
+    return result
+
 static func valid_list(items: Variant) -> bool:
     if not items is Array or items.size() > MAX_ITEMS:
         return false

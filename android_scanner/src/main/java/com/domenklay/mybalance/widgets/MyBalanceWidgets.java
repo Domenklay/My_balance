@@ -19,13 +19,15 @@ public final class MyBalanceWidgets extends GodotPlugin {
         a.runOnUiThread(()->BalanceWidget.refresh(a));
     }
     @UsedByGodot public void publish(String raw){
-        Activity a=getActivity();if(a==null||!dataVisible()||raw==null||raw.length()>4096)return;
+        Activity a=getActivity();if(a==null||!dataVisible()||raw==null||raw.length()>8192)return;
         try{
             JSONObject obj=new JSONObject(raw);
             if(!BalanceWidget.today().equals(obj.optString("date")))return;
+            JSONObject days=obj.optJSONObject("days");
+            if(days==null||days.length()>3||days.optJSONObject(BalanceWidget.today())==null)return;
             if(!raw.equals(BalanceWidget.prefs(a).getString("snapshot",""))){
                 BalanceWidget.prefs(a).edit().putString("snapshot",raw).apply();
-                a.runOnUiThread(()->BalanceWidget.refresh(a));
+                a.runOnUiThread(()->{BalanceWidget.refresh(a);BalanceWidget.scheduleRollover(a);});
             }
         }catch(Exception ignored){}
     }

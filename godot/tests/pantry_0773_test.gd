@@ -8,6 +8,9 @@ func _fail(reason: String) -> void:
     push_error("PANTRY: " + reason)
     quit(1)
 func _run() -> void:
+    if Pantry.parse_names("яйца, молоко 2,5%; рис\nтворог 5,0%") != ["яйца","молоко 2,5%","рис","творог 5,0%"]:
+        _fail("decimal comma split")
+        return
     var recipe = {"id":"fixture","name":"Омлет","category":"breakfast","cooked_weight":150,"servings":1,"ingredients":[{"name":"Яйцо без скорлупы","grams":100,"kcal":143,"p":12,"f":9,"c":1},{"name":"Молоко 2,5%","grams":50,"kcal":52,"p":3,"f":2.5,"c":4}]}
     if not Pantry.matches([recipe],["ЯЙЦА","молоко 2,5%"],0).size() == 1 or not Pantry.matches([recipe],["яйца"],0).is_empty():
         _fail("exact and alias matching")
@@ -62,6 +65,12 @@ func _run() -> void:
     buy.pressed.emit()
     if app.store.pantry_list("pantry_shopping") != ["Молоко 2,5%"] or not app.store.data["entries"].is_empty():
         _fail("shopping action or premature diary entry")
+        return
+    input.text = "молоко 2,5%; рис"
+    (app.find_child("PantryAdd",true,false) as Button).pressed.emit()
+    await process_frame
+    if app.store.pantry_list() != ["яйца","молоко 2,5%","рис"] or app.find_child("PantryBuy_fixture",true,false) != null:
+        _fail("decimal comma UI and complete recipe")
         return
     print("PASS PANTRY: exact aliases, missing items, offline shopping, migration, rollback and UI")
     app.queue_free()

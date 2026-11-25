@@ -17,6 +17,14 @@ func _run() -> void:
     if Ocr.parse("per serving 50 g\nProtein 10 g").has("p") or Ocr.parse("100 g per serving\nFat 2 g 1 g").has("f") or Ocr.parse("100 g\nFat <0.5 g").has("f") or Ocr.parse("100 g\nFat 1 g\nFat 2 g").has("f"):
         _fail("ambiguous data must stay blank")
         return
+    var table = Ocr.parse("Пищевая ценность | На 100 г | На порцию 50 г\nЭнергия | 837 кДж / 200 ккал | 418 кДж / 100 ккал\nБелки | 10,5 г | 5,25 г\nЖиры | 8 г | 4 г\nУглеводы | 20 г | 10 г")
+    var reverse = Ocr.parse("Nutrition | per serving 50 ml | per 100 ml\nEnergy | 50 kcal | 100 kcal\nProtein | 2 g | 4 g\nFat | 1 g | 2 g")
+    if table.get("kcal")!=200.0 or table.get("p")!=10.5 or table.get("f")!=8.0 or reverse.get("nutrition_unit")!="мл" or reverse.get("p")!=4.0 or reverse.has("c"):
+        _fail("explicit table columns")
+        return
+    if Ocr.parse("Nutrition | 100 g | unknown\nFat | 2 g | 1 g").has("f") or Ocr.parse("100 g\nFat 2 g 1 g").has("f"):
+        _fail("unknown column must not be inferred")
+        return
     var app = load("res://main.tscn").instantiate()
     root.add_child(app)
     await process_frame

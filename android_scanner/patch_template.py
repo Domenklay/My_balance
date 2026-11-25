@@ -161,7 +161,7 @@ print("PATCH OK: local Russian/English/Polish OCR models and camera provider")
 step_src = source.parent.parent / "steps"
 step_dest = dest.parent.parent / "steps"
 step_dest.mkdir(parents=True, exist_ok=True)
-for java_file in ("MyBalanceSteps.java","StepService.java","StepLedger.java"):
+for java_file in ("MyBalanceSteps.java","StepService.java","StepLedger.java","StepDelta.java"):
     shutil.copy2(step_src / java_file,step_dest / java_file)
 manifest_xml = manifest.read_text(encoding="utf-8")
 if "org.godotengine.plugin.v2.MyBalanceSteps" not in manifest_xml:

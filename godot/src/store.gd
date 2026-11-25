@@ -863,7 +863,7 @@ func publish_widget() -> void:
     if OS.has_feature("android") and Engine.has_singleton("MyBalanceWidgets"):
         var plugin = Engine.get_singleton("MyBalanceWidgets")
         if plugin.dataVisible():
-            plugin.publish(JSON.stringify(WidgetSnapshot.make(self,Time.get_date_string_from_system())))
+            plugin.publish(JSON.stringify(WidgetSnapshot.window(self,Time.get_date_string_from_system())))
 
 func export_json() -> String:
     return JSON.stringify(data, "\t")
