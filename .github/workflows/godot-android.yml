@@ -7,6 +7,7 @@ on:
       - "godot/**"
       - "android_scanner/**"
       - "tools/bundle_recipe_photos.py"
+      - "tools/check_android_native_alignment.py"
       - ".github/workflows/godot-android.yml"
   workflow_dispatch:
 
@@ -46,7 +47,7 @@ jobs:
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
           test -n "$SDKMANAGER"
           echo "Using $SDKMANAGER"
-          "$SDKMANAGER" --install "platform-tools" "build-tools;35.0.1" "platforms;android-35"
+          "$SDKMANAGER" --install "platform-tools" "build-tools;36.1.0" "platforms;android-36"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
       - name: Install Godot 4.6.3 and matching export templates
         shell: bash
@@ -300,6 +301,18 @@ jobs:
           test -s godot/build/MyBalance-debug.apk
           ls -lh godot/build/MyBalance-debug.apk
           sha256sum godot/build/MyBalance-debug.apk
+      - name: Verify target API, signature and 16 KB APK compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=godot/build/MyBalance-debug.apk
+          TOOLS="$ANDROID_HOME/build-tools/36.1.0"
+          "$TOOLS/aapt" dump badging "$APK" > /tmp/mybalance-badging.txt
+          grep -Fx "targetSdkVersion:'36'" /tmp/mybalance-badging.txt
+          grep -E "package: name='com\.domenklay\.mybalance\.godot'" /tmp/mybalance-badging.txt
+          "$TOOLS/apksigner" verify --verbose --print-certs "$APK"
+          "$TOOLS/zipalign" -c -P 16 -v 4 "$APK"
+          python3 tools/check_android_native_alignment.py "$APK"
       - name: Verify OCR models are present in the actual APK
         run: |
           python3 - <<'PY'
@@ -316,7 +329,7 @@ jobs:
       - name: Verify native step service manifest
         shell: bash
         run: |
-          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump xmltree godot/build/MyBalance-debug.apk AndroidManifest.xml > /tmp/steps-manifest.txt
+          "$ANDROID_HOME/build-tools/36.1.0/aapt" dump xmltree godot/build/MyBalance-debug.apk AndroidManifest.xml > /tmp/steps-manifest.txt
           grep -q 'com.domenklay.mybalance.steps.StepService' /tmp/steps-manifest.txt
           grep -q 'org.godotengine.plugin.v2.MyBalanceSteps' /tmp/steps-manifest.txt
           grep -q 'android.permission.ACTIVITY_RECOGNITION' /tmp/steps-manifest.txt
