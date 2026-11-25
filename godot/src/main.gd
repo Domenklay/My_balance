@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.77.2"
+const APP_VERSION = "0.7.77.3"
 const ProgressPhotos = preload("res://src/progress_photos.gd")
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
@@ -154,6 +154,7 @@ var note_status_label: Label
 var calendar_expanded: bool = false
 var food_form_expanded: bool = false
 var settings_page: String = "main"
+var settings_query: String = ""
 # Only one category is expanded at a time to keep the long settings screen
 # usable on smaller phones; this is presentation state, not diary data.
 var settings_section_open: String = ""
@@ -629,6 +630,7 @@ func _handle_widget_action(action: String) -> void:
     elif action == "settings":
         settings_page = "main"
         settings_section_open = "android_widgets"
+        settings_query = ""
         _navigate_to_tab("settings")
     else:
         _navigate_to_tab("day")
@@ -8166,6 +8168,37 @@ func _show_language_settings() -> void:
     apply.name = "InterfaceLanguageApply"
 
 
+func _filter_settings(query: String) -> void:
+    settings_query = query
+    var normalized = query.strip_edges().to_lower().replace("ё", "е")
+    var keywords = {
+        "language": "язык русский английский english language",
+        "appearance": "темы оформление цвет узор контраст анимации внешний вид theme appearance dark темная",
+        "google": "аккаунт google гугл диск облако синхронизация cloud account drive",
+        "reminders": "напоминания уведомления расписание время reminders notifications",
+        "backup": "резервная копия перенос восстановление импорт экспорт json backup restore",
+        "personal": "мои цели параметры анкета вес калории ккал кбжу бжу белки жиры углеводы норма calorie goals protein",
+        "shares": "калории приемы пищи распределение завтрак обед ужин перекус доли meal calories",
+        "android_widgets": "виджеты android рабочий стол приватность widgets privacy",
+        "products": "мои продукты штрихкоды каталог еда barcode products food"
+    }
+    var matches = 0
+    for id in keywords:
+        var section = body.get_node_or_null("SettingsSection_" + str(id)) as Control
+        if section == null:
+            continue
+        var visible_match = true
+        for word in normalized.split(" ", false):
+            if not str(keywords[id]).contains(word):
+                visible_match = false
+                break
+        section.visible = visible_match
+        if visible_match:
+            matches += 1
+    var empty = body.find_child("SettingsNoMatches", true, false) as Label
+    if empty != null:
+        empty.visible = matches == 0
+
 func _show_settings() -> void:
     if settings_page == "foods":
         var nav = _card("Мои продукты")
@@ -8182,7 +8215,13 @@ func _show_settings() -> void:
         "Версия " + APP_VERSION + " · Тема: " + AppearanceScript.name_for(current_theme), 12, MUTED)
     version_label.name = "AppVersionLabel"
     _button(back_to_profile, "← К личной странице", func(): _navigate_to_tab("profile"), true)
-    _label(back_to_profile, "Система и аккаунт", 14, TEXT_ACCENT)
+    var search = _text_input(back_to_profile, "Поиск по настройкам", settings_query)
+    search.name = "SettingsSearch"
+    search.clear_button_enabled = true
+    var no_matches = _label(back_to_profile, "Ничего не найдено. Попробуй другой запрос.", 12, MUTED)
+    no_matches.name = "SettingsNoMatches"
+    no_matches.visible = false
+    search.text_changed.connect(_filter_settings)
     _show_language_settings()
     _show_android_widget_settings()
     var card = _settings_section("Мои цели и параметры", "personal",
@@ -8314,8 +8353,7 @@ func _show_settings() -> void:
     animation_switch.name = "AppearanceAnimationsToggle"
     _label(appearance, "Мягкие переходы. Можно выключить для спокойного интерфейса.", 12, MUTED)
 
-    var my_foods_link = _card("Мои продукты и штрихкоды")
-    _compact_card(my_foods_link, 11, 6)
+    var my_foods_link = _settings_section("Мои продукты и штрихкоды", "products", "Каталог и сохранённые продукты")
     _label(my_foods_link, "Создание и редактирование продуктов, привязка штрихкодов, обновление каталога.", 13, MUTED)
     _button(my_foods_link, "Открыть мои продукты", func():
         settings_page = "foods"
@@ -8337,11 +8375,12 @@ func _show_settings() -> void:
     )
     _label(backup, "Записи хранятся в памяти приложения без регистрации и интернета. При удалении приложения данные могут исчезнуть.", 13, MUTED)
     # Keep stable section IDs for existing navigation and regression tests.
-    var order = ["language", "appearance", "google", "reminders", "backup", "personal", "shares"]
+    var order = ["language", "appearance", "reminders", "android_widgets", "google", "backup", "personal", "shares", "products"]
     for i in range(order.size()):
         var section = body.get_node_or_null("SettingsSection_" + order[i])
         if section != null:
             body.move_child(section, i + 1)
+    _filter_settings(settings_query)
 
 func _show_my_foods() -> void:
     var foods_card = _card("Добавить свой продукт · на 100 г")

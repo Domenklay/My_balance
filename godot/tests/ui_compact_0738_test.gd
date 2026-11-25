@@ -39,6 +39,25 @@ func _run() -> void:
         if toggle.custom_minimum_size.y < 40:
             _fail("undersized section toggle: " + section)
             return
+    var settings_search = app.find_child("SettingsSearch", true, false) as LineEdit
+    if settings_search == null:
+        _fail("settings search is missing")
+        return
+    settings_search.text = "гуГл"
+    settings_search.text_changed.emit(settings_search.text)
+    if not app.find_child("SettingsSection_google", true, false).visible or app.find_child("SettingsSection_language", true, false).visible:
+        _fail("settings search failed case-insensitive filtering")
+        return
+    settings_search.text = "нет_такой_настройки"
+    settings_search.text_changed.emit(settings_search.text)
+    if not app.find_child("SettingsNoMatches", true, false).visible:
+        _fail("settings search missing empty state")
+        return
+    settings_search.text = ""
+    settings_search.text_changed.emit(settings_search.text)
+    if not app.find_child("SettingsSection_language", true, false).visible or app.find_child("SettingsNoMatches", true, false).visible:
+        _fail("clearing settings search did not restore sections")
+        return
     var food_settings = _button(app, "Открыть мои продукты")
     if food_settings == null:
         _fail("own food management disappeared from settings")
