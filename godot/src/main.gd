@@ -38,7 +38,8 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.75"
+const APP_VERSION = "0.7.76"
+const ProgressPhotos = preload("res://src/progress_photos.gd")
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
 const RecipeSuggest = preload("res://src/recipe_suggest.gd")
@@ -116,6 +117,11 @@ var _expanded_meals: Dictionary = {}
 var tab: String = "day"
 # The combined Progress page retains separate weight and report views.
 var progress_section: String = "weight"
+var progress_photos: RefCounted
+var progress_photo_plugin: Object = null
+var progress_photo_pending: bool = false
+var progress_photo_date: String = ""
+var progress_photo_limit: int = 6
 var selected_body_metric: String = "waist"
 var body_chart_period: String = "quarter"
 var weight_chart_period: String = "quarter"
@@ -442,6 +448,14 @@ func _ready() -> void:
         ocr_plugin.connect("ocr_cancelled", Callable(self,"_on_ocr_cancelled"))
     if OS.has_feature("android") and Engine.has_singleton("MyBalanceSteps"):
         steps_plugin = Engine.get_singleton("MyBalanceSteps")
+    var private_photos_path = "" if OS.has_feature("android") else "user://progress_photos_v1"
+    if OS.has_feature("android") and Engine.has_singleton("MyBalancePhotos"):
+        progress_photo_plugin = Engine.get_singleton("MyBalancePhotos")
+        private_photos_path = str(progress_photo_plugin.privateFolder())
+        progress_photo_plugin.connect("progress_photo",Callable(self,"_on_progress_photo"))
+        progress_photo_plugin.connect("progress_photo_error",Callable(self,"_on_progress_photo_error"))
+        progress_photo_plugin.connect("progress_photo_cancelled",Callable(self,"_on_progress_photo_cancelled"))
+    progress_photos = ProgressPhotos.new(private_photos_path)
     background_rect = ColorRect.new()
     background_rect.color = BACKGROUND
     background_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -6924,11 +6938,234 @@ func _edit_activity(activity: Dictionary) -> void:
 
 
 func _set_progress_section(section: String) -> void:
-    if section not in ["weight", "stats", "body"]:
+    if section not in ["weight", "stats", "body", "photos"]:
         return
     progress_section = section
     tab = "progress"
     _render(true)
+
+
+func _progress_photo_texture(parent: Node, id: String, height: float, thumb: bool = false) -> void:
+    var image = TextureRect.new()
+    image.custom_minimum_size = Vector2(0,height)
+    image.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+    image.texture = progress_photos.texture(id,thumb)
+    parent.add_child(image)
+    if image.texture == null:
+        _label(parent,"Снимок недоступен",12,MUTED)
+
+func _photo_meta_text(record: Dictionary) -> String:
+    var line = str(record["date"])
+    if record.has("weight"):
+        line += " · " + str(snappedf(float(record["weight"]),0.1)) + " кг"
+    return line
+
+func _photo_measurements(parent: Node, record: Dictionary) -> void:
+    var values: Dictionary = record.get("measurements",{})
+    for field in BodyMeasurements.FIELDS:
+        if values.has(field[0]):
+            _label(parent,str(field[1]) + ": " + str(snappedf(float(values[field[0]]),0.1)) + " см",12,MUTED)
+    if not str(record.get("note","")).is_empty():
+        _label(parent,str(record["note"]),12,MUTED)
+
+func _show_progress_photos() -> void:
+    var header = _card("Фото прогресса")
+    _compact_card(header,10,6)
+    _label(header,"Личная галерея. Фото не входят в резервные копии дневника и не отправляются на сервер. При удалении приложения снимки могут быть потеряны.",12,MUTED)
+    _label(header,"Дата нового снимка",13,INK)
+    _date_nav(header)
+    if calendar_expanded:
+        _calendar(header)
+    var actions = _row(header)
+    var camera = _button(actions,"Камера",func(): _pick_progress_photo(true),true)
+    camera.name = "ProgressPhotoCamera"
+    camera.disabled = progress_photo_plugin == null
+    var pick = _button(actions,"+ Выбрать фото",func(): _pick_progress_photo(false))
+    pick.name = "ProgressPhotoAdd"
+    if progress_photos == null or progress_photos.folder.is_empty():
+        pick.disabled = true
+        camera.disabled = true
+        _label(header,"Локальное хранилище недоступно.",12,ACCENT)
+        return
+    var records: Array = progress_photos.list()
+    _label(header,str(records.size()) + " из " + str(ProgressPhotos.MAX_PHOTOS) + " снимков",12,MUTED)
+    var compare = _button(header,"Сравнить два снимка",func(): _progress_compare_sheet(records),true)
+    compare.name = "ProgressPhotoCompare"
+    compare.disabled = records.size()<2
+    if records.is_empty():
+        _empty_illustration(header,"progress","Добавь фото, если хочешь вести визуальную историю. Это необязательная функция.")
+        return
+    var grid = GridContainer.new()
+    grid.name = "ProgressPhotoGrid"
+    grid.columns = 2 if get_viewport_rect().size.x>=350 else 1
+    grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    grid.add_theme_constant_override("h_separation",7)
+    grid.add_theme_constant_override("v_separation",7)
+    body.add_child(grid)
+    for index in range(mini(records.size(),progress_photo_limit)):
+        var record: Dictionary = records[index]
+        var card = _card("","plain",grid)
+        _compact_card(card,7,4)
+        _progress_photo_texture(card,str(record["id"]),175,true)
+        _label(card,_photo_meta_text(record),12,INK)
+        var open = _button(card,"Открыть",func(): _progress_photo_details(record),true)
+        open.name = "ProgressPhotoOpen_" + str(record["id"])
+        open.custom_minimum_size.y = 38
+    if records.size()>progress_photo_limit:
+        _button(body,"Показать ещё 6",func():
+            progress_photo_limit += 6
+            _render()
+        ,true).name = "ProgressPhotoMore"
+
+func _pick_progress_photo(camera: bool) -> void:
+    if progress_photo_pending or progress_photos == null or progress_photos.folder.is_empty():
+        return
+    progress_photo_date = date
+    if progress_photo_plugin != null:
+        progress_photo_pending = true
+        progress_photo_plugin.pickPhoto(camera)
+        return
+    if camera or OS.has_feature("android"):
+        _message("Выбор фото недоступен.")
+        return
+    var picker = FileDialog.new()
+    picker.use_native_dialog = true
+    picker.access = FileDialog.ACCESS_FILESYSTEM
+    picker.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+    picker.filters = PackedStringArray(["*.jpg,*.jpeg,*.png,*.webp;Фото"])
+    add_child(picker)
+    progress_photo_pending = true
+    picker.file_selected.connect(func(path: String):
+        picker.queue_free()
+        progress_photo_pending = false
+        var f = FileAccess.open(path,FileAccess.READ)
+        if f == null:
+            _message("Не удалось открыть фото.")
+            return
+        if f.get_length() > 16777216:
+            f.close()
+            _message("Выбери фото до 16 МБ.")
+            return
+        var raw = f.get_buffer(f.get_length())
+        f.close()
+        _progress_photo_review(raw,progress_photo_date)
+    )
+    picker.canceled.connect(func(): progress_photo_pending = false; picker.queue_free())
+    picker.popup_centered_ratio(0.85)
+
+func _on_progress_photo(encoded: String) -> void:
+    if not progress_photo_pending:
+        return
+    progress_photo_pending = false
+    if encoded.length()>800000:
+        _message("Фото слишком большое.")
+        return
+    _progress_photo_review(Marshalls.base64_to_raw(encoded),progress_photo_date)
+
+func _on_progress_photo_error(message: String) -> void:
+    progress_photo_pending = false
+    _message(message)
+
+func _on_progress_photo_cancelled() -> void:
+    progress_photo_pending = false
+
+func _progress_photo_review(raw: PackedByteArray,day: String) -> void:
+    var bytes = ProgressPhotos.compact(raw)
+    if bytes.is_empty():
+        _message("Не удалось обработать фото.")
+        return
+    var image = Image.new()
+    if image.load_jpg_from_buffer(bytes)!=OK:
+        _message("Не удалось открыть фото.")
+        return
+    var sheet = _mobile_sheet("Новый снимок", "Дата: " + day, "Сохранить фото", 650)
+    var fields: VBoxContainer = sheet["fields"]
+    var preview = TextureRect.new()
+    preview.custom_minimum_size = Vector2(0,240)
+    preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+    preview.texture = ImageTexture.create_from_image(image)
+    fields.add_child(preview)
+    var weight: Variant = null
+    for record in store.data.get("weights",[]):
+        if str(record.get("date","")) == day:
+            weight = float(record["value"])
+            break
+    var measurements: Dictionary = store.body_measurements_on(day)
+    _label(fields,"Вес на эту дату: " + ("не записан" if weight == null else str(weight) + " кг"),12,MUTED)
+    _photo_measurements(fields,{"measurements":measurements})
+    _label(fields,"Вес и замеры сохраняются только из записей на эту дату.",11,MUTED)
+    var note = _text_input(fields,"Заметка (необязательно)")
+    note.name = "ProgressPhotoNote"
+    note.max_length = 200
+    sheet["confirm"].pressed.connect(func():
+        var id: String = progress_photos.add(bytes,day,weight,measurements,note.text)
+        if id.is_empty():
+            _sheet_error(sheet,"Не удалось сохранить фото. Проверь память и лимит галереи.")
+            return
+        sheet["root"].queue_free()
+        progress_section = "photos"
+        tab = "progress"
+        _render()
+        _notify_saved("Фото сохранено на устройстве")
+    )
+
+func _progress_photo_details(record: Dictionary) -> void:
+    var sheet = _mobile_sheet("Фото прогресса",_photo_meta_text(record),"Закрыть",710)
+    var fields: VBoxContainer = sheet["fields"]
+    _progress_photo_texture(fields,str(record["id"]),330)
+    _photo_measurements(fields,record)
+    var remove = _button(fields,"Удалить снимок",func():
+        _confirm_delete("Удалить фото с этого устройства? Восстановить его из дневника нельзя.",func():
+            if progress_photos.remove(str(record["id"])):
+                sheet["root"].queue_free()
+                _render()
+                _notify_saved("Фото удалено")
+            else:
+                _sheet_error(sheet,"Не удалось удалить фото.")
+        )
+    ,true)
+    remove.name = "ProgressPhotoDelete"
+    sheet["confirm"].pressed.connect(func(): sheet["root"].queue_free())
+
+func _progress_compare_sheet(records: Array) -> void:
+    if records.size()<2:
+        return
+    var sheet = _mobile_sheet("Сравнение фото","Выбери любые два снимка. Изображения не оцениваются автоматически.","Готово",710)
+    var fields: VBoxContainer = sheet["fields"]
+    var names: Array = []
+    for index in range(records.size()):
+        names.append(str(index+1) + ". " + _photo_meta_text(records[index]))
+    _label(fields,"Первый снимок",12,MUTED)
+    var first = _choice(fields,names)
+    first.name = "ProgressCompareFirst"
+    first.select(records.size()-1)
+    _label(fields,"Второй снимок",12,MUTED)
+    var second = _choice(fields,names)
+    second.name = "ProgressCompareSecond"
+    second.select(0)
+    var pair = _row(fields)
+    pair.name = "ProgressComparePair"
+    var refresh = func(_index: int):
+        for child in pair.get_children():
+            pair.remove_child(child)
+            child.queue_free()
+        for selected in [first.selected,second.selected]:
+            var record: Dictionary = records[selected]
+            var panel = VBoxContainer.new()
+            panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            panel.add_theme_constant_override("separation",4)
+            pair.add_child(panel)
+            _progress_photo_texture(panel,str(record["id"]),240)
+            _label(panel,_photo_meta_text(record),12,INK)
+            _photo_measurements(panel,record)
+    first.item_selected.connect(refresh)
+    second.item_selected.connect(refresh)
+    refresh.call(0)
+    sheet["confirm"].pressed.connect(func(): sheet["root"].queue_free())
 
 
 func _show_progress() -> void:
@@ -6936,7 +7173,7 @@ func _show_progress() -> void:
     _compact_card(card, 10, 5)
     var choices = _row(card)
     choices.name = "ProgressSectionChoices"
-    for item in [["weight", "Вес"], ["body", "Замеры"], ["stats", "Итоги"]]:
+    for item in [["weight", "Вес"], ["body", "Замеры"], ["photos", "Фото"], ["stats", "Итоги"]]:
         var section: String = str(item[0])
         var action = _button(choices, str(item[1]),
             func(): _set_progress_section(section), true)
@@ -6954,6 +7191,8 @@ func _show_progress() -> void:
         _show_stats()
     elif progress_section == "body":
         _show_body_measurements()
+    elif progress_section == "photos":
+        _show_progress_photos()
     else:
         _show_weight()
 

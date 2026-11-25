@@ -143,7 +143,7 @@ for filename in ("rus.traineddata", "eng.traineddata", "pol.traineddata", "LICEN
     (assets / filename).write_bytes(payload)
 res_xml = app_root / "src/main/res/xml"
 res_xml.mkdir(parents=True,exist_ok=True)
-(res_xml / "mybalance_ocr_paths.xml").write_text('<paths xmlns:android="http://schemas.android.com/apk/res/android"><cache-path name="label_capture" path="ocr_capture/" /></paths>',encoding="utf-8")
+(res_xml / "mybalance_ocr_paths.xml").write_text('<paths xmlns:android="http://schemas.android.com/apk/res/android"><cache-path name="label_capture" path="ocr_capture/" /><cache-path name="progress_capture" path="progress_capture/" /></paths>',encoding="utf-8")
 manifest_xml = manifest.read_text(encoding="utf-8")
 if "org.godotengine.plugin.v2.MyBalanceOcr" not in manifest_xml:
     app_tag = re.search(r"<application\b[^>]*>",manifest_xml,re.DOTALL)
@@ -177,3 +177,16 @@ for permission in ("ACTIVITY_RECOGNITION","FOREGROUND_SERVICE","FOREGROUND_SERVI
         manifest_xml = manifest_xml.replace("<application", '<uses-permission android:name="' + name + '" />\n    <application', 1)
 manifest.write_text(manifest_xml,encoding="utf-8")
 print("PATCH OK: optional step counter service")
+
+# Progress photos are stored in Android noBackupFilesDir, never in diary JSON.
+photo_src = source.parent.parent / "photos"
+photo_dest = dest.parent.parent / "photos"
+photo_dest.mkdir(parents=True,exist_ok=True)
+shutil.copy2(photo_src / "MyBalancePhotos.java",photo_dest / "MyBalancePhotos.java")
+manifest_xml = manifest.read_text(encoding="utf-8")
+if "org.godotengine.plugin.v2.MyBalancePhotos" not in manifest_xml:
+    app_tag = re.search(r"<application\b[^>]*>",manifest_xml,re.DOTALL)
+    photo_nodes = '\n        <meta-data android:name="org.godotengine.plugin.v2.MyBalancePhotos" android:value="com.domenklay.mybalance.photos.MyBalancePhotos" />\n'
+    manifest_xml = manifest_xml[:app_tag.end()] + photo_nodes + manifest_xml[app_tag.end():]
+manifest.write_text(manifest_xml,encoding="utf-8")
+print("PATCH OK: private progress photo picker")
