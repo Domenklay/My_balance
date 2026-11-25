@@ -106,3 +106,53 @@ print(f"PATCH OK: Google Play Code Scanner dependency present={scanner_dep in gr
 print(f"PATCH OK: Google Play Auth dependency present={google_auth_dep in gradle}")
 print(f"PATCH OK: Google Drive plugin source={cloud_dest}")
 print(f"PATCH OK: Godot v2 plugin manifest metadata present")
+
+# Local OCR. Bundle fixed language models with license; no network is used on the phone.
+from urllib.request import urlopen, Request
+ocr_source = source.parent.parent / "ocr"
+ocr_dest = dest.parent.parent / "ocr"
+ocr_dest.mkdir(parents=True, exist_ok=True)
+for java_file in ("MyBalanceOcr.java", "LabelFileProvider.java"):
+    shutil.copy2(ocr_source / java_file, ocr_dest / java_file)
+gradle = app_build.read_text(encoding="utf-8")
+ocr_dep = "implementation 'cz.adaptech.tesseract4android:tesseract4android:4.9.0'"
+if ocr_dep not in gradle:
+    gradle += "\n\ndependencies {\n    " + ocr_dep + "\n}\n"
+settings = root / "settings.gradle"
+if settings.is_file():
+    cfg = settings.read_text(encoding="utf-8")
+    if "https://jitpack.io" not in cfg:
+        match = re.search(r"dependencyResolutionManagement\s*\{[\s\S]*?repositories\s*\{", cfg)
+        if match:
+            cfg = cfg[:match.end()] + "\n        maven { url 'https://jitpack.io' }\n" + cfg[match.end():]
+        else:
+            gradle += "\nrepositories { maven { url 'https://jitpack.io' } }\n"
+        settings.write_text(cfg, encoding="utf-8")
+else:
+    gradle += "\nrepositories { maven { url 'https://jitpack.io' } }\n"
+app_build.write_text(gradle,encoding="utf-8")
+assets = app_root / "src/main/assets/nutrition_ocr"
+assets.mkdir(parents=True, exist_ok=True)
+revision = "87416418657359cb625c412a48b6e1d6d41c29bd"
+for filename in ("rus.traineddata", "eng.traineddata", "pol.traineddata", "LICENSE"):
+    url = f"https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/{revision}/{filename}"
+    with urlopen(Request(url,headers={"User-Agent":"MyBalance-build"}),timeout=45) as response:
+        payload = response.read(20_000_001)
+    if not payload or len(payload)>20_000_000 or (filename.endswith(".traineddata") and len(payload)<100_000):
+        raise SystemExit("Invalid OCR asset "+filename)
+    (assets / filename).write_bytes(payload)
+res_xml = app_root / "src/main/res/xml"
+res_xml.mkdir(parents=True,exist_ok=True)
+(res_xml / "mybalance_ocr_paths.xml").write_text('<paths xmlns:android="http://schemas.android.com/apk/res/android"><cache-path name="label_capture" path="ocr_capture/" /></paths>',encoding="utf-8")
+manifest_xml = manifest.read_text(encoding="utf-8")
+if "org.godotengine.plugin.v2.MyBalanceOcr" not in manifest_xml:
+    app_tag = re.search(r"<application\b[^>]*>",manifest_xml,re.DOTALL)
+    ocr_nodes = '''
+        <meta-data android:name="org.godotengine.plugin.v2.MyBalanceOcr" android:value="com.domenklay.mybalance.ocr.MyBalanceOcr" />
+        <provider android:name="com.domenklay.mybalance.ocr.LabelFileProvider" android:authorities="${applicationId}.nutritionocr" android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/mybalance_ocr_paths" />
+        </provider>
+'''
+    manifest_xml = manifest_xml[:app_tag.end()] + ocr_nodes + manifest_xml[app_tag.end():]
+manifest.write_text(manifest_xml,encoding="utf-8")
+print("PATCH OK: local Russian/English/Polish OCR models and camera provider")

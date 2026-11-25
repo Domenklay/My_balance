@@ -1156,6 +1156,15 @@ func save_barcode_food(details: Dictionary) -> String:
     return str(item["id"])
 
 
+func save_ocr_food(food: Dictionary) -> String:
+    var clean: Dictionary = food.duplicate(true)
+    clean.erase("ocr_review")
+    clean.erase("ocr_text")
+    if add_custom_food_without_barcode(clean):
+        return str(data["foods"].back()["id"])
+    return ""
+
+
 func add_custom_food_without_barcode(food: Dictionary) -> bool:
     var name = str(food.get("name", "")).strip_edges()
     if name.is_empty() or name.length() > 160:

@@ -38,7 +38,8 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.73"
+const APP_VERSION = "0.7.74"
+const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
 const RecipeSuggest = preload("res://src/recipe_suggest.gd")
 const ReadyRecipes = preload("res://src/ready_recipes.gd")
@@ -216,6 +217,11 @@ var online_search_label: Label
 var online_request_query: String = ""
 var diary_food_card: VBoxContainer
 var barcode_scanner: Object = null
+var ocr_plugin: Object = null
+var ocr_pending: bool = false
+var ocr_date: String = ""
+var ocr_meal: String = ""
+var ocr_locked: bool = false
 var barcode_input: LineEdit
 var barcode_message: Label
 var pending_barcode: String = ""
@@ -426,6 +432,11 @@ func _ready() -> void:
             barcode_scanner.connect("barcode_error", Callable(self, "_on_barcode_scan_error"))
         if barcode_scanner.has_signal("barcode_cancelled"):
             barcode_scanner.connect("barcode_cancelled", Callable(self, "_on_barcode_scan_cancelled"))
+    if OS.has_feature("android") and Engine.has_singleton("MyBalanceOcr"):
+        ocr_plugin = Engine.get_singleton("MyBalanceOcr")
+        ocr_plugin.connect("ocr_text", Callable(self,"_on_ocr_text"))
+        ocr_plugin.connect("ocr_error", Callable(self,"_on_ocr_error"))
+        ocr_plugin.connect("ocr_cancelled", Callable(self,"_on_ocr_cancelled"))
     background_rect = ColorRect.new()
     background_rect.color = BACKGROUND
     background_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -5033,14 +5044,82 @@ func _barcode_prefill(product: Dictionary, key: String) -> String:
 func _show_barcode_portion(food: Dictionary) -> void:
     _quick_food_sheet(food, true)
 
+func _ocr_start_sheet() -> void:
+    if ocr_pending:
+        _message("Распознавание уже выполняется.")
+        return
+    var sheet = _mobile_sheet("КБЖУ с упаковки","Сфотографируй крупно таблицу на 100 г или 100 мл. Фото обрабатывается на телефоне и не отправляется на сервер.","Ввести вручную",390)
+    var fields: VBoxContainer = sheet["fields"]
+    for option in [["Сфотографировать этикетку",true],["Выбрать фото",false]]:
+        var camera: bool = option[1]
+        var action = _button(fields,str(option[0]),func():
+            if ocr_plugin == null:
+                _sheet_error(sheet,"Распознавание фото доступно в Android. Можно вставить текст или ввести данные вручную.")
+                return
+            ocr_pending = true
+            ocr_date = _selected_food_date()
+            ocr_meal = selected_meal
+            ocr_locked = _meal_entry_locked
+            sheet["root"].queue_free()
+            ocr_plugin.pickLabel(camera)
+        ,true)
+        action.name = "OcrCamera" if camera else "OcrGallery"
+    var paste = _button(fields,"Вставить текст этикетки",func():
+        var raw = DisplayServer.clipboard_get()
+        sheet["root"].queue_free()
+        await get_tree().process_frame
+        _review_ocr_text(raw)
+    ,true)
+    paste.name = "OcrPaste"
+    sheet["confirm"].pressed.connect(func():
+        sheet["root"].queue_free()
+        await get_tree().process_frame
+        _review_ocr_text("")
+    )
+
+func _on_ocr_text(raw: String) -> void:
+    if not ocr_pending:
+        return
+    ocr_pending = false
+    selected_meal = ocr_meal
+    date = ocr_date
+    _meal_entry_locked = ocr_locked
+    _meal_entry_date = ocr_date if ocr_locked else ""
+    tab = "search"
+    _render()
+    _review_ocr_text(raw)
+
+func _on_ocr_error(message: String) -> void:
+    if not ocr_pending:
+        return
+    ocr_pending = false
+    _message(message)
+
+func _on_ocr_cancelled() -> void:
+    ocr_pending = false
+
+func _review_ocr_text(raw: String) -> void:
+    var parsed = LabelOcr.parse(raw)
+    parsed["ocr_text"] = raw.left(12000)
+    _confirm_barcode_product(parsed,true)
+
 func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void:
+    var ocr: bool = bool(product.get("ocr_review",false))
     var description = "Внеси значения с этикетки. Неизвестные поля оставлены пустыми." if manual else \
         "Проверь карточку Open Food Facts по упаковке перед добавлением."
     var sheet = _mobile_sheet(
-        "Добавить свой товар" if manual else "Найден товар по штрихкоду",
+        "Проверить КБЖУ с упаковки" if ocr else ("Добавить свой товар" if manual else "Найден товар по штрихкоду"),
         description, "Сохранить и добавить", 730.0)
     var fields: VBoxContainer = sheet["fields"]
-    _barcode_product_overview(fields, product, sheet["root"])
+    if ocr:
+        _label(fields,"Проверь распознанные значения. Неизвестные и неоднозначные поля нужно заполнить вручную. Для этикетки на порцию пересчитай на 100 г или мл.",12,ACCENT)
+        var raw_text = str(product.get("ocr_text",""))
+        if not raw_text.is_empty():
+            var source_text = _label(fields,raw_text,11,MUTED)
+            source_text.visible = false
+            _button(fields,"Показать распознанный текст",func(): source_text.visible = not source_text.visible,true)
+    else:
+        _barcode_product_overview(fields, product, sheet["root"])
     _label(fields, "Название товара", 13, MUTED)
     var name = _text_input(fields, "Название продукта", str(product.get("name", "")))
     name.name = "BarcodeProductName"
@@ -5128,8 +5207,7 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
     if meal_index >= 0:
         meal.select(meal_index)
     meal.item_selected.connect(func(index: int): selected_meal = meal.get_item_text(index))
-    var needs_confirmation: bool = not manual and \
-        BarcodeScript.needs_nutrition_review(product)
+    var needs_confirmation: bool = ocr or (not manual and BarcodeScript.needs_nutrition_review(product))
     var confirmed = CheckBox.new()
     confirmed.name = "BarcodeLabelConfirmed"
     confirmed.text = "КБЖУ и единицы проверены по этикетке"
@@ -5161,9 +5239,13 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
     for key in ["kcal", "p", "f", "c"]:
         var field_input: LineEdit = nutrient_inputs[key]
         field_input.text_changed.connect(func(_v: String):
+            if ocr:
+                confirmed.button_pressed = false
             refresh_quality.call()
         )
     basis.item_selected.connect(func(_index: int):
+        if ocr:
+            confirmed.button_pressed = false
         refresh_quality.call()
     )
     refresh_quality.call()
@@ -5202,7 +5284,7 @@ func _confirm_barcode_product(product: Dictionary, manual: bool = false) -> void
         record["nutrition_complete"] = true
         record["image_url"] = BarcodeScript.safe_image_url(
             str(record.get("image_url", "")))
-        var saved_id = store.save_barcode_food(record)
+        var saved_id = store.save_ocr_food(record) if ocr else store.save_barcode_food(record)
         if saved_id.is_empty():
             _sheet_error(sheet, "Не удалось сохранить товар. Проверь штрихкод или память.")
             return
@@ -5986,6 +6068,9 @@ func _food_form(parent: VBoxContainer) -> void:
     quick_camera.custom_minimum_size.y = 40
     quick_camera.add_theme_font_size_override("font_size", 12)
     quick_camera.clip_text = true
+    var ocr_button = _button(parent,"КБЖУ с фото упаковки",func(): _ocr_start_sheet(),true)
+    ocr_button.name = "FoodOcrLabel"
+    ocr_button.custom_minimum_size.y = 38
     barcode_panel.visible = false
     barcode_divider.visible = false
     online_search_label = _label(parent,
@@ -6273,6 +6358,7 @@ func _food_form(parent: VBoxContainer) -> void:
     parent.move_child(sort_row, 9)
     parent.move_child(results_box, 10)
     parent.move_child(advanced_button, 11)
+    parent.move_child(ocr_button, 4)
     parent.move_child(barcode_panel, parent.get_child_count() - 1)
     parent.move_child(barcode_divider, parent.get_child_count() - 2)
     _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star, category, results_box, meal, added_count)
