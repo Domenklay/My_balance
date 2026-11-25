@@ -32,6 +32,11 @@ FILES = {
     "catalog_banana_pancakes": "BananaPancakes.JPG",
     "catalog_apple_muffins": "Allison's Fine Baked Goods Apple Muffin 2010.jpg",
     "catalog_berry_yogurt": "Yogurt fruit bowl.jpg",
+    "catalog_pumpkin_soup": "Pumpkin soup 1.jpg",
+    "catalog_mushroom_soup": "Mushroom Soup.jpg",
+    "catalog_avocado_toast": "Smashed Avocado On Toast (with one poached egg) - Jonny's 2026-01-06.jpg",
+    "catalog_shakshuka": "Shakshuka.jpg",
+    "catalog_tabbouleh_home": "Tabouleh.JPG",
 }
 UA = "MyBalance/0.7.71 (https://github.com/Domenklay/My_balance; offline recipe photo attribution)"
 def get(url, max_bytes=32_000_000):

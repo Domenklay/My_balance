@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.78"
+const APP_VERSION = "0.7.78.1"
 const ProgressPhotos = preload("res://src/progress_photos.gd")
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
@@ -191,6 +191,7 @@ var ready_recipes_open: bool = false
 var ready_query: String = ""
 var ready_category: int = 0
 var ready_calorie: int = 0
+var ready_sort: int = 0
 const READY_PAGE_SIZE: int = 20
 var ready_visible_limit: int = READY_PAGE_SIZE
 var ready_index: Array = []
@@ -3150,6 +3151,14 @@ func _show_ready_recipes() -> void:
         ready_visible_limit = READY_PAGE_SIZE
         _render()
     )
+    _label(filters, "Сортировка рецептов", 12, MUTED)
+    var sort = _choice(filters, ["По умолчанию", "Меньше калорий", "Больше белка", "С фотографиями сначала"])
+    sort.name = "ReadyRecipeSort"
+    sort.select(ready_sort)
+    sort.item_selected.connect(func(index: int):
+        ready_sort = index
+        ready_visible_limit = READY_PAGE_SIZE
+        _render())
     var count = _label(filters, "", 12, MUTED)
     _label(filters, "КБЖУ и вес готового блюда — приблизительные. Сохранённую копию можно уточнить.", 12, MUTED)
     var grid = GridContainer.new()
@@ -3170,7 +3179,7 @@ func _show_ready_recipes() -> void:
             var terms: String = str(recipe["name"]).to_lower()
             for ingredient in recipe["ingredients"]:
                 terms += " " + str(ingredient["name"]).to_lower()
-            ready_index.append({"recipe": recipe, "data": data, "terms": terms})
+            ready_index.append({"recipe": recipe, "data": data, "terms": terms.replace("ё", "е"), "photo": ResourceLoader.exists("res://assets/recipe_covers/" + str(recipe["id"]) + ".jpg")})
     var refresh = func(value: String, append_only: bool):
         ready_query = value
         if not append_only:
@@ -3178,16 +3187,32 @@ func _show_ready_recipes() -> void:
                 grid.remove_child(child)
                 child.queue_free()
         var filtered: Array = []
-        var needle = value.strip_edges().to_lower()
+        var needle = value.strip_edges().to_lower().replace("ё", "е")
+        var words = needle.split(" ", false)
         for item in ready_index:
             var recipe: Dictionary = item["recipe"]
             if ready_category > 0 and recipe["category"] != RecipeMath.CATEGORY_IDS[ready_category-1]:
                 continue
             if not RecipeMath.matches_calorie_filter(float(item["data"]["total_kcal"]) / float(recipe["servings"]), ready_calorie):
                 continue
-            if not needle.is_empty() and not str(item["terms"]).contains(needle):
-                continue
-            filtered.append(item)
+            var matches = true
+            for word in words:
+                if not str(item["terms"]).contains(word):
+                    matches = false
+                    break
+            if matches:
+                filtered.append(item)
+        if ready_sort == 1:
+            filtered.sort_custom(func(a, b):
+                return float(a["data"]["total_kcal"]) / float(a["recipe"]["servings"]) < float(b["data"]["total_kcal"]) / float(b["recipe"]["servings"]))
+        elif ready_sort == 2:
+            filtered.sort_custom(func(a, b):
+                return float(a["data"]["total_p"]) / float(a["recipe"]["servings"]) > float(b["data"]["total_p"]) / float(b["recipe"]["servings"]))
+        elif ready_sort == 3:
+            filtered.sort_custom(func(a, b):
+                if bool(a["photo"]) != bool(b["photo"]):
+                    return bool(a["photo"])
+                return str(a["recipe"]["name"]).nocasecmp_to(str(b["recipe"]["name"])) < 0)
         var shown: int = mini(ready_visible_limit, filtered.size())
         for i in range(grid.get_child_count(), shown):
             var item: Dictionary = filtered[i]

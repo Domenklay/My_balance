@@ -13,8 +13,8 @@ func _run() -> void:
             _fail("invalid catalog entry")
             return
         ids[recipe["id"]] = true
-    if ids.size() != 100:
-        _fail("expected 100 unique offline recipes")
+    if ids.size() != 112:
+        _fail("expected 112 unique offline recipes")
         return
     var app = load("res://main.tscn").instantiate()
     root.add_child(app)
@@ -53,6 +53,38 @@ func _run() -> void:
     if grid.get_child_count() != 20:
         _fail("clearing search must reset pagination")
         return
+    search.text = "шпинат курица"
+    search.text_changed.emit(search.text)
+    await process_frame
+    if app.find_child("ReadyRecipe_catalog_chicken_spin_pasta",true,false) == null or app.find_child("ReadyRecipe_catalog_oats",true,false) != null:
+        _fail("unordered multiword ingredient search")
+        return
+    search.text = ""
+    search.text_changed.emit("")
+    var sort = app.find_child("ReadyRecipeSort",true,false) as OptionButton
+    if sort == null:
+        _fail("sort menu missing")
+        return
+    sort.select(1)
+    sort.item_selected.emit(1)
+    await process_frame
+    grid = app.find_child("ReadyRecipeGrid",true,false) as GridContainer
+    var previous_kcal = -1.0
+    for card in grid.get_children():
+        var recipe_id = str(card.name).trim_prefix("ReadyRecipe_")
+        for record in Catalog.all():
+            if record["id"] == recipe_id:
+                var metrics = Math.calculate(record["ingredients"],float(record["cooked_weight"]))
+                var current = float(metrics["total_kcal"])/float(record["servings"])
+                if current < previous_kcal:
+                    _fail("calorie ordering incorrect")
+                    return
+                previous_kcal = current
+                break
+    sort = app.find_child("ReadyRecipeSort",true,false) as OptionButton
+    sort.select(0)
+    sort.item_selected.emit(0)
+    await process_frame
     var cat = app.find_child("ReadyRecipeCategory",true,false) as OptionButton
     cat.select(Math.CATEGORY_IDS.find("soups")+1)
     cat.item_selected.emit(cat.selected)
