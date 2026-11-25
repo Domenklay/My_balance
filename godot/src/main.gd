@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.77.1"
+const APP_VERSION = "0.7.77.2"
 const ProgressPhotos = preload("res://src/progress_photos.gd")
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
@@ -6848,14 +6848,12 @@ func _show_activity() -> void:
     _sport_metric(metrics, "Шаги", str(summary["steps"]), "за день", PROTEIN_BG, MACRO_PROTEIN, "steps")
     _sport_metric(metrics, "Занятия", str(summary["minutes"]), "мин", CARBS_BG, MACRO_CARBS, "minutes")
     _sport_metric(metrics, "Энергия", "≈" + str(summary["estimated_kcal"]), "ккал", FAT_BG, MACRO_FAT, "energy")
-    var automatic = VBoxContainer.new()
+    var automatic = _card("Автоматический шагомер")
     automatic.name = "AutoStepControls"
-    automatic.add_theme_constant_override("separation",4)
-    overview.add_child(automatic)
+    _compact_card(automatic, 10, 6)
     _label(automatic,_step_status_text(),12,MUTED).name = "AutoStepStatus"
     _label(automatic,_step_source_text(),12,TEXT_ACCENT).name = "AutoStepSource"
-    var step_actions = _row(automatic)
-    var toggle = _button(step_actions,"Остановить шагомер" if steps_status.get("running",false) else "Включить шагомер",func():
+    var toggle = _button(automatic,"Остановить шагомер" if steps_status.get("running",false) else "Включить шагомер",func():
         if steps_plugin == null:
             _message("Автоподсчёт работает только на совместимом Android.")
         elif steps_status.get("running",false):
@@ -6866,7 +6864,7 @@ func _show_activity() -> void:
     toggle.name = "AutoStepToggle"
     toggle.custom_minimum_size.y = 40
     toggle.disabled = steps_plugin == null or not steps_status.get("supported",false)
-    var auto = _button(step_actions,"Использовать авто",func():
+    var auto = _button(automatic,"Использовать авто",func():
         if store.use_automatic_steps(date):
             _render()
         else:
@@ -6878,9 +6876,12 @@ func _show_activity() -> void:
     if steps_plugin != null and not steps_status.get("permission",false):
         _button(automatic,"Разрешения Android",func(): steps_plugin.openStepSettings(),true)
     _label(automatic,"Считаются шаги после включения. После остановки или перезапуска службы возможны пропуски. Ручной ввод заменяет автоитог выбранного дня.",11,MUTED)
-    var step_title = _nowrap(overview, "Шаги за день (вручную)", 13, INK)
+    var manual = _card("Ручной ввод шагов")
+    manual.name = "SportManualCard"
+    _compact_card(manual, 10, 6)
+    var step_title = _nowrap(manual, "Шаги за день (вручную)", 13, MUTED)
     step_title.name = "SportStepsCaption"
-    var step_row = _row(overview)
+    var step_row = _row(manual)
     step_row.name = "SportStepsRow"
     var steps_input = _number(step_row, float(store.day_steps(date)), 0, 100000, 1)
     steps_input.name = "ActivitySteps"
@@ -6894,7 +6895,7 @@ func _show_activity() -> void:
         adjust.name = "SportStepsMinus" if amount < 0 else "SportStepsPlus"
         adjust.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
         adjust.custom_minimum_size = Vector2(62, 44)
-    var save_steps = _button(overview, "Сохранить шаги", func():
+    var save_steps = _button(manual, "Сохранить шаги", func():
         if store.set_day_steps(date, roundi(steps_input.value)):
             _render()
             _notify_saved("Шаги сохранены")
@@ -6903,7 +6904,7 @@ func _show_activity() -> void:
     )
     save_steps.name = "ActivitySaveSteps"
     save_steps.custom_minimum_size.y = 44
-    _label(overview, "Авто и ручные шаги не суммируются. Ккал — только по тренировкам; норма питания не меняется.", 11, MUTED)
+    _label(manual, "Авто и ручные шаги не суммируются. Ккал — только по тренировкам; норма питания не меняется.", 11, MUTED)
 
     var card = _card("Добавить тренировку")
     _compact_card(card, 10, 7)

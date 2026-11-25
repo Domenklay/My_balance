@@ -22,6 +22,13 @@ func _run() -> void:
         app._render()
         await process_frame
         await process_frame
+        var automatic = app.find_child("AutoStepControls", true, false)
+        var manual = app.find_child("SportManualCard", true, false)
+        var toggle = app.find_child("AutoStepToggle", true, false)
+        var auto = app.find_child("AutoStepUse", true, false)
+        if automatic == null or manual == null or toggle == null or auto == null or toggle.get_parent() != automatic or auto.get_parent() != automatic:
+            _fail("step actions must be full-width in a separate card")
+            return
         var metrics = app.find_child("ActivityOverview", true, false)
         var row = app.find_child("SportStepsRow", true, false)
         var field = app.find_child("ActivitySteps", true, false) as SpinBox
@@ -30,7 +37,7 @@ func _run() -> void:
         if metrics == null or metrics.get_child_count() != 3 or row == null or field == null or save == null or caption == null:
             _fail("missing controls: " + id)
             return
-        if caption.get_parent() == row or save.get_parent() == row or row.get_child_count() != 3:
+        if caption.get_parent() != manual or save.get_parent() != manual or row.get_parent() != manual or row.get_child_count() != 3:
             _fail("step caption or save button still squeezes input")
             return
         var colors: Array = []
