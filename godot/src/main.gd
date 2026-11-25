@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.76"
+const APP_VERSION = "0.7.77"
 const ProgressPhotos = preload("res://src/progress_photos.gd")
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
@@ -224,6 +224,9 @@ var online_request_query: String = ""
 var diary_food_card: VBoxContainer
 var barcode_scanner: Object = null
 var steps_plugin: Object = null
+var widget_plugin: Object = null
+var widget_timer: Timer
+var widget_day: String = ""
 var steps_status: Dictionary = {}
 var steps_poll: Timer
 var ocr_plugin: Object = null
@@ -580,6 +583,14 @@ func _ready() -> void:
     add_child(note_save_timer)
     _make_tabs()
     _setup_toast()
+    if OS.has_feature("android") and Engine.has_singleton("MyBalanceWidgets"):
+        widget_plugin = Engine.get_singleton("MyBalanceWidgets")
+        widget_timer = Timer.new()
+        widget_timer.wait_time = 1.5
+        widget_timer.timeout.connect(_poll_widget)
+        add_child(widget_timer)
+        widget_timer.start()
+        store.publish_widget()
     if steps_plugin != null:
         steps_poll = Timer.new()
         steps_poll.wait_time = 5.0
@@ -591,6 +602,66 @@ func _ready() -> void:
         tab = "onboarding"
         onboarding_step = 0
     _render()
+
+func _poll_widget() -> void:
+    if widget_plugin == null:
+        return
+    var today = Time.get_date_string_from_system()
+    if widget_day != today:
+        widget_day = today
+        store.publish_widget()
+    var action: String = str(widget_plugin.takeAction())
+    if action.is_empty() or store.needs_onboarding():
+        return
+    _handle_widget_action(action)
+
+func _handle_widget_action(action: String) -> void:
+    if action not in ["day","food","water","sport","settings"]:
+        return
+    date = Time.get_date_string_from_system()
+    month_shown = date.substr(0,7)
+    _meal_entry_locked = false
+    _meal_entry_date = ""
+    if action == "food":
+        _navigate_to_tab("search")
+    elif action == "sport":
+        _navigate_to_tab("activity")
+    elif action == "settings":
+        settings_page = "main"
+        settings_section_open = "android_widgets"
+        _navigate_to_tab("settings")
+    else:
+        _navigate_to_tab("day")
+        if action == "water":
+            await get_tree().process_frame
+            var water = find_child("DayWaterCard",true,false) as Control
+            if water != null:
+                scroll.ensure_control_visible(water)
+
+func _show_android_widget_settings() -> void:
+    var enabled: bool = widget_plugin != null and widget_plugin.dataVisible()
+    var card = _settings_section("Виджеты Android","android_widgets","Данные видимы" if enabled else "Данные скрыты")
+    _label(card,"Два виджета: калории или калории, БЖУ, вода и шаги. Добавляются через меню виджетов рабочего стола Android.",12,MUTED)
+    _label(card,"Показатели видны на рабочем столе без открытия приложения. По умолчанию они скрыты. Фото, вес и записи еды не отображаются.",12,MUTED)
+    var toggle = CheckButton.new()
+    toggle.name = "AndroidWidgetPrivacy"
+    toggle.text = "Показывать данные на виджетах"
+    toggle.button_pressed = enabled
+    toggle.disabled = widget_plugin == null
+    card.add_child(toggle)
+    toggle.toggled.connect(func(value: bool):
+        if widget_plugin != null:
+            widget_plugin.setDataVisible(value)
+            store.publish_widget()
+    )
+    if widget_plugin == null:
+        _label(card,"Доступно только в Android APK.",12,MUTED)
+    else:
+        _button(card,"Обновить показатели",func():
+            store.publish_widget()
+            _notify_saved("Данные обновлены")
+        ,true)
+    _label(card,"При смене суток старые показатели скрываются до обновления. Частота фонового обновления зависит от Android.",11,MUTED)
 
 func _setup_toast() -> void:
     toast_panel = PanelContainer.new()
@@ -8111,6 +8182,7 @@ func _show_settings() -> void:
     _button(back_to_profile, "← К личной странице", func(): _navigate_to_tab("profile"), true)
     _label(back_to_profile, "Система и аккаунт", 14, TEXT_ACCENT)
     _show_language_settings()
+    _show_android_widget_settings()
     var card = _settings_section("Мои цели и параметры", "personal",
         str(roundi(float(store.data["settings"]["kcal"]))) + " ккал/день · Цель: " +
         str(snappedf(float(store.data["settings"]["goal"]), 0.1)) + " кг")

@@ -15,6 +15,7 @@ public final class StepService extends Service implements SensorEventListener {
     static volatile boolean running=false;
     private SensorManager manager;
     private long lastTimestamp=0;
+    private long lastWidgetUpdate=0;
     static boolean permission(Context c) {
         return Build.VERSION.SDK_INT<29 || c.checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION)==PackageManager.PERMISSION_GRANTED;
     }
@@ -57,6 +58,11 @@ public final class StepService extends Service implements SensorEventListener {
         long age=Math.max(0L,(SystemClock.elapsedRealtimeNanos()-event.timestamp)/1000000L);
         long time=System.currentTimeMillis()-age;
         StepLedger.record(this,(long)event.values[0],time);
+        long now=SystemClock.elapsedRealtime();
+        if(now-lastWidgetUpdate>=60000L){
+            lastWidgetUpdate=now;
+            com.domenklay.mybalance.widgets.BalanceWidget.refresh(this);
+        }
     }
     @Override public void onAccuracyChanged(Sensor s,int accuracy) {}
     @Override public void onDestroy() {

@@ -18,6 +18,7 @@ const MealPlanner = preload("res://src/meal_planner.gd")
 const MacroGoals = preload("res://src/macro_goals.gd")
 const Reminders = preload("res://src/reminders.gd")
 const Pantry = preload("res://src/pantry_math.gd")
+const WidgetSnapshot = preload("res://src/widget_snapshot.gd")
 
 const MEAL_NAMES = ["Завтрак", "Обед", "Ужин", "Перекус"]
 const DEFAULT_MEAL_SHARES = [25, 35, 30, 10]
@@ -855,7 +856,14 @@ func import_json(raw: String, persist: bool = true) -> bool:
     if persist and not save():
         data = original_data
         return false
+    publish_widget()
     return true
+
+func publish_widget() -> void:
+    if OS.has_feature("android") and Engine.has_singleton("MyBalanceWidgets"):
+        var plugin = Engine.get_singleton("MyBalanceWidgets")
+        if plugin.dataVisible():
+            plugin.publish(JSON.stringify(WidgetSnapshot.make(self,Time.get_date_string_from_system())))
 
 func export_json() -> String:
     return JSON.stringify(data, "\t")

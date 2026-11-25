@@ -190,3 +190,39 @@ if "org.godotengine.plugin.v2.MyBalancePhotos" not in manifest_xml:
     manifest_xml = manifest_xml[:app_tag.end()] + photo_nodes + manifest_xml[app_tag.end():]
 manifest.write_text(manifest_xml,encoding="utf-8")
 print("PATCH OK: private progress photo picker")
+
+# Android home-screen widgets. Resources use stable, unique names.
+widget_src = source.parent.parent / "widgets"
+widget_dest = dest.parent.parent / "widgets"
+widget_dest.mkdir(parents=True,exist_ok=True)
+for java_file in widget_src.glob("*.java"):
+    shutil.copy2(java_file,widget_dest / java_file.name)
+for kind in ("layout","xml","drawable"):
+    target = app_root / "src/main/res" / kind
+    target.mkdir(parents=True,exist_ok=True)
+    for resource in (Path("android_scanner/src/main/res") / kind).glob("*.xml"):
+        shutil.copy2(resource,target / resource.name)
+manifest_xml = manifest.read_text(encoding="utf-8")
+if "org.godotengine.plugin.v2.MyBalanceWidgets" not in manifest_xml:
+    app_tag = re.search(r"<application\b[^>]*>",manifest_xml,re.DOTALL)
+    widget_nodes = '''
+        <meta-data android:name="org.godotengine.plugin.v2.MyBalanceWidgets" android:value="com.domenklay.mybalance.widgets.MyBalanceWidgets" />
+        <activity android:name="com.domenklay.mybalance.widgets.WidgetOpenActivity" android:exported="false" android:theme="@android:style/Theme.NoDisplay" />
+'''
+    for kind, cls, label in (("compact","CompactWidget","Мой баланс — калории"),("expanded","ExpandedWidget","Мой баланс — день")):
+        widget_nodes += f'''
+        <receiver android:name="com.domenklay.mybalance.widgets.{cls}" android:label="{label}" android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/mybalance_widget_{kind}" />
+        </receiver>
+'''
+    manifest_xml = manifest_xml[:app_tag.end()] + widget_nodes + manifest_xml[app_tag.end():]
+manifest.write_text(manifest_xml,encoding="utf-8")
+print("PATCH OK: two Android home-screen widgets")
