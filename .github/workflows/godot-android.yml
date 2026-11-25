@@ -289,6 +289,19 @@ jobs:
           test -s godot/build/MyBalance-debug.apk
           ls -lh godot/build/MyBalance-debug.apk
           sha256sum godot/build/MyBalance-debug.apk
+      - name: Verify OCR models are present in the actual APK
+        run: |
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          with ZipFile("godot/build/MyBalance-debug.apk") as z:
+              for lang in ("rus","eng","pol"):
+                  name = f"assets/data/nutrition_ocr/{lang}.traineddata"
+                  assert z.getinfo(name).file_size > 100000, name
+              assert "assets/data/nutrition_ocr/LICENSE" in z.namelist()
+              assert "lib/arm64-v8a/libtesseract.so" in z.namelist()
+              assert z.testzip() is None
+          print("PASS: OCR language assets and native library in final APK")
+          PY
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:

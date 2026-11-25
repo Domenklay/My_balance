@@ -96,7 +96,7 @@ public final class MyBalanceOcr extends GodotPlugin {
                     File target = new File(models,lang+".traineddata");
                     if (!target.isFile() || target.length() < 100000) {
                         File temp = new File(models,lang+".tmp");
-                        try (InputStream input = a.getAssets().open("nutrition_ocr/"+lang+".traineddata");
+                        try (InputStream input = a.getAssets().open("data/nutrition_ocr/"+lang+".traineddata");
                              FileOutputStream output = new FileOutputStream(temp)) {
                             byte[] buffer = new byte[32768]; int n;
                             while ((n=input.read(buffer))!=-1) output.write(buffer,0,n);

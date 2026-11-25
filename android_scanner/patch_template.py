@@ -131,7 +131,7 @@ if settings.is_file():
 else:
     gradle += "\nrepositories { maven { url 'https://jitpack.io' } }\n"
 app_build.write_text(gradle,encoding="utf-8")
-assets = app_root / "src/main/assets/nutrition_ocr"
+assets = Path("godot/data/nutrition_ocr")
 assets.mkdir(parents=True, exist_ok=True)
 revision = "87416418657359cb625c412a48b6e1d6d41c29bd"
 for filename in ("rus.traineddata", "eng.traineddata", "pol.traineddata", "LICENSE"):
