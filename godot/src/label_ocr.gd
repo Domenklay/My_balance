@@ -2,7 +2,7 @@ extends RefCounted
 # Conservative extraction. Multiple bases/columns are left for manual review.
 static func _regex(pattern: String) -> RegEx:
     var r = RegEx.new()
-    r.compile(pattern)
+    r.compile("(*UCP)" + pattern)
     return r
 
 static func parse(raw: String) -> Dictionary:
