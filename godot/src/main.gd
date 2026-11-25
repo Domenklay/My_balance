@@ -3199,9 +3199,11 @@ func _show_ready_recipes() -> void:
             for word in words:
                 # Common Russian ingredient aliases, without arbitrary fuzzy matches.
                 var term: String = word
+                var haystack: String = str(item["terms"])
+                var found: bool = haystack.contains(term)
                 if term in ["курица", "курицей", "курицу", "курицы"]:
-                    term = "кур"
-                if not str(item["terms"]).contains(term):
+                    found = haystack.contains("куриц") or haystack.contains("курин")
+                if not found:
                     matches = false
                     break
             if matches:
