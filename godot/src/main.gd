@@ -4007,7 +4007,7 @@ func _show_water_card() -> void:
     amount_label.name = "WaterDailyAmount"
     # _nowrap uses ellipsis and has no intrinsic minimum; reserve width so
     # the current ml / goal never disappears on a narrow phone screen.
-    amount_label.custom_minimum_size.x = 128
+    amount_label.custom_minimum_size.x = 145
     amount_label.size_flags_horizontal = Control.SIZE_SHRINK_END
     amount_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
     var expanded = _button(heading, "▴" if water_details_expanded else "⋯", func():
