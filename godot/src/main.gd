@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.82"
+const APP_VERSION = "0.7.83"
 const ProgressPhotos = preload("res://src/progress_photos.gd")
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
@@ -194,6 +194,7 @@ var ready_query: String = ""
 var ready_category: int = 0
 var ready_calorie: int = 0
 var ready_sort: int = 0
+var ready_filters_expanded: bool = false
 const READY_PAGE_SIZE: int = 20
 var ready_visible_limit: int = READY_PAGE_SIZE
 var ready_index: Array = []
@@ -3157,8 +3158,22 @@ func _show_ready_recipes() -> void:
         ready_visible_limit = READY_PAGE_SIZE
         _render()
     )
-    _label(filters, "Калорийность на порцию", 12, MUTED)
-    var kcal = _choice(filters, ["Любая калорийность","До 200 ккал","До 350 ккал","До 500 ккал","До 750 ккал","Свыше 750 ккал"])
+    var filter_toggle = _button(filters, "Фильтры и сортировка", Callable(), true)
+    filter_toggle.name = "ReadyRecipeFilterToggle"
+    filter_toggle.custom_minimum_size.y = 38
+    var extra = VBoxContainer.new()
+    extra.name = "ReadyRecipeExtraFilters"
+    extra.add_theme_constant_override("separation", 5)
+    filters.add_child(extra)
+    var sync_filter = func():
+        extra.visible = ready_filters_expanded
+        var active = int(ready_calorie != 0) + int(ready_sort != 0)
+        filter_toggle.text = ("Скрыть фильтры" if ready_filters_expanded else "Фильтры и сортировка") + (" · " + str(active) if active > 0 else "") + (" ▴" if ready_filters_expanded else " ▾")
+    filter_toggle.pressed.connect(func():
+        ready_filters_expanded = not ready_filters_expanded
+        sync_filter.call())
+    _label(extra, "Калорийность на порцию", 12, MUTED)
+    var kcal = _choice(extra, ["Любая калорийность","До 200 ккал","До 350 ккал","До 500 ккал","До 750 ккал","Свыше 750 ккал"])
     kcal.name = "ReadyRecipeCalories"
     kcal.select(ready_calorie)
     kcal.item_selected.connect(func(index: int):
@@ -3166,14 +3181,15 @@ func _show_ready_recipes() -> void:
         ready_visible_limit = READY_PAGE_SIZE
         _render()
     )
-    _label(filters, "Сортировка рецептов", 12, MUTED)
-    var sort = _choice(filters, ["По умолчанию", "Меньше калорий", "Больше белка", "С фотографиями сначала"])
+    _label(extra, "Сортировка рецептов", 12, MUTED)
+    var sort = _choice(extra, ["По умолчанию", "Меньше калорий", "Больше белка", "С фотографиями сначала"])
     sort.name = "ReadyRecipeSort"
     sort.select(ready_sort)
     sort.item_selected.connect(func(index: int):
         ready_sort = index
         ready_visible_limit = READY_PAGE_SIZE
         _render())
+    sync_filter.call()
     var count = _label(filters, "", 12, MUTED)
     _label(filters, "КБЖУ и вес готового блюда — приблизительные. Сохранённую копию можно уточнить.", 12, MUTED)
     var grid = GridContainer.new()
@@ -4559,56 +4575,6 @@ func _show_day() -> void:
         macro_edit.add_theme_color_override(state, WHITE)
     macro_edit.pressed.connect(_show_macro_goal_editor)
     macro_footer.add_child(macro_edit)
-    var planner_shortcut = _card("", "tint")
-    _compact_card(planner_shortcut, 8, 4)
-    planner_shortcut.get_parent().name = "DayPlannerShortcut"
-    var suggest = _button(planner_shortcut, "Подобрать блюдо по КБЖУ", func(): _recipe_suggest_sheet(date), true)
-    suggest.name = "DayRecipeSuggest"
-    suggest.custom_minimum_size.y = 38
-    suggest.add_theme_font_size_override("font_size", 13)
-    var action_row = _row(planner_shortcut)
-    action_row.add_theme_constant_override("separation", 5)
-    var plan_shortcut = _button(action_row, "▦ План недели и покупки",
-        func(): _open_week_planner(), true)
-    plan_shortcut.name = "DayOpenPlanner"
-    plan_shortcut.custom_minimum_size.y = 40
-    plan_shortcut.add_theme_font_size_override("font_size", 12)
-    plan_shortcut.clip_text = true
-    plan_shortcut.tooltip_text = "План недели и покупки"
-
-    var day_tools_toggle = _button(action_row, "⋯ Действия с днём" +
-        (" ▴" if day_tools_expanded else " ▾"), func():
-            day_tools_expanded = not day_tools_expanded
-            _render()
-    , true)
-    day_tools_toggle.name = "DayToolsToggle"
-    day_tools_toggle.custom_minimum_size.y = 36
-    day_tools_toggle.add_theme_font_size_override("font_size", 12)
-    day_tools_toggle.clip_text = true
-    if day_tools_expanded:
-        var small_screen: bool = get_viewport_rect().size.x < 390.0
-        var day_tool_buttons: BoxContainer = (
-            VBoxContainer.new() if small_screen else HBoxContainer.new())
-        planner_shortcut.add_child(day_tool_buttons)
-        day_tool_buttons.name = "DayToolsActions"
-        day_tool_buttons.add_theme_constant_override("separation", 5)
-        var copy_button = _button(day_tool_buttons, "↻ Копировать день",
-            func(): _copy_day_sheet(), true)
-        copy_button.name = "DayCopyOpen"
-        copy_button.custom_minimum_size.y = 39
-        copy_button.add_theme_font_size_override("font_size", 12)
-        var templates_button = _button(day_tool_buttons, "☆ Мои наборы",
-            func(): _meal_templates_sheet(), true)
-        templates_button.name = "DayTemplatesOpen"
-        templates_button.custom_minimum_size.y = 39
-        templates_button.add_theme_font_size_override("font_size", 12)
-        if store.can_undo_day_copy(date):
-            var undo = _button(planner_shortcut, "↶ Отменить копирование",
-                func(): _request_undo_day_copy(), true)
-            undo.name = "DayCopyUndo"
-            undo.custom_minimum_size.y = 39
-            undo.add_theme_font_size_override("font_size", 12)
-
     # Compact sections are always present. Only the selected meal unfolds.
     # Expansion state is in-memory, keyed by date: diary records are untouched.
     # No extra standalone title card: every meal already has its own header.
@@ -4838,6 +4804,58 @@ func _show_day() -> void:
 
     # Hydration follows all four meal cards. Movement is tracked only in Sport.
     _show_water_card()
+
+    var planner_shortcut = _card("", "tint")
+    _compact_card(planner_shortcut, 8, 4)
+    planner_shortcut.get_parent().name = "DayPlannerShortcut"
+    _label(planner_shortcut, "Планирование питания", 14, INK)
+    var suggest = _button(planner_shortcut, "Подобрать блюдо по КБЖУ", func(): _recipe_suggest_sheet(date), true)
+    suggest.name = "DayRecipeSuggest"
+    suggest.custom_minimum_size.y = 38
+    suggest.add_theme_font_size_override("font_size", 13)
+    var action_row = _row(planner_shortcut)
+    action_row.add_theme_constant_override("separation", 5)
+    var plan_shortcut = _button(action_row, "▦ План недели и покупки",
+        func(): _open_week_planner(), true)
+    plan_shortcut.name = "DayOpenPlanner"
+    plan_shortcut.custom_minimum_size.y = 40
+    plan_shortcut.add_theme_font_size_override("font_size", 12)
+    plan_shortcut.clip_text = true
+    plan_shortcut.tooltip_text = "План недели и покупки"
+
+    var day_tools_toggle = _button(action_row, "⋯ Действия с днём" +
+        (" ▴" if day_tools_expanded else " ▾"), func():
+            day_tools_expanded = not day_tools_expanded
+            _render()
+    , true)
+    day_tools_toggle.name = "DayToolsToggle"
+    day_tools_toggle.custom_minimum_size.y = 36
+    day_tools_toggle.add_theme_font_size_override("font_size", 12)
+    day_tools_toggle.clip_text = true
+    if day_tools_expanded:
+        var small_screen: bool = get_viewport_rect().size.x < 390.0
+        var day_tool_buttons: BoxContainer = (
+            VBoxContainer.new() if small_screen else HBoxContainer.new())
+        planner_shortcut.add_child(day_tool_buttons)
+        day_tool_buttons.name = "DayToolsActions"
+        day_tool_buttons.add_theme_constant_override("separation", 5)
+        var copy_button = _button(day_tool_buttons, "↻ Копировать день",
+            func(): _copy_day_sheet(), true)
+        copy_button.name = "DayCopyOpen"
+        copy_button.custom_minimum_size.y = 39
+        copy_button.add_theme_font_size_override("font_size", 12)
+        var templates_button = _button(day_tool_buttons, "☆ Мои наборы",
+            func(): _meal_templates_sheet(), true)
+        templates_button.name = "DayTemplatesOpen"
+        templates_button.custom_minimum_size.y = 39
+        templates_button.add_theme_font_size_override("font_size", 12)
+        if store.can_undo_day_copy(date):
+            var undo = _button(planner_shortcut, "↶ Отменить копирование",
+                func(): _request_undo_day_copy(), true)
+            undo.name = "DayCopyUndo"
+            undo.custom_minimum_size.y = 39
+            undo.add_theme_font_size_override("font_size", 12)
+
 
     # Both 0.7.29 preferences stay independently saved, but the diary only
     # renders one compact graph at a time to avoid another long scroll.

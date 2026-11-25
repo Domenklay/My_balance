@@ -61,6 +61,16 @@ func _run() -> void:
         return
     search.text = ""
     search.text_changed.emit("")
+    var toggle = app.find_child("ReadyRecipeFilterToggle",true,false) as Button
+    var extra = app.find_child("ReadyRecipeExtraFilters",true,false) as Control
+    if toggle == null or extra == null or extra.visible:
+        _fail("advanced filters must start collapsed")
+        return
+    toggle.pressed.emit()
+    await process_frame
+    if not extra.visible:
+        _fail("advanced filters cannot be opened")
+        return
     var sort = app.find_child("ReadyRecipeSort",true,false) as OptionButton
     if sort == null:
         _fail("sort menu missing")
@@ -81,6 +91,16 @@ func _run() -> void:
                     return
                 previous_kcal = current
                 break
+    toggle = app.find_child("ReadyRecipeFilterToggle",true,false) as Button
+    if toggle == null or not toggle.text.contains("· 1"):
+        _fail("active advanced filter count missing")
+        return
+    toggle.pressed.emit()
+    await process_frame
+    extra = app.find_child("ReadyRecipeExtraFilters",true,false) as Control
+    if extra.visible or JSON.stringify(app.store.data) != original:
+        _fail("closing filters must not modify diary")
+        return
     sort = app.find_child("ReadyRecipeSort",true,false) as OptionButton
     sort.select(0)
     sort.item_selected.emit(0)

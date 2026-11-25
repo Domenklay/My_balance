@@ -57,6 +57,10 @@ func _run() -> void:
                 water.get_index() != snack.get_index() + 1:
             _fail("water should follow snack without duplicate movement: " + id)
             return
+        var planner = app.find_child("DayPlannerShortcut", true, false)
+        if planner == null or planner.get_parent() != app.body or planner.get_index() <= water.get_index():
+            _fail("planning tools should follow daily essentials")
+            return
         if app.find_child("WaterQuickAdd_250", true, false) == null or app.store.day_calories(app.date) != total:
             _fail("day actions or totals lost")
             return
