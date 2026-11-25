@@ -140,7 +140,7 @@ func default_data() -> Dictionary:
         "settings": {"kcal": 1800, "start": 88.0, "goal": 65.0, "theme": "forest", "patterns": true, "high_contrast": false, "animations": true,
             "meal_shares": DEFAULT_MEAL_SHARES.duplicate(), "home_widgets": DEFAULT_HOME_WIDGETS.duplicate(), "water_goal_ml": DEFAULT_WATER_GOAL_ML, "onboarding_complete": false,
             "personal": {}, "macro_goals": MacroGoals.defaults(), "reminders": Reminders.defaults(), "language":"ru"},
-        "foods": [], "entries": [], "activities": [], "steps": {}, "weights": [], "body_measurements": [], "water_entries": [], "notes": {}, "favorites": [],
+        "foods": [], "entries": [], "activities": [], "steps": {}, "auto_steps": {}, "step_sources": {}, "weights": [], "body_measurements": [], "water_entries": [], "notes": {}, "favorites": [],
         "food_search_history": [], "pantry_items": [], "pantry_shopping": [], "recipes": [], "meal_templates": [], "planned_meals": [], "shopping_checked": {}, "day_copy_undo": {}, "food_portions": [], "profile": {"name": "Мой профиль", "avatar": "leaf", "motto": "Маленькие шаги — большой результат",
             "photo": "", "frame": "plain"}
     }
@@ -636,6 +636,18 @@ func import_json(raw: String, persist: bool = true) -> bool:
     for day in obj["steps"]:
         if not (day is String) or not ActivityMath.valid_date(day) or not ActivityMath.valid_steps(obj["steps"][day]):
             return false
+    for key in ["auto_steps","step_sources"]:
+        if not obj.has(key):
+            obj[key] = {}
+        if not obj[key] is Dictionary or obj[key].size() > 10000:
+            return false
+        for day in obj[key]:
+            if not day is String or not ActivityMath.valid_date(day):
+                return false
+            if key == "auto_steps" and not ActivityMath.valid_steps(obj[key][day]):
+                return false
+            if key == "step_sources" and obj[key][day] not in ["manual","auto"]:
+                return false
     if not obj.has("favorites"):
         obj["favorites"] = []
     if not obj.has("food_portions"):
@@ -1802,13 +1814,52 @@ func day_entries(date: String) -> Array:
 func day_activities(date: String) -> Array:
     return data["activities"].filter(func(e): return e is Dictionary and str(e.get("date", "")) == date)
 
+func step_source(day: String) -> String:
+    return str(data.get("step_sources",{}).get(day,"manual" if data.get("steps",{}).has(day) else "auto"))
+
+func automatic_steps(day: String) -> int:
+    return roundi(float(data.get("auto_steps",{}).get(day,0)))
+
 func day_steps(day: String) -> int:
-    return roundi(float(data.get("steps", {}).get(day, 0)))
+    if step_source(day) == "manual":
+        return roundi(float(data.get("steps",{}).get(day,0)))
+    return automatic_steps(day)
+
+func use_automatic_steps(day: String) -> bool:
+    if not ActivityMath.valid_date(day):
+        return false
+    var previous = data["step_sources"].duplicate(true)
+    data["step_sources"][day] = "auto"
+    if save():
+        return true
+    data["step_sources"] = previous
+    return false
+
+func sync_automatic_steps(days: Dictionary) -> bool:
+    if days.size() > 10000:
+        return false
+    var previous = data["auto_steps"].duplicate(true)
+    var next = previous.duplicate(true)
+    for day in days:
+        if not day is String or not ActivityMath.valid_date(day) or not ActivityMath.valid_steps(days[day]):
+            return false
+        next[day] = maxi(int(next.get(day,0)),int(days[day]))
+    if next == previous:
+        return true
+    if next.size() > 10000:
+        return false
+    data["auto_steps"] = next
+    if save():
+        return true
+    data["auto_steps"] = previous
+    return false
 
 func set_day_steps(day: String, count: int) -> bool:
     if not ActivityMath.valid_date(day) or not ActivityMath.valid_steps(count):
         return false
     var before: Dictionary = data.get("steps", {}).duplicate(true)
+    var before_sources = data["step_sources"].duplicate(true)
+    data["step_sources"][day] = "manual"
     if count == 0:
         data["steps"].erase(day)
     else:
@@ -1816,6 +1867,7 @@ func set_day_steps(day: String, count: int) -> bool:
     if save():
         return true
     data["steps"] = before
+    data["step_sources"] = before_sources
     return false
 
 func add_activity(day: String, kind: String, minutes: float,

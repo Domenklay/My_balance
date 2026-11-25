@@ -156,3 +156,24 @@ if "org.godotengine.plugin.v2.MyBalanceOcr" not in manifest_xml:
     manifest_xml = manifest_xml[:app_tag.end()] + ocr_nodes + manifest_xml[app_tag.end():]
 manifest.write_text(manifest_xml,encoding="utf-8")
 print("PATCH OK: local Russian/English/Polish OCR models and camera provider")
+
+# Optional native step-counter foreground service. No location or network permission.
+step_src = source.parent.parent / "steps"
+step_dest = dest.parent.parent / "steps"
+step_dest.mkdir(parents=True, exist_ok=True)
+for java_file in ("MyBalanceSteps.java","StepService.java","StepLedger.java"):
+    shutil.copy2(step_src / java_file,step_dest / java_file)
+manifest_xml = manifest.read_text(encoding="utf-8")
+if "org.godotengine.plugin.v2.MyBalanceSteps" not in manifest_xml:
+    app_tag = re.search(r"<application\b[^>]*>",manifest_xml,re.DOTALL)
+    step_nodes = '''
+        <meta-data android:name="org.godotengine.plugin.v2.MyBalanceSteps" android:value="com.domenklay.mybalance.steps.MyBalanceSteps" />
+        <service android:name="com.domenklay.mybalance.steps.StepService" android:exported="false" android:foregroundServiceType="health" />
+'''
+    manifest_xml = manifest_xml[:app_tag.end()] + step_nodes + manifest_xml[app_tag.end():]
+for permission in ("ACTIVITY_RECOGNITION","FOREGROUND_SERVICE","FOREGROUND_SERVICE_HEALTH"):
+    name = "android.permission." + permission
+    if name not in manifest_xml:
+        manifest_xml = manifest_xml.replace("<application", '<uses-permission android:name="' + name + '" />\n    <application', 1)
+manifest.write_text(manifest_xml,encoding="utf-8")
+print("PATCH OK: optional step counter service")

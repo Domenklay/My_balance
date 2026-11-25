@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.74"
+const APP_VERSION = "0.7.75"
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
 const RecipeSuggest = preload("res://src/recipe_suggest.gd")
@@ -217,6 +217,9 @@ var online_search_label: Label
 var online_request_query: String = ""
 var diary_food_card: VBoxContainer
 var barcode_scanner: Object = null
+var steps_plugin: Object = null
+var steps_status: Dictionary = {}
+var steps_poll: Timer
 var ocr_plugin: Object = null
 var ocr_pending: bool = false
 var ocr_date: String = ""
@@ -437,6 +440,8 @@ func _ready() -> void:
         ocr_plugin.connect("ocr_text", Callable(self,"_on_ocr_text"))
         ocr_plugin.connect("ocr_error", Callable(self,"_on_ocr_error"))
         ocr_plugin.connect("ocr_cancelled", Callable(self,"_on_ocr_cancelled"))
+    if OS.has_feature("android") and Engine.has_singleton("MyBalanceSteps"):
+        steps_plugin = Engine.get_singleton("MyBalanceSteps")
     background_rect = ColorRect.new()
     background_rect.color = BACKGROUND
     background_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -561,6 +566,13 @@ func _ready() -> void:
     add_child(note_save_timer)
     _make_tabs()
     _setup_toast()
+    if steps_plugin != null:
+        steps_poll = Timer.new()
+        steps_poll.wait_time = 5.0
+        steps_poll.timeout.connect(_poll_step_sensor)
+        add_child(steps_poll)
+        steps_poll.start()
+        _poll_step_sensor()
     if store.needs_onboarding():
         tab = "onboarding"
         onboarding_step = 0
@@ -6685,6 +6697,57 @@ func _sport_metric(parent: Node, caption: String, value: String, unit: String,
         var label = _nowrap(stack, str(item[0]), int(item[1]), foreground)
         label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
+func _poll_step_sensor() -> void:
+    if steps_plugin == null:
+        return
+    var parsed = JSON.parse_string(str(steps_plugin.snapshot()))
+    if not parsed is Dictionary:
+        return
+    steps_status = parsed
+    if parsed.get("days") is Dictionary:
+        if not store.sync_automatic_steps(parsed["days"]):
+            steps_status["save_error"] = true
+    if tab != "activity":
+        return
+    var caption = find_child("AutoStepStatus",true,false) as Label
+    if caption != null:
+        caption.text = _step_status_text()
+    var toggle = find_child("AutoStepToggle",true,false) as Button
+    if toggle != null:
+        toggle.text = "Остановить шагомер" if steps_status.get("running",false) else "Включить шагомер"
+        toggle.disabled = not steps_status.get("supported",false)
+    var value = find_child("SportMetric_steps",true,false)
+    if value != null and value.get_child_count()>0:
+        value.get_child(0).get_child(1).text = str(store.day_steps(date))
+    var weekly = find_child("SportWeekTotals",true,false) as Label
+    if weekly != null:
+        var total = store.week_activity_summary(date)
+        weekly.text = str(total["count"]) + " тренировок · " + str(total["minutes"]) + " мин · " + str(total["steps"]) + " шагов"
+    var source = find_child("AutoStepSource",true,false) as Label
+    if source != null:
+        source.text = _step_source_text()
+    var use_auto = find_child("AutoStepUse",true,false) as Button
+    if use_auto != null:
+        use_auto.disabled = store.automatic_steps(date) == 0
+
+func _step_source_text() -> String:
+    return ("Источник дня: ручной ввод" if store.step_source(date) == "manual" else "Источник дня: датчик телефона") + " · авто: " + str(store.automatic_steps(date))
+
+func _step_status_text() -> String:
+    if steps_plugin == null:
+        return "Автоподсчёт доступен на совместимом Android. Ручной ввод работает всегда."
+    if not steps_status.get("supported",false):
+        return "Датчик шагов не найден. Используй ручной ввод."
+    if not steps_status.get("permission",false):
+        return "Для шагомера нужно разрешение «Физическая активность»."
+    if steps_status.get("save_error",false):
+        return "Не удалось сохранить показания. Проверь свободную память."
+    if not steps_status.get("running",false):
+        return "Шагомер остановлен. Включи его для подсчёта новых шагов."
+    var updated: float = float(steps_status.get("updated",0))
+    var stamp = Time.get_datetime_string_from_unix_time(int(updated/1000.0)).replace("T"," ").substr(0,16) if updated > 0 else ""
+    return "Шагомер включён · " + ("последнее показание: " + stamp + " UTC" if not stamp.is_empty() else "ожидаем датчик")
+
 func _show_activity() -> void:
     var overview = _card("Движение за день")
     overview.name = "SportOverviewCard"
@@ -6699,7 +6762,37 @@ func _show_activity() -> void:
     _sport_metric(metrics, "Шаги", str(summary["steps"]), "за день", PROTEIN_BG, MACRO_PROTEIN, "steps")
     _sport_metric(metrics, "Занятия", str(summary["minutes"]), "мин", CARBS_BG, MACRO_CARBS, "minutes")
     _sport_metric(metrics, "Энергия", "≈" + str(summary["estimated_kcal"]), "ккал", FAT_BG, MACRO_FAT, "energy")
-    var step_title = _nowrap(overview, "Шаги за день", 13, INK)
+    var automatic = VBoxContainer.new()
+    automatic.name = "AutoStepControls"
+    automatic.add_theme_constant_override("separation",4)
+    overview.add_child(automatic)
+    _label(automatic,_step_status_text(),12,MUTED).name = "AutoStepStatus"
+    _label(automatic,_step_source_text(),12,TEXT_ACCENT).name = "AutoStepSource"
+    var step_actions = _row(automatic)
+    var toggle = _button(step_actions,"Остановить шагомер" if steps_status.get("running",false) else "Включить шагомер",func():
+        if steps_plugin == null:
+            _message("Автоподсчёт работает только на совместимом Android.")
+        elif steps_status.get("running",false):
+            steps_plugin.stopSteps()
+        else:
+            steps_plugin.startSteps()
+    ,true)
+    toggle.name = "AutoStepToggle"
+    toggle.custom_minimum_size.y = 40
+    toggle.disabled = steps_plugin == null or not steps_status.get("supported",false)
+    var auto = _button(step_actions,"Использовать авто",func():
+        if store.use_automatic_steps(date):
+            _render()
+        else:
+            _message("Не удалось сменить источник шагов.")
+    ,true)
+    auto.name = "AutoStepUse"
+    auto.custom_minimum_size.y = 40
+    auto.disabled = store.automatic_steps(date) == 0
+    if steps_plugin != null and not steps_status.get("permission",false):
+        _button(automatic,"Разрешения Android",func(): steps_plugin.openStepSettings(),true)
+    _label(automatic,"Считаются шаги после включения. После остановки или перезапуска службы возможны пропуски. Ручной ввод заменяет автоитог выбранного дня.",11,MUTED)
+    var step_title = _nowrap(overview, "Шаги за день (вручную)", 13, INK)
     step_title.name = "SportStepsCaption"
     var step_row = _row(overview)
     step_row.name = "SportStepsRow"
@@ -6724,7 +6817,7 @@ func _show_activity() -> void:
     )
     save_steps.name = "ActivitySaveSteps"
     save_steps.custom_minimum_size.y = 44
-    _label(overview, "Шаги вводятся вручную. Ккал — только по тренировкам; норма питания не меняется.", 11, MUTED)
+    _label(overview, "Авто и ручные шаги не суммируются. Ккал — только по тренировкам; норма питания не меняется.", 11, MUTED)
 
     var card = _card("Добавить тренировку")
     _compact_card(card, 10, 7)
@@ -6789,7 +6882,7 @@ func _show_activity() -> void:
     var week_card = _card("Итоги недели")
     _compact_card(week_card, 10, 6)
     _label(week_card, str(weekly["count"]) + " тренировок · " +
-        str(weekly["minutes"]) + " мин · " + str(weekly["steps"]) + " шагов", 14, INK)
+        str(weekly["minutes"]) + " мин · " + str(weekly["steps"]) + " шагов", 14, INK).name = "SportWeekTotals"
     _label(week_card, "Оценочный расход на тренировках: ≈" +
         str(weekly["estimated_kcal"]) + " ккал", 12, MUTED)
     _label(week_card, "Расход рассчитан по интенсивности (MET) и последнему весу на дату тренировки. Возможна значительная погрешность.", 12, MUTED)

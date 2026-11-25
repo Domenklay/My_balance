@@ -199,6 +199,8 @@ jobs:
         run: cd community_server && python3 -m unittest -v test_server
       - name: Test 0.7.67 avatar header, photo and navigation
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/header_avatar_0767_test.gd
+      - name: Test 0.7.75 automatic steps and manual override
+        run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/automatic_steps_0775_test.gd
       - name: Test 0.7.74 OCR parsing and mandatory label review
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/label_ocr_0774_test.gd
       - name: Test 0.7.73 pantry matching and shopping persistence
@@ -302,6 +304,14 @@ jobs:
               assert z.testzip() is None
           print("PASS: OCR language assets and native library in final APK")
           PY
+      - name: Verify native step service manifest
+        shell: bash
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump xmltree godot/build/MyBalance-debug.apk AndroidManifest.xml > /tmp/steps-manifest.txt
+          grep -q 'com.domenklay.mybalance.steps.StepService' /tmp/steps-manifest.txt
+          grep -q 'org.godotengine.plugin.v2.MyBalanceSteps' /tmp/steps-manifest.txt
+          grep -q 'android.permission.ACTIVITY_RECOGNITION' /tmp/steps-manifest.txt
+          grep -q 'android.permission.FOREGROUND_SERVICE_HEALTH' /tmp/steps-manifest.txt
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
