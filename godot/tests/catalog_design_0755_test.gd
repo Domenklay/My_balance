@@ -15,6 +15,12 @@ func _run() -> void:
     app._render()
     await process_frame
     var search = app.find_child("FoodNameSearch", true, false) as LineEdit
+    var capture = app.find_child("FoodCaptureActions", true, false)
+    var camera = app.find_child("FoodCameraQuick", true, false)
+    var ocr = app.find_child("FoodOcrLabel", true, false)
+    if capture == null or camera == null or ocr == null or camera.get_parent() != capture or ocr.get_parent() != capture:
+        _fail("capture actions must share a compact row")
+        return
     if search == null or app.find_child("FoodCameraQuick", true, false) == null:
         _fail("search or camera missing")
         return

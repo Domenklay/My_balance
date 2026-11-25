@@ -47,6 +47,15 @@ func _run() -> void:
                 _fail("metric cards not visually distinct")
                 return
             colors.append(style.bg_color)
+        var week_details = app.find_child("SportWeekDetails", true, false) as Control
+        var week_toggle = app.find_child("SportWeekDetailsToggle", true, false) as Button
+        if week_details == null or week_toggle == null or week_details.visible:
+            _fail("weekly details should start collapsed")
+            return
+        week_toggle.pressed.emit()
+        if not week_details.visible:
+            _fail("weekly details cannot expand")
+            return
         field.value = 1234
         var plus = app.find_child("SportStepsPlus", true, false) as Button
         plus.pressed.emit()

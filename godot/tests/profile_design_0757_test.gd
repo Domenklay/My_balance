@@ -27,6 +27,11 @@ func _run() -> void:
         if avatar == null or avatar.size.x < 88 or settings == null or grid == null or grid.get_child_count() != Rewards.AWARDS.size():
             _fail("profile visual controls missing " + id)
             return
+        var settings_panel = app.find_child("ProfileSystemSettings", true, false)
+        var rewards_panel = app.find_child("ProfileRewardsCard", true, false)
+        if settings_panel == null or rewards_panel == null or settings_panel.get_index() >= rewards_panel.get_index():
+            _fail("settings must be above optional rewards")
+            return
         if grid.columns != 2 or app.body.get_child_count() > 5:
             _fail("profile layout is not compact")
             return

@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.83"
+const APP_VERSION = "0.7.84"
 const ProgressPhotos = preload("res://src/progress_photos.gd")
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
@@ -1913,8 +1913,22 @@ func _show_profile() -> void:
     macro_button.custom_minimum_size.y = 42
     macro_button.clip_text = true
 
+    var system_card = _card("Приложение")
+    system_card.get_parent().name = "ProfileSystemSettings"
+    _compact_card(system_card, 11, 5)
+    var profile_settings = _button(system_card, "⚙ Настройки", func():
+        settings_page = "main"
+        settings_section_open = ""
+        _navigate_to_tab("settings")
+    , true)
+    profile_settings.name = "ProfileSettingsShortcut"
+    profile_settings.custom_minimum_size.y = 44
+    profile_settings.alignment = HORIZONTAL_ALIGNMENT_LEFT
+    _label(system_card, "Темы, язык, уведомления и резервные копии", 12, MUTED)
+
     var summary: Dictionary = store.reward_summary()
     var awards = _card("Звёзды и награды", "tint")
+    awards.get_parent().name = "ProfileRewardsCard"
     _compact_card(awards, 12, 7)
     var counters = _row(awards)
     counters.name = "ProfileRewardCounters"
@@ -1988,18 +2002,6 @@ func _show_profile() -> void:
                 , true)
                 select_button.disabled = not available
 
-    var system_card = _card("Приложение")
-    system_card.get_parent().name = "ProfileSystemSettings"
-    _compact_card(system_card, 11, 5)
-    var profile_settings = _button(system_card, "⚙ Настройки", func():
-        settings_page = "main"
-        settings_section_open = ""
-        _navigate_to_tab("settings")
-    , true)
-    profile_settings.name = "ProfileSettingsShortcut"
-    profile_settings.custom_minimum_size.y = 44
-    profile_settings.alignment = HORIZONTAL_ALIGNMENT_LEFT
-    _label(system_card, "Язык, темы, уведомления, аккаунт Google и резервные копии", 12, MUTED)
 
 # Appearance changes stay in the questionnaire draft until the final Save.
 func _questionnaire_avatar_controls(parent: Node) -> void:
@@ -6260,7 +6262,10 @@ func _food_form(parent: VBoxContainer) -> void:
     barcode_toggle.custom_minimum_size.y = 40
     barcode_toggle.add_theme_font_size_override("font_size", 12)
     barcode_toggle.clip_text = true
-    var quick_camera = _button(online_actions, "Камера", func():
+    var capture_actions = _row(parent)
+    capture_actions.name = "FoodCaptureActions"
+    capture_actions.add_theme_constant_override("separation", 5)
+    var quick_camera = _button(capture_actions, "Камера · штрихкод", func():
         if barcode_scanner != null:
             _barcode_message("Открываю сканер штрихкодов…")
             barcode_scanner.scanBarcode()
@@ -6274,7 +6279,10 @@ func _food_form(parent: VBoxContainer) -> void:
     quick_camera.custom_minimum_size.y = 40
     quick_camera.add_theme_font_size_override("font_size", 12)
     quick_camera.clip_text = true
-    var ocr_button = _button(parent,"КБЖУ с фото упаковки",func(): _ocr_start_sheet(),true)
+    var ocr_button = _button(capture_actions,"КБЖУ с фото",func(): _ocr_start_sheet(),true)
+    ocr_button.tooltip_text = "Распознать КБЖУ с фотографии упаковки"
+    ocr_button.clip_text = true
+    ocr_button.add_theme_font_size_override("font_size", 12)
     ocr_button.name = "FoodOcrLabel"
     ocr_button.custom_minimum_size.y = 38
     barcode_panel.visible = false
@@ -6564,7 +6572,7 @@ func _food_form(parent: VBoxContainer) -> void:
     parent.move_child(sort_row, 9)
     parent.move_child(results_box, 10)
     parent.move_child(advanced_button, 11)
-    parent.move_child(ocr_button, 4)
+    parent.move_child(capture_actions, 4)
     parent.move_child(barcode_panel, parent.get_child_count() - 1)
     parent.move_child(barcode_divider, parent.get_child_count() - 2)
     _refresh_food_picker(picker, search, favorite_only, filtered, grams, preview, star, category, results_box, meal, added_count)
@@ -7084,9 +7092,20 @@ func _show_activity() -> void:
     _compact_card(week_card, 10, 6)
     _label(week_card, str(weekly["count"]) + " тренировок · " +
         str(weekly["minutes"]) + " мин · " + str(weekly["steps"]) + " шагов", 14, INK).name = "SportWeekTotals"
-    _label(week_card, "Оценочный расход на тренировках: ≈" +
+    var week_details = VBoxContainer.new()
+    week_details.name = "SportWeekDetails"
+    week_details.add_theme_constant_override("separation", 4)
+    week_card.add_child(week_details)
+    week_details.visible = false
+    _label(week_details, "Оценочный расход на тренировках: ≈" +
         str(weekly["estimated_kcal"]) + " ккал", 12, MUTED)
-    _label(week_card, "Расход рассчитан по интенсивности (MET) и последнему весу на дату тренировки. Возможна значительная погрешность.", 12, MUTED)
+    _label(week_details, "Расход рассчитан по интенсивности (MET) и последнему весу на дату тренировки. Возможна значительная погрешность.", 12, MUTED)
+    var week_toggle = _button(week_card, "Подробнее ▾", Callable(), true)
+    week_toggle.name = "SportWeekDetailsToggle"
+    week_toggle.custom_minimum_size.y = 38
+    week_toggle.pressed.connect(func():
+        week_details.visible = not week_details.visible
+        week_toggle.text = "Скрыть подробности ▴" if week_details.visible else "Подробнее ▾")
 
 
 func _edit_activity(activity: Dictionary) -> void:
