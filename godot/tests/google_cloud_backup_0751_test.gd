@@ -37,8 +37,13 @@ func _run() -> void:
         _fail("remote file id/checksum not stored together")
         return
     app._on_google_error("Облачная копия изменилась на другом устройстве.")
-    if app.google_checked:
+    if app.google_checked or not app.google_checksum.is_empty() or not app.google_file_id.is_empty():
         _fail("conflict did not invalidate the remote revision")
+        return
+    app._on_google_status(true, "2026-11-24T16:00:00", "md5-expected", "drive-file-42")
+    app._on_google_error("Ошибка сети")
+    if app.google_checked or not app.google_checksum.is_empty() or not app.google_file_id.is_empty():
+        _fail("network error left a stale remote revision")
         return
     app._on_google_disconnected()
     if app.google_checked or not app.google_file_id.is_empty() or \

@@ -183,7 +183,10 @@ jobs:
           assert "downloadBackup(String expectedId, String expectedMd5)" in code
           assert "deleteBackup(String expectedId, String expectedMd5)" in code
           assert "uploadBackup(String json, String expectedMd5, String expectedId)" in code
-          print("PASS: Google Drive safe revision operations")
+          assert 'md5Hex(json).equalsIgnoreCase(saved.optString("md5Checksum", ""))' in code
+          assert 'listing.optString("nextPageToken", "")' in code
+          assert "setInstanceFollowRedirects(false)" in code
+          print("PASS: Google Drive safe revision operations and post-upload checksum")
           PY
       - name: Test five distinctive palettes, high contrast and theme previews 0.7.50.1
         run: timeout --signal=SIGINT --kill-after=5s 90s /tmp/godot --headless --path godot --script res://tests/five_distinct_themes_0750_1_test.gd

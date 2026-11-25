@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.88"
+const APP_VERSION = "0.7.89"
 const ProgressPhotos = preload("res://src/progress_photos.gd")
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
@@ -8182,8 +8182,10 @@ func _on_google_backup_deleted() -> void:
 
 func _on_google_error(message: String) -> void:
     google_busy = false
-    if message.contains("изменилась"):
-        google_checked = false
+    # A failed or interrupted cloud operation leaves the remote revision uncertain.
+    google_checked = false
+    google_checksum = ""
+    google_file_id = ""
     _google_refresh_settings()
     _message("Google Диск: " + message)
 
@@ -8218,7 +8220,7 @@ func _google_upload() -> void:
         return
     _confirm_action("Сохранить на Google Диск?",
         "Это заменит предыдущую облачную копию, но не изменит дневник. " +
-        "При изменении копии другим устройством загрузка будет остановлена.",
+        "Перед загрузкой проверяется версия копии. Не запускай параллельную загрузку с другого телефона.",
         func():
             google_busy = true
             google_plugin.uploadBackup(serialized, expected, expected_id)
@@ -8268,7 +8270,7 @@ func _show_google_backup_settings() -> void:
     if google_busy:
         state = "Обращение к Google Диску…"
     var card = _settings_section("Аккаунт Google и синхронизация", "google", state)
-    _label(card, "Локальный профиль работает без регистрации. Google — только для резервных копий.", 12, MUTED)
+    _label(card, "Локальный профиль работает без регистрации. Google — только для ручных резервных копий. Для переноса на новый телефон выбери тот же аккаунт Google.", 12, MUTED)
     if google_plugin == null:
         var notice = _label(card,
             "Подключение к Google доступно в Android-сборке с Google Play Services. " +
@@ -8298,8 +8300,9 @@ func _show_google_backup_settings() -> void:
     var restore = _button(card, "Восстановить данные из Google Диска", func(): _google_download(), true)
     restore.name = "GoogleCloudRestore"
     restore.disabled = not google_checked or not google_exists or google_busy
-    _label(card, "Восстановление запрашивает подтверждение и не объединяет записи автоматически. " +
-        "При изменении копии другим устройством операция будет остановлена. " +
+    _label(card, "Фото прогресса хранятся отдельно: перенеси их через раздел Фото → резервная копия. " +
+        "Восстановление запрашивает подтверждение и не объединяет записи автоматически. " +
+        "Перед операцией проверяется последняя известная версия копии. Не выполняй облачные операции одновременно на двух телефонах. " +
         "Перед заменой сохрани локальную JSON-копию.", 12, MUTED)
     if google_exists:
         var remove = _button(card, "Удалить облачную копию", func(): _google_delete(), true)

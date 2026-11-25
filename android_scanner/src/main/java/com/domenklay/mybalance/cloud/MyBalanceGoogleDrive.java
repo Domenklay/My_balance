@@ -28,6 +28,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -44,7 +45,7 @@ public final class MyBalanceGoogleDrive extends GodotPlugin {
     private static final String FILENAME = "mybalance-backup-v1.json";
     private static final String LIST_URL =
         "https://www.googleapis.com/drive/v3/files?spaces=appDataFolder"
-        + "&q=name%3D%27mybalance-backup-v1.json%27"
+        + "&q=name%3D%27mybalance-backup-v1.json%27%20and%20trashed%3Dfalse"
         + "&fields=nextPageToken,files(id,name,md5Checksum,modifiedTime)&pageSize=20";
     private static final int AUTH_REQUEST = 19346;
     private static final int MAX_BACKUP = 5_000_000;
@@ -234,7 +235,7 @@ public final class MyBalanceGoogleDrive extends GodotPlugin {
                     + file.getString("id") + "?uploadType=media",
                     "application/json; charset=utf-8", json);
             } else {
-                String boundary = "mybalance-android-backup-boundary";
+                String boundary = "mybalance-" + UUID.randomUUID();
                 String multipart = "--" + boundary + "\r\n"
                     + "Content-Type: application/json; charset=UTF-8\r\n\r\n"
                     + "{\"name\":\"" + FILENAME + "\",\"parents\":[\"appDataFolder\"]}\r\n"
@@ -248,7 +249,8 @@ public final class MyBalanceGoogleDrive extends GodotPlugin {
             if (response.code < 200 || response.code >= 300)
                 throw new Exception("Google Диск не принял резервную копию.");
             JSONObject saved = findBackup();
-            if (saved == null) throw new Exception("Копия отправлена, но не подтверждена Google Диском.");
+            if (saved == null || !md5Hex(json).equalsIgnoreCase(saved.optString("md5Checksum", "")))
+                throw new Exception("Копия отправлена, но её содержимое не подтверждено. Проверь облачную копию.");
             signal(SAVED, saved.optString("modifiedTime", ""));
             signal(STATUS, true, saved.optString("modifiedTime", ""),
                 saved.optString("md5Checksum", ""), saved.optString("id", ""));
@@ -273,8 +275,12 @@ public final class MyBalanceGoogleDrive extends GodotPlugin {
     private JSONObject findBackup() throws Exception {
         HttpResponse response = request("GET", LIST_URL, null, null);
         if (response.code != 200) throw new Exception("Не удалось открыть папку данных Google Диска.");
-        JSONArray files = new JSONObject(response.body).optJSONArray("files");
-        if (files == null || files.length() == 0) return null;
+        JSONObject listing = new JSONObject(response.body);
+        JSONArray files = listing.optJSONArray("files");
+        if (files == null) throw new Exception("Google Диск вернул неполный список копий.");
+        if (!listing.optString("nextPageToken", "").isEmpty())
+            throw new Exception("Список облачных копий неполный. Безопасное обновление остановлено.");
+        if (files.length() == 0) return null;
         if (files.length() > 1) throw new Exception(
             "Найдено несколько облачных копий. Безопасное обновление остановлено.");
         return files.getJSONObject(0);
@@ -292,6 +298,8 @@ public final class MyBalanceGoogleDrive extends GodotPlugin {
                     signal(DISCONNECTED);
                     error("Срок разрешения Google истёк. Подключись ещё раз.");
                 }
+                else if (ex instanceof java.io.IOException || ex instanceof org.json.JSONException)
+                    error("Не удалось проверить ответ Google Диска. Проверь интернет и повтори проверку копии.");
                 else error(ex.getMessage() == null ? "Ошибка связи с Google Диском." : ex.getMessage());
             }
         });
@@ -301,6 +309,8 @@ public final class MyBalanceGoogleDrive extends GodotPlugin {
         final String token = accessToken;
         if (token == null || token.isEmpty()) throw new Exception("Сначала подключи Google Диск.");
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        try {
+        connection.setInstanceFollowRedirects(false);
         // Android HttpURLConnection does not support PATCH on all devices.
         // Google Drive accepts a POST with X-HTTP-Method-Override: PATCH.
         connection.setRequestMethod("PATCH".equals(method) ? "POST" : method);
@@ -320,7 +330,6 @@ public final class MyBalanceGoogleDrive extends GodotPlugin {
         }
         int code = connection.getResponseCode();
         if (code < 200 || code >= 300) {
-            connection.disconnect();
             throw new Exception("HTTP " + code + " — проверь доступ Google Диска и подключение.");
         }
         InputStream in = code == 204 ? null : connection.getInputStream();
@@ -336,8 +345,10 @@ public final class MyBalanceGoogleDrive extends GodotPlugin {
                 }
             }
         }
-        connection.disconnect();
         return new HttpResponse(code, data.toString("UTF-8"));
+        } finally {
+            connection.disconnect();
+        }
     }
 
     private static final class HttpResponse {
