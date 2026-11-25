@@ -1902,7 +1902,7 @@ func _show_profile() -> void:
         ("+" if change > 0.0 else "") + str(snappedf(change, 0.1)) + " кг", 13, INK)
     var goals_row = _row(overview)
     goals_row.name = "ProfileGoalActions"
-    var kcal_button = _button(goals_row, "✎ Изменить норму калорий",
+    var kcal_button = _button(goals_row, "Норма калорий",
         func(): _show_calorie_goal_editor(), true)
     kcal_button.custom_minimum_size.y = 42
     kcal_button.clip_text = true
@@ -8052,6 +8052,8 @@ func _settings_section(title: String, section: String, summary: String) -> VBoxC
     toggle.icon = NAV_TEXTURES.get(str(icons.get(section, "profile")))
     toggle.expand_icon = true
     toggle.add_theme_constant_override("icon_max_width", 22)
+    for state in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_focus_color"]:
+        toggle.add_theme_color_override(state, INK if DARK_MODE else TEXT_ACCENT)
     if not expanded:
         var caption = _label(card, summary, 12, MUTED)
         caption.name = "SettingsSectionSummary_" + section

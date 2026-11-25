@@ -5,6 +5,7 @@ static func english() -> Translation:
     var result = Translation.new()
     result.locale = "en"
     var messages = {
+        "Норма калорий": "Calorie goal",
         "Подсчёт после включения; при остановке возможны пропуски.": "Counts after activation; stopping may cause gaps.",
         "Рецепты с расчётом КБЖУ": "Recipes with nutrition estimates",
         "По остаткам КБЖУ": "Remaining macros",
