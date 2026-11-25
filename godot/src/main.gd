@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.79"
+const APP_VERSION = "0.7.80"
 const ProgressPhotos = preload("res://src/progress_photos.gd")
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
@@ -2213,11 +2213,11 @@ func _recipe_sync_form(name: LineEdit, cooked: SpinBox, portions: SpinBox) -> vo
     recipe_draft["servings"] = portions.value
 
 func _refresh_recipe_food_search(search: LineEdit, picker: OptionButton, filtered: Array) -> void:
-    var needle = search.text.strip_edges()
+    var prepared = FoodSearchScript.prepare(search.text)
     filtered.clear()
     picker.clear()
     for food in store.all_foods():
-        if FoodSearchScript.matches(food, needle):
+        if FoodSearchScript.matches_prepared(food, prepared):
             filtered.append(food)
             picker.add_item(str(food.get("name", "Продукт")))
             if filtered.size() >= 75:
@@ -6576,6 +6576,7 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
     filtered.clear()
     var all = store.all_foods()
     var query = search.text.strip_edges().to_lower()
+    var prepared = FoodSearchScript.prepare(query)
     if results_box != null:
         var quick_area = results_box.get_parent().get_node_or_null("FoodRecentFavorites") as VBoxContainer
         if quick_area != null:
@@ -6605,7 +6606,7 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
             if own_food is Dictionary:
                 owned_ids[str(own_food.get("id", ""))] = true
     for item in all:
-        if not FoodSearchScript.matches(item, query):
+        if not FoodSearchScript.matches_prepared(item, prepared):
             continue
         var item_id = str(item.get("id", ""))
         if favorite_only.button_pressed and not store.is_favorite(item_id):
@@ -6638,8 +6639,12 @@ func _refresh_food_picker(picker: OptionButton, search: LineEdit, favorite_only:
     for favorite_id in store.data.get("favorites", []):
         favorites_index[str(favorite_id)] = true
     var sort_mode: int = int(results_box.get_meta("sort_mode", 0)) if results_box != null else 0
+    var ranks: Dictionary = {}
+    if sort_mode == 0:
+        for item in filtered:
+            ranks[str(item.get("id", ""))] = FoodSearchScript.relevance_prepared(item, str(prepared["needle"]))
     filtered.sort_custom(func(a, b):
-        return FoodSearchScript.sort_before(a, b, query, sort_mode, usage_counts, favorites_index)
+        return FoodSearchScript.sort_before(a, b, query, sort_mode, usage_counts, favorites_index, ranks)
     )
     picker.clear()
     var selection = 0
@@ -6676,6 +6681,7 @@ func _rebuild_food_results(results_box: VBoxContainer, filtered: Array,
     _label(results_box, "Найдено: " + str(filtered.size()) + " · показано: " + str(shown), 12, MUTED)
     if filtered.is_empty():
         _empty_illustration(results_box, "search", "Ничего не найдено. Попробуй другое название или бренд.")
+    var last_portions: Dictionary = store.last_food_portions(filtered.slice(0, shown))
     for index in range(shown):
         var item: Dictionary = filtered[index]
         var row = _soft_list_row(results_box)
@@ -6727,7 +6733,7 @@ func _rebuild_food_results(results_box: VBoxContainer, filtered: Array,
         if not warnings.is_empty():
             var alert = _label(stack, "⚠ " + str(warnings[0]), 11, ACCENT)
             alert.name = "FoodQualityWarning_" + str(index)
-        var last: Dictionary = store.last_food_portion(item)
+        var last: Dictionary = last_portions.get(food_id + "|" + PortionMath.base_unit(item), {})
         if not last.is_empty() and \
                 str(last.get("unit", "г")) == PortionMath.base_unit(item):
             var repeat = _button(stack,

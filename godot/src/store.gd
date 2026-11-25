@@ -1664,27 +1664,37 @@ func portion_options(food: Dictionary) -> Array:
 
 # Last recorded serving per food id: computed from the diary so upgrades
 # restore old entries automatically, without a parallel per-food cache.
-func last_food_portion(food: Dictionary) -> Dictionary:
-    var food_id: String = str(food.get("id", ""))
-    if food_id.is_empty():
-        return {}
-    var unit: String = PortionMath.base_unit(food)
+# A single reverse scan for the visible result page, preserving the latest
+# valid portion for each product AND nutrition unit.
+func last_food_portions(foods: Array) -> Dictionary:
+    var pending: Dictionary = {}
+    for food in foods:
+        var id: String = str(food.get("id", ""))
+        if not id.is_empty():
+            pending[id + "|" + PortionMath.base_unit(food)] = true
+    var result: Dictionary = {}
+    if pending.is_empty():
+        return result
     for i in range(data["entries"].size() - 1, -1, -1):
         var entry: Dictionary = data["entries"][i]
-        if str(entry.get("food", "")) != food_id or \
-                str(entry.get("unit", "г")) != unit:
+        var unit: String = str(entry.get("unit", "г"))
+        var key: String = str(entry.get("food", "")) + "|" + unit
+        if not pending.has(key):
             continue
         var amount: float = float(entry.get("grams", 0.0))
         if not is_finite(amount) or amount <= 0.0 or amount > 5000.0:
             continue
-        return {
-            "grams": amount, "unit": unit,
+        result[key] = {"grams": amount, "unit": unit,
             "portion_label": str(entry.get("portion_label", "")),
             "portion_count": entry.get("portion_count", 0.0),
-            "portion_id": str(entry.get("portion_id", ""))
-        }
-    return {}
+            "portion_id": str(entry.get("portion_id", ""))}
+        pending.erase(key)
+        if pending.is_empty():
+            break
+    return result
 
+func last_food_portion(food: Dictionary) -> Dictionary:
+    return last_food_portions([food]).get(str(food.get("id", "")) + "|" + PortionMath.base_unit(food), {})
 
 func save_food_portion(food_id: String, label: String, amount: float) -> bool:
     var food: Dictionary = food_by_id(food_id)
@@ -1724,9 +1734,29 @@ func delete_food_portion(portion_id: String) -> bool:
     return false
 
 func food_by_id(id: String) -> Dictionary:
-    for f in all_foods():
-        if str(f.get("id", "")) == id:
-            return f
+    # Default products use stable numeric IDs. Avoid allocating the whole
+    # catalog for a single lookup, including legacy diary entries.
+    if id.begins_with("d"):
+        var suffix = id.substr(1)
+        if suffix.is_valid_int():
+            var index = int(suffix)
+            if index >= 0 and index < DEFAULT_PRODUCTS.size() and id == "d" + str(index):
+                var f: Array = DEFAULT_PRODUCTS[index]
+                return {"id": id, "name": f[0], "kcal": f[1], "p": f[2], "f": f[3], "c": f[4]}
+    for item in bundled_foods:
+        if str(item.get("id", "")) != id:
+            continue
+        var code = str(item.get("barcode", ""))
+        var replaced = false
+        for custom in data["foods"]:
+            if custom is Dictionary and not code.is_empty() and str(custom.get("barcode", "")) == code:
+                replaced = true
+                break
+        if not replaced:
+            return item
+    for custom in data["foods"]:
+        if custom is Dictionary and str(custom.get("id", "")) == id:
+            return custom
     return {}
 
 func entry_food(entry: Dictionary) -> Dictionary:

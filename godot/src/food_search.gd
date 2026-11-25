@@ -33,23 +33,42 @@ static func fix_keyboard(s: String) -> String:
         out += KEY_RU.substr(pos, 1) if pos >= 0 else c
     return out
 
-static func matches(food: Dictionary, query: String) -> bool:
-    var needle = normalize(query)
-    if needle.is_empty():
+# Prepare query tokens once per search, not once per candidate.
+static func prepare(query: String) -> Dictionary:
+    var needle: String = normalize(query)
+    var tokens: Array = []
+    for token in needle.split(" ", false):
+        tokens.append({"text": token, "keyboard": fix_keyboard(token)})
+    return {"needle": needle, "tokens": tokens}
+
+static func matches_prepared(food: Dictionary, prepared: Dictionary) -> bool:
+    var tokens: Array = prepared["tokens"]
+    if tokens.is_empty():
         return true
     var target = normalize(str(food.get("name", "")) + " " +
         str(food.get("brand", "")) + " " + str(food.get("barcode", "")))
-    var roman = transliterate(target)
-    for token in needle.split(" ", false):
-        if token in target or token in roman or fix_keyboard(token) in target:
+    var roman: String = ""
+    var roman_ready: bool = false
+    for token in tokens:
+        var value: String = str(token["text"])
+        if value in target or str(token["keyboard"]) in target:
             continue
-        return false
+        if not roman_ready:
+            roman = transliterate(target)
+            roman_ready = true
+        if value not in roman:
+            return false
     return true
+
+static func matches(food: Dictionary, query: String) -> bool:
+    return matches_prepared(food, prepare(query))
 
 # Text relevance is checked only after matches(), so a brand-only match is
 # still returned but ranks below a direct product-name match.
 static func relevance(food: Dictionary, query: String) -> int:
-    var needle: String = normalize(query)
+    return relevance_prepared(food, normalize(query))
+
+static func relevance_prepared(food: Dictionary, needle: String) -> int:
     if needle.is_empty():
         return 0
     if str(food.get("barcode", "")) == needle:
@@ -69,7 +88,7 @@ static func relevance(food: Dictionary, query: String) -> int:
 # Modes: 0=relevance, 1=frequency, 2=name, 3=calories asc, 4=calories desc.
 # Stable name and id tie-breakers avoid random order and flickering between searches.
 static func sort_before(a: Dictionary, b: Dictionary, query: String, mode: int,
-        counts: Dictionary, favorites: Dictionary) -> bool:
+        counts: Dictionary, favorites: Dictionary, ranks: Dictionary = {}) -> bool:
     var a_id: String = str(a.get("id", ""))
     var b_id: String = str(b.get("id", ""))
     var a_count: int = int(counts.get(a_id, 0))
@@ -83,8 +102,8 @@ static func sort_before(a: Dictionary, b: Dictionary, query: String, mode: int,
         if a_count != b_count:
             return a_count > b_count
     elif mode == 0:
-        var a_rank: int = relevance(a, query)
-        var b_rank: int = relevance(b, query)
+        var a_rank: int = int(ranks[a_id]) if ranks.has(a_id) else relevance(a, query)
+        var b_rank: int = int(ranks[b_id]) if ranks.has(b_id) else relevance(b, query)
         if a_rank != b_rank:
             return a_rank < b_rank
         var a_favorite: bool = favorites.has(a_id)

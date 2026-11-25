@@ -64,6 +64,21 @@ func _run() -> void:
             not app.store.frequent_foods(0, 2).is_empty():
         _fail("frequency counts, threshold, or zero limit are wrong")
         return
+    var base = {"id":"test", "name":"Молоко 2,5%", "brand":"Ёлка", "barcode":"1234567890123"}
+    for query in ["молоко елка", "moloko", "vjkjrj", "1234567890123", "", "неизвестно"]:
+        var expected: bool = query != "неизвестно"
+        if FoodSearch.matches_prepared(base, FoodSearch.prepare(query)) != expected or FoodSearch.matches(base, query) != expected:
+            _fail("prepared search changed Cyrillic, transliteration, keyboard or barcode matching: " + query)
+            return
+    var sample_foods = [app.store.food_by_id("sort_a"), app.store.food_by_id("sort_b"), app.store.food_by_id("sort_c")]
+    var portions = app.store.last_food_portions(sample_foods)
+    if portions.size() != 3 or float(portions["sort_c|г"]["grams"]) != 100.0:
+        _fail("batch portion lookup lost existing history")
+        return
+    for food in app.store.all_foods():
+        if app.store.food_by_id(str(food["id"])) != food:
+            _fail("direct lookup disagrees with catalog")
+            return
     var favorites: Dictionary = {"sort_a":true}
     if not FoodSearch.sort_before(foods[0], foods[1], "тестосорт абрикос", 0, {}, favorites):
         _fail("exact title match must outrank a shorter unrelated match")
