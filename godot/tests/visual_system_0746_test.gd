@@ -60,6 +60,17 @@ func _run() -> void:
                 primary_style.bg_color == secondary_style.bg_color:
             _fail("primary and secondary buttons look identical: " + id)
             return
+        var sample = app._card("Проверка оформления", "plain", app.body)
+        var sample_style = sample.get_parent().get_theme_stylebox("panel") as StyleBoxFlat
+        var item = app._soft_list_row(sample)
+        var row_style = item.get_parent().get_theme_stylebox("panel") as StyleBoxFlat
+        if sample_style.shadow_size != 0 or row_style.border_width_left != 0 or sample_style.content_margin_top != 12:
+            _fail("ordinary surfaces should be quiet and compact: " + id)
+            return
+        if primary.custom_minimum_size.y < 44 or secondary.custom_minimum_size.y < 44:
+            _fail("touch targets must not shrink: " + id)
+            return
+        sample.get_parent().queue_free()
         secondary.queue_free()
         primary.queue_free()
     app.store.data["settings"]["theme"] = "botanical"
@@ -71,6 +82,13 @@ func _run() -> void:
     if hc.border_width_left < 2:
         _fail("high contrast mode lost stronger borders")
         return
+    var contrast_sample = app._card("", "plain", app.body)
+    var contrast_row = app._soft_list_row(contrast_sample)
+    var contrast_row_style = contrast_row.get_parent().get_theme_stylebox("panel") as StyleBoxFlat
+    if contrast_row_style.border_width_left < 2:
+        _fail("high contrast list boundaries disappeared")
+        return
+    contrast_sample.get_parent().queue_free()
     app.tab = "progress"
     app.progress_section = "body"
     app._render()

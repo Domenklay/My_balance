@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.84"
+const APP_VERSION = "0.7.85"
 const ProgressPhotos = preload("res://src/progress_photos.gd")
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
@@ -893,8 +893,8 @@ func _button(parent: Node, s: String, call: Callable, secondary: bool = false) -
         elif mode == "pressed":
             st.bg_color = SECONDARY.darkened(0.045) if secondary else GREEN.darkened(0.07)
         if secondary:
-            st.border_color = BORDER if HIGH_CONTRAST else BORDER.lightened(0.12)
-            st.set_border_width_all(1)
+            st.border_color = BORDER if HIGH_CONTRAST else st.bg_color.lerp(BORDER, 0.40)
+            st.set_border_width_all(2 if HIGH_CONTRAST else 1)
         elif HIGH_CONTRAST:
             st.border_color = GREEN.darkened(0.18)
             st.set_border_width_all(1)
@@ -932,19 +932,17 @@ func _card(title: String, variant: String = "plain", holder: Node = null) -> VBo
             style.bg_color = ACTIVITY_BG
         _:
             style.bg_color = CARD_BG
-    style.set_corner_radius_all(18)
-    style.border_color = BORDER if variant == "plain" or HIGH_CONTRAST else style.bg_color
-    if current_theme == "botanical":
-        style.border_color = BORDER
-    style.set_border_width_all(2 if HIGH_CONTRAST else 1)
-    # Quiet elevation: the calorie card has visual priority.
+    style.set_corner_radius_all(16)
+    # Flat surfaces reduce visual noise; retain strong boundaries in contrast mode.
+    style.border_color = BORDER if HIGH_CONTRAST else style.bg_color.lerp(BORDER, 0.35)
+    style.set_border_width_all(2 if HIGH_CONTRAST else (1 if variant == "plain" else 0))
     style.shadow_color = Color(0.0, 0.0, 0.0, 0.12 if DARK_MODE else 0.048)
-    style.shadow_size = 3 if variant == "hero" else 1
+    style.shadow_size = 2 if variant == "hero" and not HIGH_CONTRAST else 0
     style.shadow_offset = Vector2(0, 1)
-    style.content_margin_left = 15
-    style.content_margin_right = 15
-    style.content_margin_top = 15
-    style.content_margin_bottom = 15
+    style.content_margin_left = 12
+    style.content_margin_right = 12
+    style.content_margin_top = 12
+    style.content_margin_bottom = 12
     panel.add_theme_stylebox_override("panel", style)
     (body if holder == null else holder).add_child(panel)
     # Do not place foliage behind calorie totals or macro labels on the day tab.
@@ -952,7 +950,7 @@ func _card(title: String, variant: String = "plain", holder: Node = null) -> VBo
     if PATTERNS and variant in ["hero", "tint"] and tab != "day":
         var ornament = PatternScript.new()
         ornament.mouse_filter = Control.MOUSE_FILTER_IGNORE
-        ornament.configure(PATTERN_STYLE, PATTERN_COLOR, true, 0.13 if variant == "hero" else 0.07)
+        ornament.configure(PATTERN_STYLE, PATTERN_COLOR, true, 0.07 if variant == "hero" else 0.035)
         panel.add_child(ornament)
     if PATTERNS and variant == "activity" and current_theme == "botanical" and tab == "day":
         var mountain_art = PatternScript.new()
@@ -962,10 +960,10 @@ func _card(title: String, variant: String = "plain", holder: Node = null) -> VBo
     var content = VBoxContainer.new()
     content.mouse_filter = Control.MOUSE_FILTER_PASS
     content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    content.add_theme_constant_override("separation", 11)
+    content.add_theme_constant_override("separation", 8)
     panel.add_child(content)
     if not title.is_empty():
-        _label(content, title, 18, WHITE if variant == "hero" else INK)
+        _label(content, title, 17, WHITE if variant == "hero" else INK)
     return content
 
 # Per-day compact cards retain the same colors and contrast but reduce
@@ -980,7 +978,7 @@ func _compact_card(content: VBoxContainer, margin: int = 9, spacing: int = 5) ->
             style.content_margin_right = margin
             style.content_margin_top = margin
             style.content_margin_bottom = margin
-            style.shadow_size = 1
+            # Preserve the shared elevation policy rather than adding shadows back.
             style.shadow_offset = Vector2(0, 1)
     content.add_theme_constant_override("separation", spacing)
 
@@ -1039,13 +1037,13 @@ func _soft_list_row(parent: Node) -> HBoxContainer:
     panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     var st = StyleBoxFlat.new()
     st.bg_color = ROW_BG
-    st.border_color = BORDER if HIGH_CONTRAST else BORDER.lightened(0.20)
-    st.set_border_width_all(1)
+    st.border_color = BORDER if HIGH_CONTRAST else ROW_BG
+    st.set_border_width_all(2 if HIGH_CONTRAST else 0)
     st.set_corner_radius_all(12)
     st.content_margin_left = 10
     st.content_margin_right = 8
-    st.content_margin_top = 8
-    st.content_margin_bottom = 8
+    st.content_margin_top = 6
+    st.content_margin_bottom = 6
     panel.add_theme_stylebox_override("panel", st)
     parent.add_child(panel)
     var row = HBoxContainer.new()
