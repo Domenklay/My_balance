@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.81"
+const APP_VERSION = "0.7.82"
 const ProgressPhotos = preload("res://src/progress_photos.gd")
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
@@ -2656,9 +2656,10 @@ func _recipe_suggest_sheet(day: String) -> void:
     var category = _choice(fields, ["Все блюда"] + RecipeMath.CATEGORY_LABELS)
     category.name = "SuggestCategory"
     _label(fields, "Размер порции", 12, MUTED)
-    var portion = _choice(fields, ["½ порции", "1 порция", "1½ порции", "2 порции"])
+    var portion = _choice(fields, ["½ порции", "1 порция", "1½ порции", "2 порции", "Авто по остаткам КБЖУ"])
     portion.name = "SuggestPortion"
     portion.select(1)
+    _label(fields, "Авто подберёт до одной обычной порции по оставшимся целям (от 25 г).", 12, MUTED)
     var results = VBoxContainer.new()
     results.name = "SuggestResults"
     results.add_theme_constant_override("separation", 7)
@@ -2668,7 +2669,7 @@ func _recipe_suggest_sheet(day: String) -> void:
             results.remove_child(child)
             child.queue_free()
         var cat: String = "" if category.selected == 0 else RecipeMath.CATEGORY_IDS[category.selected-1]
-        var matches: Array = RecipeSuggest.recommend(recipes, budget, [0.5,1.0,1.5,2.0][portion.selected], cat)
+        var matches: Array = RecipeSuggest.recommend(recipes, budget, [0.5,1.0,1.5,2.0,0.0][portion.selected], cat)
         _label(results, "Подходит: " + str(matches.size()) + " · показано до 20", 12, MUTED)
         if matches.is_empty():
             _label(results, "Нет блюд, совпадающих со всеми выбранными условиями. Можно открыть обычный каталог или изменить категорию и размер порции.", 13, INK)

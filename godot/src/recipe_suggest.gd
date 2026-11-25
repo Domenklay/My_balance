@@ -11,7 +11,7 @@ static func remaining(target_kcal: float, consumed_kcal: float, targets: Diction
 
 static func recommend(recipes: Array, budget: Dictionary, factor: float = 1.0, category: String = "") -> Array:
     var found: Array = []
-    if float(budget.get("kcal", 0)) <= 0 or factor not in [0.5, 1.0, 1.5, 2.0]:
+    if float(budget.get("kcal", 0)) <= 0 or factor not in [0.0, 0.5, 1.0, 1.5, 2.0]:
         return found
     for recipe in recipes:
         if not RecipeMath.validate_recipe(recipe):
@@ -19,7 +19,19 @@ static func recommend(recipes: Array, budget: Dictionary, factor: float = 1.0, c
         if not category.is_empty() and recipe.get("category", "other") != category:
             continue
         var metrics = RecipeMath.calculate(recipe["ingredients"], float(recipe["cooked_weight"]))
-        var grams = roundf(float(recipe["cooked_weight"]) / float(recipe["servings"]) * factor)
+        var normal_grams = float(recipe["cooked_weight"]) / float(recipe["servings"])
+        var grams = roundf(normal_grams * factor)
+        if factor == 0.0:
+            # Auto mode: largest whole-gram portion within explicit targets,
+            # never larger than a normal serving or the existing 5000 g limit.
+            var limit = minf(normal_grams, 5000.0)
+            for key in ["kcal", "p", "f", "c"]:
+                if budget.has(key) and float(metrics[key]) > 0.0:
+                    limit = minf(limit, maxf(0.0, float(budget[key])) * 100.0 / float(metrics[key]))
+            grams = floorf(limit)
+            # Avoid suggesting impractically tiny portions.
+            if grams < 25.0:
+                continue
         if grams < 1 or grams > 5000:
             continue
         var portion = RecipeMath.portion(str(recipe["name"]), metrics, grams)

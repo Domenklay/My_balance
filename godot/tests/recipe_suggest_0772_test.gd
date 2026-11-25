@@ -25,6 +25,22 @@ func _run() -> void:
     if not Suggest.recommend(all, {"kcal":0}, 0.5).is_empty():
         _fail("zero budget must not invent a target")
         return
+    var sample = {"id":"auto_test","name":"Тест","category":"mains","servings":2,"cooked_weight":400,
+        "ingredients":[{"name":"Тест","grams":400,"kcal":200,"p":10,"f":5,"c":20}]}
+    var auto = Suggest.recommend([sample], {"kcal":180,"p":8}, 0.0)
+    if auto.size() != 1 or float(auto[0]["grams"]) != 80.0 or float(auto[0]["portion"]["kcal"]) != 160.0:
+        _fail("auto portion must fit the strictest explicit target")
+        return
+    if not Suggest.recommend([sample], {"kcal":40}, 0.0).is_empty():
+        _fail("auto mode must not suggest portions under 25 g")
+        return
+    var full = Suggest.recommend([sample], {"kcal":2000}, 0.0)
+    if full.size() != 1 or float(full[0]["grams"]) != 200.0:
+        _fail("auto portion must not exceed one normal serving")
+        return
+    if not Suggest.recommend([sample], {"kcal":500,"f":0}, 0.0).is_empty():
+        _fail("auto mode must respect an exhausted configured macro")
+        return
     var without_macros = Suggest.recommend(all, {"kcal":500}, 1.0, "soups")
     if without_macros.is_empty():
         _fail("optional macro goals or category")
@@ -56,6 +72,16 @@ func _run() -> void:
     await process_frame
     if app.find_child("SuggestResults", true, false) == null or JSON.stringify(app.store.data) != before:
         _fail("suggestions missing or mutated diary")
+        return
+    var portion_mode = app.find_child("SuggestPortion",true,false) as OptionButton
+    if portion_mode == null or portion_mode.item_count != 5:
+        _fail("auto portion mode missing")
+        return
+    portion_mode.select(4)
+    portion_mode.item_selected.emit(4)
+    await process_frame
+    if JSON.stringify(app.store.data) != before:
+        _fail("auto portion selection mutated diary")
         return
     var results = app.find_child("SuggestResults",true,false)
     var choice: Button = null
