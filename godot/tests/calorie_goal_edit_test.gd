@@ -110,7 +110,7 @@ func _run() -> void:
     app.tab = "profile"
     app._render()
     await process_frame
-    var profile_edit = _button(app, "✎ Изменить норму калорий")
+    var profile_edit = app.find_child("ProfileEditCalorieGoal", true, false) as Button
     if profile_edit == null:
         _fail("profile missing direct calorie edit action")
         return

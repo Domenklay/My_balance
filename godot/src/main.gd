@@ -1907,6 +1907,7 @@ func _show_profile() -> void:
     kcal_button.custom_minimum_size.y = 42
     kcal_button.clip_text = true
     kcal_button.tooltip_text = "Изменить норму калорий"
+    kcal_button.name = "ProfileEditCalorieGoal"
     var macro_button = _button(goals_row, "Нормы БЖУ", func(): _show_macro_goal_editor(), true)
     macro_button.custom_minimum_size.y = 42
     macro_button.clip_text = true
