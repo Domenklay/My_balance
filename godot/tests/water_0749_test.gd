@@ -115,6 +115,9 @@ func _run() -> void:
         _fail("water shortcut does not update day")
         return
     var show = app.find_child("WaterDetailsToggle", true, false) as Button
+    if show == null or show.get_parent() != app.find_child("WaterDailyAmount", true, false).get_parent():
+        _fail("water details must share compact header")
+        return
     show.pressed.emit()
     await process_frame
     var amount = app.find_child("WaterCustomAmount", true, false) as SpinBox

@@ -178,7 +178,7 @@ func _run() -> void:
     await process_frame
     if app.tab != "planner" or app.find_child("PlannerWeekDates", true, false) == null or \
             app.find_child("PlannerAddRecipe", true, false) == null or \
-            app.find_child("PlannerShoppingCount", true, false) == null:
+            app.find_child("PlannerView_shopping", true, false) == null:
         _fail("weekly planner screen missing buttons or shopping section")
         return
     (app.find_child("PlannerAddRecipe", true, false) as Button).pressed.emit()
@@ -197,13 +197,18 @@ func _run() -> void:
     await process_frame
     if app.store.planned_meals_on(monday).size() != 1 or \
             app.find_child("PlannerApplyDay", true, false) == null or \
-            app.find_child("PlannerBuy_0", true, false) == null:
+            app.find_child("PlannerBuy_0", true, false) != null:
         _fail("planner form did not create day plan and shopping list")
         return
     var macro_label = app.find_child("PlannerDayMacros", true, false) as Label
     var remaining_label = app.find_child("PlannerRemainingCalories", true, false) as Label
-    if macro_label == null or not macro_label.text.contains("17.8") or remaining_label == null or app.find_child("PlannerCopyShopping", true, false) == null:
+    if macro_label == null or not macro_label.text.contains("17.8") or remaining_label == null:
         _fail("new nutrition summary or shopping copy missing")
+        return
+    (app.find_child("PlannerView_shopping", true, false) as Button).pressed.emit()
+    await process_frame
+    if app.find_child("PlannerShoppingCount", true, false) == null or app.find_child("PlannerCopyShopping", true, false) == null or app.find_child("PlannerBuy_0", true, false) == null or app.find_child("PlannerAddRecipe", true, false) != null:
+        _fail("shopping tab must show shopping without menu controls")
         return
     (app.find_child("PlannerBuy_0", true, false) as Button).pressed.emit()
     await process_frame
@@ -216,6 +221,11 @@ func _run() -> void:
         return
     if app.store.data["shopping_checked"].is_empty():
         _fail("shopping checklist tap does not persist")
+        return
+    (app.find_child("PlannerView_menu", true, false) as Button).pressed.emit()
+    await process_frame
+    if app.find_child("PlannerApplyDay", true, false) == null or app.find_child("PlannerShoppingCount", true, false) != null:
+        _fail("menu tab did not restore planned day")
         return
     (app.find_child("PlannerApplyDay", true, false) as Button).pressed.emit()
     await process_frame

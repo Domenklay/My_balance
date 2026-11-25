@@ -5,6 +5,12 @@ static func english() -> Translation:
     var result = Translation.new()
     result.locale = "en"
     var messages = {
+        "Подсчёт после включения; при остановке возможны пропуски.": "Counts after activation; stopping may cause gaps.",
+        "Рецепты с расчётом КБЖУ": "Recipes with nutrition estimates",
+        "По остаткам КБЖУ": "Remaining macros",
+        "Меню и список покупок на выбранную неделю.": "Menu and shopping list for the selected week.",
+        "Покупки": "Shopping",
+        "Меню": "Menu",
         "Мой баланс": "My Balance",
         "Забота о себе каждый день": "Take care of yourself every day",
         "День": "Day",

@@ -36,7 +36,7 @@ func _run() -> void:
         if card == null or details == null or toggle == null or details.visible:
             _fail("settings should be collapsed by default: " + section)
             return
-        if toggle.custom_minimum_size.y < 40:
+        if toggle.icon == null or toggle.custom_minimum_size.y < 40:
             _fail("undersized section toggle: " + section)
             return
     var settings_search = app.find_child("SettingsSearch", true, false) as LineEdit

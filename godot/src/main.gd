@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.80"
+const APP_VERSION = "0.7.81"
 const ProgressPhotos = preload("res://src/progress_photos.gd")
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
@@ -142,6 +142,7 @@ var google_file_id: String = ""
 var google_modified: String = ""
 var google_busy: bool = false
 var planner_day: String = ""
+var planner_view: String = "menu"
 var shopping_expanded: bool = false
 var shopping_filter: int = 0
 var stats_period: String = "week"
@@ -1778,7 +1779,7 @@ func _show_profile() -> void:
     var profile: Dictionary = store.data.get("profile", {})
     var hero = _card("", "hero")
     hero.get_parent().name = "ProfileHero"
-    _compact_card(hero, 12, 7)
+    _compact_card(hero, 9, 5)
     var intro = _row(hero)
     var badge = PanelContainer.new()
     badge.name = "ProfileAvatarFrame"
@@ -1886,7 +1887,7 @@ func _show_profile() -> void:
     measure_link.clip_text = true
     var overview = _card("Мои данные и цели")
     overview.get_parent().name = "ProfilePersonalSummary"
-    _compact_card(overview, 12, 7)
+    _compact_card(overview, 9, 5)
     var personal: Dictionary = settings.get("personal", {})
     if personal.is_empty():
         _label(overview, "Анкета ещё не заполнена. Укажи рост, возраст, вес и уровень активности.", 12, MUTED)
@@ -1899,11 +1900,16 @@ func _show_profile() -> void:
     _label(overview, str(roundi(float(settings["kcal"]))) +
         " ккал в сутки · Изменение с начала: " +
         ("+" if change > 0.0 else "") + str(snappedf(change, 0.1)) + " кг", 13, INK)
-    var kcal_button = _button(overview, "✎ Изменить норму калорий",
+    var goals_row = _row(overview)
+    goals_row.name = "ProfileGoalActions"
+    var kcal_button = _button(goals_row, "✎ Изменить норму калорий",
         func(): _show_calorie_goal_editor(), true)
-    kcal_button.custom_minimum_size.y = 39
-    var macro_button = _button(overview, "Нормы БЖУ", func(): _show_macro_goal_editor(), true)
-    macro_button.custom_minimum_size.y = 39
+    kcal_button.custom_minimum_size.y = 42
+    kcal_button.clip_text = true
+    kcal_button.tooltip_text = "Изменить норму калорий"
+    var macro_button = _button(goals_row, "Нормы БЖУ", func(): _show_macro_goal_editor(), true)
+    macro_button.custom_minimum_size.y = 42
+    macro_button.clip_text = true
 
     var summary: Dictionary = store.reward_summary()
     var awards = _card("Звёзды и награды", "tint")
@@ -3111,8 +3117,8 @@ func _ready_recipe_photo_credit(recipe: Dictionary) -> Dictionary:
 
 func _show_ready_recipes() -> void:
     var intro = _card("Готовые рецепты", "hero")
-    _compact_card(intro, 10, 6)
-    _label(intro, "Открытая кулинарная книга и рецепты редакции", 12, HERO_MUTED)
+    _compact_card(intro, 8, 4)
+    _label(intro, "Рецепты с расчётом КБЖУ", 12, HERO_MUTED)
     var shortcuts = _row(intro)
     _button(shortcuts, "Мои рецепты", func():
         ready_recipes_open = false
@@ -3124,10 +3130,15 @@ func _show_ready_recipes() -> void:
         ready_recipes_open = false
         _begin_recipe_editor()
     )
-    var suggest = _button(intro, "Подобрать по остаткам КБЖУ", func(): _recipe_suggest_sheet(date), true)
+    var tools = _row(intro)
+    tools.name = "ReadyRecipeTools"
+    var suggest = _button(tools, "По остаткам КБЖУ", func(): _recipe_suggest_sheet(date), true)
+    suggest.clip_text = true
+    suggest.tooltip_text = "Подобрать по остаткам КБЖУ"
     suggest.name = "ReadyRecipeSuggest"
     suggest.custom_minimum_size.y = 38
-    var pantry = _button(intro, "Что есть дома?", func(): _pantry_sheet(), true)
+    var pantry = _button(tools, "Что есть дома?", func(): _pantry_sheet(), true)
+    pantry.clip_text = true
     pantry.name = "ReadyRecipePantry"
     pantry.custom_minimum_size.y = 38
     var filters = _card("")
@@ -3981,7 +3992,7 @@ func _show_water_card() -> void:
     var info: Dictionary = store.day_water_summary(date)
     var water_card = _card("", "plain")
     water_card.get_parent().name = "DayWaterCard"
-    _compact_card(water_card, 10, 6)
+    _compact_card(water_card, 8, 4)
     var water_bg = Color("#203E50") if DARK_MODE else Color("#E6F4F8")
     var water_ink = Color("#BDEDF5") if DARK_MODE else Color("#245D71")
     var water_button_bg = Color("#31596E") if DARK_MODE else Color("#D2EAF2")
@@ -3996,9 +4007,18 @@ func _show_water_card() -> void:
     amount_label.name = "WaterDailyAmount"
     # _nowrap uses ellipsis and has no intrinsic minimum; reserve width so
     # the current ml / goal never disappears on a narrow phone screen.
-    amount_label.custom_minimum_size.x = 145
+    amount_label.custom_minimum_size.x = 128
     amount_label.size_flags_horizontal = Control.SIZE_SHRINK_END
     amount_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+    var expanded = _button(heading, "▴" if water_details_expanded else "⋯", func():
+        water_details_expanded = not water_details_expanded
+        _render()
+    , true)
+    expanded.name = "WaterDetailsToggle"
+    expanded.tooltip_text = "Своя порция, цель и история"
+    expanded.size_flags_horizontal = Control.SIZE_SHRINK_END
+    expanded.custom_minimum_size = Vector2(42, 40)
+    _semantic_button(expanded, water_button_bg, water_ink)
     var water_progress = ProgressBar.new()
     water_progress.name = "WaterDailyProgress"
     water_progress.min_value = 0
@@ -4037,16 +4057,6 @@ func _show_water_card() -> void:
         _semantic_button(button, water_button_bg, water_ink)
         button.custom_minimum_size.y = 41
         button.add_theme_font_size_override("font_size", 12)
-    var expanded = _button(water_card,
-        "▴ Скрыть воду" if water_details_expanded else
-        "▾ Своя порция, цель и история", func():
-            water_details_expanded = not water_details_expanded
-            _render()
-    , true)
-    expanded.name = "WaterDetailsToggle"
-    _semantic_button(expanded, water_button_bg, water_ink)
-    expanded.custom_minimum_size.y = 37
-    expanded.add_theme_font_size_override("font_size", 12)
     if not water_details_expanded:
         return
     _label(water_card, "Добавить свою порцию", 13, INK)
@@ -4116,6 +4126,7 @@ func _show_water_card() -> void:
 
 func _open_week_planner() -> void:
     planner_day = date
+    planner_view = "menu"
     shopping_expanded = false
     shopping_filter = 0
     _meal_entry_locked = false
@@ -4258,8 +4269,8 @@ func _show_week_planner() -> void:
     var first: String = str(week[0])
     var last: String = str(week[6])
     var header = _card("План питания на неделю", "hero")
-    _compact_card(header, 12, 8)
-    _label(header, "Сначала запланируй блюда, затем перенеси выбранный день в дневник.", 12, HERO_MUTED)
+    _compact_card(header, 9, 5)
+    _label(header, "Меню и список покупок на выбранную неделю.", 12, HERO_MUTED)
     var navigation = _row(header)
     var previous = _button(navigation, "‹", func(): _planner_shift_week(-1), true)
     previous.name = "PlannerPreviousWeek"
@@ -4278,6 +4289,20 @@ func _show_week_planner() -> void:
     today.name = "PlannerCurrentWeek"
     var back = _button(shortcuts, "← Дневник", func(): _navigate_to_tab("day"), true)
     back.name = "PlannerBackToDay"
+    var sections = _row(header)
+    sections.name = "PlannerViewTabs"
+    for item in [["menu", "Меню"], ["shopping", "Покупки"]]:
+        var view: String = str(item[0])
+        var action = _button(sections, str(item[1]), func():
+            planner_view = view
+            _render(true)
+        , view != planner_view)
+        action.name = "PlannerView_" + view
+        action.custom_minimum_size.y = 42
+        action.clip_text = true
+    if planner_view == "shopping":
+        _show_planner_shopping()
+        return
 
     var grid_card = _card("Выбери день")
     _compact_card(grid_card, 9, 7)
@@ -4366,6 +4391,7 @@ func _show_week_planner() -> void:
         , true)
         open_diary.name = "PlannerOpenDiary"
 
+func _show_planner_shopping() -> void:
     var extra_shopping = _card("Покупки из подбора рецептов")
     _compact_card(extra_shopping,10,5)
     _label(extra_shopping,"Список по названиям, без автоматического расчёта количества.",11,MUTED)
@@ -6905,7 +6931,7 @@ func _step_status_text() -> String:
 func _show_activity() -> void:
     var overview = _card("Движение за день")
     overview.name = "SportOverviewCard"
-    _compact_card(overview, 12, 8)
+    _compact_card(overview, 9, 5)
     _date_nav(overview)
     if calendar_expanded:
         _calendar(overview)
@@ -6943,7 +6969,7 @@ func _show_activity() -> void:
     auto.disabled = store.automatic_steps(date) == 0
     if steps_plugin != null and not steps_status.get("permission",false):
         _button(automatic,"Разрешения Android",func(): steps_plugin.openStepSettings(),true)
-    _label(automatic,"Считаются шаги после включения. После остановки или перезапуска службы возможны пропуски. Ручной ввод заменяет автоитог выбранного дня.",11,MUTED)
+    _label(automatic,"Подсчёт после включения; при остановке возможны пропуски.",11,MUTED)
     var manual = _card("Ручной ввод шагов")
     manual.name = "SportManualCard"
     _compact_card(manual, 10, 6)
@@ -7408,6 +7434,13 @@ func _show_progress() -> void:
             for state in ["normal", "hover", "pressed"]:
                 action.add_theme_stylebox_override(state, selected)
             action.add_theme_color_override("font_color", WHITE)
+    var progress_data: Dictionary = ProfileProgressScript.summarize(store.data["settings"], store.data["weights"])
+    if bool(progress_data["has_records"]):
+        var summary_row = _row(card)
+        summary_row.name = "ProgressQuickSummary"
+        var change: float = float(progress_data["change"])
+        _label(summary_row, "Вес: " + str(snappedf(float(progress_data["latest"]), 0.1)) + " кг", 13, INK).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        _label(summary_row, "От старта: " + ("+" if change > 0 else "") + str(snappedf(change, 0.1)) + " кг", 12, MUTED)
     if progress_section == "stats":
         _show_stats()
     elif progress_section == "body":
@@ -8015,6 +8048,10 @@ func _settings_section(title: String, section: String, summary: String) -> VBoxC
     toggle.name = "SettingsSectionToggle_" + section
     toggle.custom_minimum_size.y = 44
     toggle.alignment = HORIZONTAL_ALIGNMENT_LEFT
+    var icons = {"language":"search", "appearance":"profile", "google":"stats", "reminders":"day", "backup":"recipes", "personal":"weight", "shares":"day", "android_widgets":"activity", "products":"search"}
+    toggle.icon = NAV_TEXTURES.get(str(icons.get(section, "profile")))
+    toggle.expand_icon = true
+    toggle.add_theme_constant_override("icon_max_width", 22)
     if not expanded:
         var caption = _label(card, summary, 12, MUTED)
         caption.name = "SettingsSectionSummary_" + section
