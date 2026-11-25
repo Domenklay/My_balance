@@ -18,8 +18,9 @@ func _run() -> void:
     var settings = app.find_child("ProfileSettingsShortcut", true, false) as Button
     var questionnaire = app.find_child("ProfileQuestionnaire", true, false) as Button
     var system_card = app.find_child("ProfileSystemSettings", true, false)
-    if settings == null or questionnaire == null or system_card != app.body.get_child(-1):
-        _fail("questionnaire or bottom settings missing")
+    var rewards = app.find_child("ProfileRewardsCard", true, false)
+    if settings == null or questionnaire == null or system_card == null or rewards == null or system_card.get_parent() != app.body or system_card.get_index() >= rewards.get_index():
+        _fail("questionnaire or accessible settings above rewards missing")
         return
     questionnaire.pressed.emit()
     await process_frame
@@ -61,5 +62,5 @@ func _run() -> void:
         _fail("legacy language migration")
         return
     app.queue_free()
-    print("PASS PROFILE SYSTEM: questionnaire, bottom settings, language, legacy and starting weight")
+    print("PASS PROFILE SYSTEM: questionnaire, accessible settings, language, legacy and starting weight")
     quit(0)

@@ -134,6 +134,11 @@ func _run() -> void:
     app._meal_entry_date = "2026-11-21"
     app._quick_food_sheet(egg)
     await process_frame
+    var locked_meal = app.find_child("QuickPortionMeal", true, false) as OptionButton
+    var meal_caption = app.find_child("QuickPortionMealCaption", true, false) as Label
+    if locked_meal == null or locked_meal.visible or meal_caption == null or not meal_caption.text.contains("Обед"):
+        _fail("locked meal should be a readable caption, not a disabled selector")
+        return
     var sheet = app.get_node_or_null("ProductSheet")
     var selected: OptionButton = sheet.find_child("QuickPortionMeasure", true, false) if sheet != null else null
     var quantity: SpinBox = sheet.find_child("QuickPortionQuantity", true, false) if sheet != null else null

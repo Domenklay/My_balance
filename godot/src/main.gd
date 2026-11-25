@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.85"
+const APP_VERSION = "0.7.86"
 const ProgressPhotos = preload("res://src/progress_photos.gd")
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
@@ -6106,9 +6106,11 @@ func _quick_food_sheet(food: Dictionary, from_barcode: bool = false,
     quantity.value_changed.connect(refresh)
     refresh.call(quantity.value)
 
-    _label(fields, "Приём пищи", 13, MUTED)
+    var meal_caption = _label(fields, "Приём пищи: " + selected_meal if _meal_entry_locked else "Приём пищи", 13, MUTED)
+    meal_caption.name = "QuickPortionMealCaption"
     var meal = _choice(fields, ["Завтрак", "Обед", "Перекус", "Ужин"])
     meal.name = "QuickPortionMeal"
+    meal.visible = not _meal_entry_locked
     meal.disabled = _meal_entry_locked
     var initial_meal = ["Завтрак", "Обед", "Перекус", "Ужин"].find(selected_meal)
     if initial_meal >= 0:
@@ -7787,9 +7789,22 @@ func _show_weight() -> void:
     var weight_targets = _row(card)
     _catalog_nutrient(weight_targets, "Старт, кг", float(settings["start"]), CARBS_BG, MACRO_CARBS)
     _catalog_nutrient(weight_targets, "Цель, кг", float(settings["goal"]), PROTEIN_BG, MACRO_PROTEIN)
-    var value = _number(card, store.weight_prefill(date), 20, 400, 0.1)
+    var weight_row = _row(card)
+    weight_row.name = "WeightEntryRow"
+    weight_row.add_theme_constant_override("separation", 5)
+    var value = _number(weight_row, store.weight_prefill(date), 20, 400, 0.1)
     value.name = "WeightEntryValue"
-    _label(card, "Предложен последний измеренный вес на выбранную дату. Измени его перед сохранением.", 12, MUTED)
+    value.get_line_edit().virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER_DECIMAL
+    for delta in [-0.1, 0.1]:
+        var step: float = delta
+        var adjust = _button(weight_row, "−0,1" if step < 0 else "+0,1", func():
+            value.value = clampf(snappedf(value.value + step, 0.1), 20.0, 400.0)
+        , true)
+        adjust.name = "WeightQuickMinus" if step < 0 else "WeightQuickPlus"
+        adjust.custom_minimum_size = Vector2(62, 44)
+        adjust.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+    weight_row.move_child(weight_row.get_node("WeightQuickMinus"), 0)
+    _label(card, "Вес, кг · последнее измерение можно изменить.", 12, MUTED)
     _button(card, "Записать вес", func():
         if store.save_weight_entry(date, value.value):
             _render()

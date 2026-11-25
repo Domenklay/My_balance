@@ -100,6 +100,22 @@ func _run() -> void:
     if app.tab != "weight" or _find_button(app, "Записать вес") == null:
         _fail("quick weight action stopped navigating")
         return
+    var weight_field = app.find_child("WeightEntryValue", true, false) as SpinBox
+    var plus = app.find_child("WeightQuickPlus", true, false) as Button
+    var minus = app.find_child("WeightQuickMinus", true, false) as Button
+    if weight_field == null or plus == null or minus == null:
+        _fail("quick weight adjustments missing")
+        return
+    var weight_before = JSON.stringify(app.store.data)
+    weight_field.value = 80.0
+    plus.pressed.emit()
+    if not is_equal_approx(weight_field.value, 80.1):
+        _fail("quick weight increase failed")
+        return
+    minus.pressed.emit()
+    if not is_equal_approx(weight_field.value, 80.0) or JSON.stringify(app.store.data) != weight_before:
+        _fail("quick weight adjustment saved without confirmation")
+        return
     app._navigate_to_tab("profile")
     await process_frame
     _find_button(app, "⚙ Настройки").pressed.emit()
