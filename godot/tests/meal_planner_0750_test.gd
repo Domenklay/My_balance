@@ -48,6 +48,10 @@ func _run() -> void:
             store.day_entries(monday).size() != 0:
         _fail("planned Kcal wrong or plan improperly logged into actual diary")
         return
+    var totals: Dictionary = PlanMath.nutrition_totals(monday_items)
+    if not is_equal_approx(float(totals["kcal"]), calories) or absf(float(totals["p"]) - (17.8 + float(food["p"]))) > 0.01:
+        _fail("planned nutrition summary does not reflect serving sizes")
+        return
     var shopping: Array = store.week_planned_shopping(monday)
     if shopping.size() < 2:
         _fail("ingredient shopping list did not merge same ingredient")
@@ -80,6 +84,14 @@ func _run() -> void:
             store.week_planned_shopping(monday).filter(
                 func(item): return item["key"] == key and item["bought"]).size() != 1:
         _fail("shopping checklist not saved")
+        return
+    var checked_list: Array = store.week_planned_shopping(monday)
+    if PlanMath.filter_shopping(checked_list, 2).size() != 1 or PlanMath.filter_shopping(checked_list, 1).size() != checked_list.size() - 1:
+        _fail("shopping filter does not respect checked status")
+        return
+    var copied: String = PlanMath.shopping_text(checked_list, ["Чай"])
+    if copied.contains("Молоко —") or not copied.contains("Чай") or not copied.contains("Овсяные хлопья"):
+        _fail("copied shopping list includes purchased items or omits remaining items")
         return
     if store.toggle_shopping_item(monday, "unknown|г"):
         _fail("shopping toggled an ingredient absent from the week")
@@ -188,8 +200,20 @@ func _run() -> void:
             app.find_child("PlannerBuy_0", true, false) == null:
         _fail("planner form did not create day plan and shopping list")
         return
+    var macro_label = app.find_child("PlannerDayMacros", true, false) as Label
+    var remaining_label = app.find_child("PlannerRemainingCalories", true, false) as Label
+    if macro_label == null or not macro_label.text.contains("17.8") or remaining_label == null or app.find_child("PlannerCopyShopping", true, false) == null:
+        _fail("new nutrition summary or shopping copy missing")
+        return
     (app.find_child("PlannerBuy_0", true, false) as Button).pressed.emit()
     await process_frame
+    var filter = app.find_child("PlannerShoppingFilter", true, false) as OptionButton
+    filter.select(2)
+    filter.item_selected.emit(2)
+    await process_frame
+    if app.find_child("PlannerBuy_0", true, false) == null or app.find_child("PlannerBuy_1", true, false) != null:
+        _fail("purchased-only UI filter failed")
+        return
     if app.store.data["shopping_checked"].is_empty():
         _fail("shopping checklist tap does not persist")
         return

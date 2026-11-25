@@ -113,6 +113,35 @@ static func item_kcal(item: Dictionary) -> float:
     return float(item["nutrition"]["kcal"]) * float(item["grams"]) / 100.0
 
 
+static func nutrition_totals(items: Array) -> Dictionary:
+    var totals: Dictionary = {"kcal":0.0, "p":0.0, "f":0.0, "c":0.0}
+    for item in items:
+        if not valid_item(item):
+            continue
+        var factor: float = float(item["grams"]) / 100.0
+        for nutrient in NUTRIENTS:
+            totals[nutrient] += float(item["nutrition"][nutrient]) * factor
+    return totals
+
+
+# Presentation only; neither filtering nor copying mutates the checklist.
+static func filter_shopping(items: Array, mode: int) -> Array:
+    return items.filter(func(item):
+        return mode == 0 or bool(item["bought"]) == (mode == 2))
+
+
+static func shopping_text(items: Array, extra: Array) -> String:
+    var lines: PackedStringArray = ["Список покупок"]
+    for item in filter_shopping(items, 1):
+        lines.append("☐ " + str(item["name"]) + " — " + str(snappedf(float(item["grams"]), 0.1)) + " " + str(item["unit"]))
+    if not extra.is_empty():
+        lines.append("")
+        lines.append("Дополнительные покупки (без количества):")
+        for title in extra:
+            lines.append("☐ " + str(title))
+    return "\n".join(lines)
+
+
 static func items_for_day(items: Array, day: String) -> Array:
     var out: Array = []
     for item in items:

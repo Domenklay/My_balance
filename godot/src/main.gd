@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.77.3"
+const APP_VERSION = "0.7.78"
 const ProgressPhotos = preload("res://src/progress_photos.gd")
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
@@ -142,6 +142,7 @@ var google_modified: String = ""
 var google_busy: bool = false
 var planner_day: String = ""
 var shopping_expanded: bool = false
+var shopping_filter: int = 0
 var stats_period: String = "week"
 var stats_anchor: String = ""
 var month_shown: String = ""
@@ -4083,6 +4084,7 @@ func _show_water_card() -> void:
 func _open_week_planner() -> void:
     planner_day = date
     shopping_expanded = false
+    shopping_filter = 0
     _meal_entry_locked = false
     _meal_entry_date = ""
     tab = "planner"
@@ -4270,6 +4272,13 @@ func _show_week_planner() -> void:
         str(roundi(float(store.data["settings"]["kcal"]))) + \
         " ккал дневной ориентир", 14, TEXT_ACCENT)
     daily_total.name = "PlannerDayCalories"
+    var records: Array = store.planned_meals_on(planner_day)
+    var nutrition: Dictionary = MealPlannerScript.nutrition_totals(records)
+    var macros = _label(day_card, "Б " + str(snappedf(float(nutrition["p"]), 0.1)) + " г · Ж " + str(snappedf(float(nutrition["f"]), 0.1)) + " г · У " + str(snappedf(float(nutrition["c"]), 0.1)) + " г", 13, INK)
+    macros.name = "PlannerDayMacros"
+    var remainder: float = float(store.data["settings"]["kcal"]) - total
+    var remaining = _label(day_card, ("Осталось запланировать: " if remainder >= 0 else "Сверх дневного ориентира: ") + str(roundi(absf(remainder))) + " ккал", 12, TEXT_ACCENT if remainder >= 0 else MUTED)
+    remaining.name = "PlannerRemainingCalories"
     _label(day_card, "Калории плана не учитываются в дневнике до переноса.", 11, MUTED)
     var add_row = _row(day_card)
     var recipe_button = _button(add_row, "+ Рецепт", func(): _planner_add_sheet("recipe"), true)
@@ -4278,7 +4287,6 @@ func _show_week_planner() -> void:
     var food_button = _button(add_row, "+ Продукт", func(): _planner_add_sheet("food"), true)
     food_button.name = "PlannerAddFood"
     food_button.custom_minimum_size.y = 41
-    var records: Array = store.planned_meals_on(planner_day)
     for meal in MealPlannerScript.MEALS:
         var meal_items: Array = records.filter(func(item):
             return str(item["meal"]) == str(meal))
@@ -4287,7 +4295,10 @@ func _show_week_planner() -> void:
         meal_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
         meal_col.add_theme_constant_override("separation", 5)
         meal_box.add_child(meal_col)
-        _label(meal_col, str(meal) + " · " + str(meal_items.size()) + " блюд", 13, INK)
+        var meal_total: Dictionary = MealPlannerScript.nutrition_totals(meal_items)
+        _label(meal_col, str(meal) + " · " + str(roundi(float(meal_total["kcal"]))) + " ккал", 13, INK).name = "PlannerMealTotal_" + str(MealPlannerScript.MEALS.find(meal))
+        if meal_items.is_empty():
+            _label(meal_col, "Пока ничего не запланировано", 11, MUTED)
         for item in meal_items:
             var row = _row(meal_col)
             var amount: String = str(snappedf(float(item["grams"]), 0.1)) + " " + \
@@ -4354,9 +4365,25 @@ func _show_week_planner() -> void:
     _label(shopping, "Одинаковые ингредиенты объединены. Граммы и миллилитры считаются отдельно.", 11, MUTED)
     if shopping_items.is_empty():
         _label(shopping, "Добавь блюда — ингредиенты появятся здесь.", 12, MUTED)
-    var max_visible: int = shopping_items.size() if shopping_expanded else mini(shopping_items.size(), 14)
+    var filters = _choice(shopping, ["Все продукты", "Осталось купить", "Куплено"])
+    filters.name = "PlannerShoppingFilter"
+    filters.select(shopping_filter)
+    filters.item_selected.connect(func(index: int):
+        shopping_filter = index
+        shopping_expanded = false
+        _render())
+    var visible_items: Array = MealPlannerScript.filter_shopping(shopping_items, shopping_filter)
+    if visible_items.is_empty() and not shopping_items.is_empty():
+        _label(shopping, "В этой категории пока нет продуктов.", 12, MUTED)
+    var copy = _button(shopping, "Скопировать список покупок", func():
+        DisplayServer.clipboard_set(MealPlannerScript.shopping_text(shopping_items, extra_items))
+        _notify_saved("Список покупок скопирован")
+    , true)
+    copy.name = "PlannerCopyShopping"
+    copy.disabled = purchased == shopping_items.size() and extra_items.is_empty()
+    var max_visible: int = visible_items.size() if shopping_expanded else mini(visible_items.size(), 14)
     for index in range(max_visible):
-        var item: Dictionary = shopping_items[index]
+        var item: Dictionary = visible_items[index]
         var shopping_row = _soft_list_row(shopping)
         var item_key: String = str(item["key"])
         var bought: bool = bool(item["bought"])
@@ -4374,10 +4401,10 @@ func _show_week_planner() -> void:
             str(snappedf(float(item["grams"]), 0.1)) + " " + str(item["unit"]), 13,
             MUTED if bought else INK)
         caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    if shopping_items.size() > 14:
+    if visible_items.size() > 14:
         var expand = _button(shopping,
             "Свернуть список" if shopping_expanded else
-            "Показать все (" + str(shopping_items.size()) + ")", func():
+            "Показать все (" + str(visible_items.size()) + ")", func():
                 shopping_expanded = not shopping_expanded
                 _render()
         , true)
