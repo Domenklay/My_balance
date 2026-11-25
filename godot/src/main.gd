@@ -38,7 +38,7 @@ const NAV_TEXTURES = {
     "profile": preload("res://assets/nav/profile.svg")
 }
 # Keep the UI version tied to the Android export by regression test.
-const APP_VERSION = "0.7.78.1"
+const APP_VERSION = "0.7.79"
 const ProgressPhotos = preload("res://src/progress_photos.gd")
 const LabelOcr = preload("res://src/label_ocr.gd")
 const PantryMath = preload("res://src/pantry_math.gd")
@@ -120,6 +120,7 @@ var progress_section: String = "weight"
 var progress_photos: RefCounted
 var progress_photo_plugin: Object = null
 var progress_photo_pending: bool = false
+var progress_backup_pending: bool = false
 var progress_photo_date: String = ""
 var progress_photo_limit: int = 6
 var selected_body_metric: String = "waist"
@@ -461,6 +462,7 @@ func _ready() -> void:
         progress_photo_plugin.connect("progress_photo",Callable(self,"_on_progress_photo"))
         progress_photo_plugin.connect("progress_photo_error",Callable(self,"_on_progress_photo_error"))
         progress_photo_plugin.connect("progress_photo_cancelled",Callable(self,"_on_progress_photo_cancelled"))
+        progress_photo_plugin.connect("progress_backup_result",Callable(self,"_on_progress_backup_result"))
     progress_photos = ProgressPhotos.new(private_photos_path)
     background_rect = ColorRect.new()
     background_rect.color = BACKGROUND
@@ -7106,7 +7108,7 @@ func _photo_measurements(parent: Node, record: Dictionary) -> void:
 func _show_progress_photos() -> void:
     var header = _card("Фото прогресса")
     _compact_card(header,10,6)
-    _label(header,"Личная галерея. Фото не входят в резервные копии дневника и не отправляются на сервер. При удалении приложения снимки могут быть потеряны.",12,MUTED)
+    _label(header,"Личная галерея. Фото не входят в резервные копии дневника и не отправляются на сервер. Сохрани отдельную копию перед удалением приложения.",12,MUTED)
     _label(header,"Дата нового снимка",13,INK)
     _date_nav(header)
     if calendar_expanded:
@@ -7124,6 +7126,8 @@ func _show_progress_photos() -> void:
         return
     var records: Array = progress_photos.list()
     _label(header,str(records.size()) + " из " + str(ProgressPhotos.MAX_PHOTOS) + " снимков",12,MUTED)
+    var backup = _button(header, "Резервная копия фотографий", func(): _progress_backup_sheet(), true)
+    backup.name = "ProgressPhotoBackup"
     var compare = _button(header,"Сравнить два снимка",func(): _progress_compare_sheet(records),true)
     compare.name = "ProgressPhotoCompare"
     compare.disabled = records.size()<2
@@ -7151,6 +7155,84 @@ func _show_progress_photos() -> void:
             progress_photo_limit += 6
             _render()
         ,true).name = "ProgressPhotoMore"
+
+func _progress_backup_sheet() -> void:
+    var sheet = _mobile_sheet("Копия галереи", "Фотографии, даты, вес и замеры на момент снимка", "Закрыть", 420.0)
+    var fields: VBoxContainer = sheet["fields"]
+    _label(fields, "ZIP содержит личные фотографии в открытом виде. Храни файл в безопасном месте. Дневник и Google-копия не изменяются.", 13, MUTED)
+    var export_button = _button(fields, "Сохранить ZIP галереи", func():
+        sheet["root"].queue_free()
+        _pick_progress_backup(true)
+    )
+    export_button.name = "ProgressBackupExport"
+    export_button.disabled = progress_photos.list().is_empty() or progress_backup_pending
+    var import_button = _button(fields, "Восстановить из ZIP", func():
+        sheet["root"].queue_free()
+        _pick_progress_backup(false)
+    , true)
+    import_button.name = "ProgressBackupImport"
+    import_button.disabled = progress_backup_pending
+    _label(fields, "Снимки с одинаковым идентификатором не дублируются. Имеющиеся фотографии не удаляются.", 12, MUTED)
+    sheet["confirm"].pressed.connect(func(): sheet["root"].queue_free())
+
+func _pick_progress_backup(exporting: bool) -> void:
+    if progress_backup_pending or progress_photos == null or progress_photos.folder.is_empty():
+        return
+    if progress_photo_plugin != null:
+        progress_backup_pending = true
+        if exporting:
+            var path: String = progress_photos.folder.path_join("transfer.zip")
+            if not progress_photos.export_backup(path):
+                progress_backup_pending = false
+                _message("Не удалось подготовить копию фотографий.")
+                return
+        progress_photo_plugin.pickBackup(exporting)
+        return
+    if OS.has_feature("android"):
+        _message("Системный выбор файла недоступен.")
+        return
+    var picker = FileDialog.new()
+    picker.use_native_dialog = true
+    picker.access = FileDialog.ACCESS_FILESYSTEM
+    picker.file_mode = FileDialog.FILE_MODE_SAVE_FILE if exporting else FileDialog.FILE_MODE_OPEN_FILE
+    picker.filters = PackedStringArray(["*.zip;Копия галереи;application/zip"])
+    if exporting:
+        picker.current_file = "MyBalance-Photos-" + Time.get_date_string_from_system() + ".zip"
+    add_child(picker)
+    progress_backup_pending = true
+    picker.file_selected.connect(func(path: String):
+        progress_backup_pending = false
+        picker.queue_free()
+        if exporting:
+            if progress_photos.export_backup(path):
+                _notify_saved("Копия фотографий сохранена")
+            else:
+                _message("Не удалось сохранить копию фотографий.")
+        else:
+            _restore_progress_backup(path)
+    )
+    picker.canceled.connect(func(): progress_backup_pending = false; picker.queue_free())
+    picker.popup_file_dialog()
+
+func _restore_progress_backup(path: String) -> void:
+    var count: int = progress_photos.import_backup(path)
+    if count < 0:
+        _message("Копия повреждена, несовместима или превышен лимит галереи. Старые фото сохранены.")
+    else:
+        _render()
+        _notify_saved("Добавлено снимков: " + str(count))
+
+func _on_progress_backup_result(status: String) -> void:
+    progress_backup_pending = false
+    var path: String = progress_photos.folder.path_join("transfer.zip")
+    if status == "imported":
+        _restore_progress_backup(path)
+    elif status == "exported":
+        _notify_saved("Копия фотографий сохранена")
+    elif status != "cancelled":
+        _message("Не удалось выполнить операцию с копией фотографий.")
+    if FileAccess.file_exists(path):
+        DirAccess.remove_absolute(path)
 
 func _pick_progress_photo(camera: bool) -> void:
     if progress_photo_pending or progress_photos == null or progress_photos.folder.is_empty():
@@ -7443,7 +7525,7 @@ func _show_body_measurements() -> void:
     _date_nav(edit_card)
     if calendar_expanded:
         _calendar(edit_card)
-    _label(edit_card, "Указывай только то, что измерила. Пустые поля не заполняются автоматически.", 12, MUTED)
+    _label(edit_card, "Указывай только измеренные параметры. Пустые поля не заполняются автоматически.", 12, MUTED)
     var current: Dictionary = store.body_measurements_on(date)
     var fields: Dictionary = {}
     var grid = GridContainer.new()
@@ -7463,6 +7545,7 @@ func _show_body_measurements() -> void:
         var entry = _text_input(holder, "Не указано")
         entry.name = "BodyField_" + key
         entry.max_length = 8
+        entry.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER_DECIMAL
         entry.custom_minimum_size = Vector2(85, 44)
         if current.has(key):
             entry.text = str(snappedf(float(current[key]), 0.1))

@@ -156,3 +156,177 @@ func remove(id: String) -> bool:
         return false
     records = records.filter(func(record): return record["id"]!=id)
     return true
+
+# The exported gallery is deliberately separate from the food diary.
+const BACKUP_LIMIT = 112000000
+const BACKUP_MANIFEST = "mybalance-progress-v1"
+
+static func valid_payload(value: Variant) -> bool:
+    if not valid_meta(value) or not value.get("jpeg") is String:
+        return false
+    if value["jpeg"].length() > MAX_BYTES * 2:
+        return false
+    var bytes = Marshalls.base64_to_raw(value["jpeg"])
+    if bytes.is_empty() or bytes.size() > MAX_BYTES:
+        return false
+    var img = Image.new()
+    if img.load_jpg_from_buffer(bytes) != OK or img.is_empty():
+        return false
+    return mini(img.get_width(), img.get_height()) >= 16 and maxi(img.get_width(), img.get_height()) <= MAX_SIDE
+
+func export_backup(path: String) -> bool:
+    if folder.is_empty() or records.is_empty():
+        return false
+    var zip = ZIPPacker.new()
+    if zip.open(path) != OK:
+        return false
+    var ok: bool = zip.start_file("manifest.txt") == OK
+    if ok:
+        ok = zip.write_file(BACKUP_MANIFEST.to_utf8_buffer()) == OK
+        ok = zip.close_file() == OK and ok
+    for meta in records:
+        if not ok:
+            break
+        var payload = _read(str(meta["id"]))
+        if not valid_payload(payload):
+            ok = false
+            break
+        if zip.start_file(str(meta["id"]) + ".json") != OK:
+            ok = false
+            break
+        ok = zip.write_file(JSON.stringify(payload).to_utf8_buffer()) == OK
+        ok = zip.close_file() == OK and ok
+    ok = zip.close() == OK and ok
+    if not ok:
+        DirAccess.remove_absolute(path)
+    return ok
+
+# Validate and stage each record before publishing anything. Duplicate IDs
+# are skipped, never overwritten; a full gallery rejects the whole import.
+func import_backup(path: String) -> int:
+    if folder.is_empty():
+        return -1
+    var f = FileAccess.open(path, FileAccess.READ)
+    if f == null:
+        return -1
+    var length = f.get_length()
+    f.close()
+    if length <= 0 or length > BACKUP_LIMIT:
+        return -1
+    var zip = ZIPReader.new()
+    if zip.open(path) != OK:
+        return -1
+    var names = zip.get_files()
+    var ok: bool = names.size() <= MAX_PHOTOS + 1 and names.has("manifest.txt")
+    # Limit decompressed entry sizes using the ZIP central directory before read_file.
+    if ok:
+        ok = _safe_zip_sizes(path, names.size())
+    if ok:
+        ok = zip.read_file("manifest.txt").get_string_from_utf8() == BACKUP_MANIFEST
+    var staged: Array[String] = []
+    var seen: Dictionary = {}
+    for filename in names:
+        if not ok:
+            break
+        if seen.has(filename):
+            ok = false
+            break
+        seen[filename] = true
+        if filename == "manifest.txt":
+            continue
+        var id: String = filename.trim_suffix(".json")
+        if not filename.ends_with(".json") or not valid_id(id):
+            ok = false
+            break
+        var raw = zip.read_file(filename)
+        if raw.size() > MAX_BYTES * 2:
+            ok = false
+            break
+        var value = JSON.parse_string(raw.get_string_from_utf8())
+        if not valid_payload(value) or value["id"] != id:
+            ok = false
+            break
+        if FileAccess.file_exists(_path(id)):
+            continue
+        if records.size() + staged.size() >= MAX_PHOTOS:
+            ok = false
+            break
+        var temp = folder.path_join(id + ".tmp")
+        var out = FileAccess.open(temp, FileAccess.WRITE)
+        if out == null:
+            ok = false
+            break
+        staged.append(id)
+        out.store_buffer(raw)
+        out.flush()
+        var status = out.get_error()
+        out.close()
+        if status != OK:
+            ok = false
+            break
+    zip.close()
+    var published: Array[String] = []
+    if ok:
+        for id in staged:
+            if FileAccess.file_exists(_path(id)) or DirAccess.rename_absolute(folder.path_join(id + ".tmp"), _path(id)) != OK:
+                ok = false
+                break
+            published.append(id)
+    if not ok:
+        for id in published:
+            DirAccess.remove_absolute(_path(id))
+    for id in staged:
+        var temp = folder.path_join(id + ".tmp")
+        if FileAccess.file_exists(temp):
+            DirAccess.remove_absolute(temp)
+    reload()
+    return published.size() if ok else -1
+
+# Accept only ordinary bounded ZIP archives, not ZIP64, encrypted or split
+# archives. Validate declared uncompressed sizes before calling ZIPReader.
+static func _safe_zip_sizes(path: String, expected: int) -> bool:
+    var f = FileAccess.open(path, FileAccess.READ)
+    if f == null:
+        return false
+    var length = f.get_length()
+    if length < 22:
+        f.close()
+        return false
+    # Our own ZIPPacker writes no archive comment.
+    f.seek(length - 22)
+    if f.get_32() != 0x06054b50 or f.get_16() != 0 or f.get_16() != 0:
+        f.close()
+        return false
+    var disk_count = f.get_16()
+    var total_count = f.get_16()
+    var central_size = f.get_32()
+    var offset = f.get_32()
+    var comment = f.get_16()
+    if comment != 0 or total_count != expected or disk_count != total_count or offset + central_size != length - 22:
+        f.close()
+        return false
+    f.seek(offset)
+    var total = 0
+    for i in range(total_count):
+        var start = f.get_position()
+        if start + 46 > length - 22 or f.get_32() != 0x02014b50:
+            f.close()
+            return false
+        f.seek(start + 8)
+        var flags = f.get_16()
+        var method = f.get_16()
+        f.seek(start + 20)
+        var packed = f.get_32()
+        var unpacked = f.get_32()
+        var name_len = f.get_16()
+        var extra_len = f.get_16()
+        var comment_len = f.get_16()
+        total += unpacked
+        var next = start + 46 + name_len + extra_len + comment_len
+        if (flags & 1) != 0 or method not in [0, 8] or packed > BACKUP_LIMIT or unpacked > MAX_BYTES * 2 or total > BACKUP_LIMIT or next > length - 22:
+            f.close()
+            return false
+        f.seek(next)
+    var ok = f.get_position() == length - 22
+    f.close()
+    return ok

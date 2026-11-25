@@ -25,6 +25,33 @@ func _run() -> void:
     if texture==null or texture.get_width()!=1440 or texture.get_height()!=720 or restored.texture(a,true).get_width()!=420:
         _fail("aspect ratio and size limits")
         return
+    var archive = folder.path_join("gallery.zip")
+    var target_folder = folder + "_restored"
+    var target = Photos.new(target_folder)
+    if not restored.export_backup(archive) or target.import_backup(archive) != 2 or target.import_backup(archive) != 0:
+        _fail("backup export, merge and duplicate prevention")
+        return
+    if target.list() != restored.list() or target.texture(a) == null:
+        _fail("backup metadata or image mismatch")
+        return
+    var bad = folder.path_join("invalid.zip")
+    var pack = ZIPPacker.new()
+    pack.open(bad)
+    pack.start_file("manifest.txt")
+    pack.write_file(Photos.BACKUP_MANIFEST.to_utf8_buffer())
+    pack.close_file()
+    pack.start_file("invalid.json")
+    pack.write_file("{}".to_utf8_buffer())
+    pack.close_file()
+    pack.close()
+    if target.import_backup(bad) != -1 or target.list().size() != 2:
+        _fail("invalid archive changed existing gallery")
+        return
+    target.remove(a)
+    target.remove(b)
+    DirAccess.remove_absolute(target_folder)
+    DirAccess.remove_absolute(archive)
+    DirAccess.remove_absolute(bad)
     var app = load("res://main.tscn").instantiate()
     root.add_child(app)
     await process_frame
@@ -35,6 +62,9 @@ func _run() -> void:
     await process_frame
     if app.find_child("ProgressPhotoGrid",true,false)==null or app.store.export_json().contains(a) or app.store.export_json().contains("jpeg"):
         _fail("gallery missing or private data in diary")
+        return
+    if app.find_child("ProgressPhotoBackup",true,false) == null:
+        _fail("photo backup button missing")
         return
     (app.find_child("ProgressPhotoCompare",true,false) as Button).pressed.emit()
     await process_frame

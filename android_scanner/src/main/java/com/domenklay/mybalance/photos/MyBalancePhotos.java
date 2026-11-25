@@ -20,13 +20,18 @@ import org.godotengine.godot.plugin.UsedByGodot;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MyBalancePhotos extends GodotPlugin {
-    private static final int CAMERA=19352, GALLERY=19353;
+    private static final int CAMERA=19352, GALLERY=19353, EXPORT_BACKUP=19354, IMPORT_BACKUP=19355;
+    private static final long BACKUP_LIMIT=112000000L;
+    private static final SignalInfo BACKUP=new SignalInfo("progress_backup_result",String.class);
     private static final SignalInfo PHOTO=new SignalInfo("progress_photo",String.class);
     private static final SignalInfo ERROR=new SignalInfo("progress_photo_error",String.class);
     private static final SignalInfo CANCEL=new SignalInfo("progress_photo_cancelled");
@@ -35,7 +40,7 @@ public final class MyBalancePhotos extends GodotPlugin {
     private Uri captureUri;
     public MyBalancePhotos(Godot godot){super(godot);}
     @Override public String getPluginName(){return "MyBalancePhotos";}
-    @Override public Set<SignalInfo> getPluginSignals(){return new HashSet<>(Arrays.asList(PHOTO,ERROR,CANCEL));}
+    @Override public Set<SignalInfo> getPluginSignals(){return new HashSet<>(Arrays.asList(PHOTO,ERROR,CANCEL,BACKUP));}
     @UsedByGodot public String privateFolder(){
         Activity a=getActivity();
         return a==null?"":new File(a.getNoBackupFilesDir(),"progress_photos_v1").getAbsolutePath();
@@ -71,7 +76,61 @@ public final class MyBalancePhotos extends GodotPlugin {
         if(capture!=null)capture.delete();
         capture=null;captureUri=null;
     }
+    @UsedByGodot public void pickBackup(boolean exporting){
+        Activity a=getActivity();
+        if(a==null||!busy.compareAndSet(false,true)){emitSignal(BACKUP.getName(),"error");return;}
+        a.runOnUiThread(()->{
+            try{
+                Intent intent=new Intent(exporting?Intent.ACTION_CREATE_DOCUMENT:Intent.ACTION_OPEN_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType(exporting?"application/zip":"*/*");
+                if(exporting)intent.putExtra(Intent.EXTRA_TITLE,"MyBalance-Photos-"+new java.text.SimpleDateFormat("yyyy-MM-dd",java.util.Locale.ROOT).format(new java.util.Date())+".zip");
+                a.startActivityForResult(intent,exporting?EXPORT_BACKUP:IMPORT_BACKUP);
+            }catch(Exception e){busy.set(false);emitSignal(BACKUP.getName(),"error");}
+        });
+    }
+    private void backupResult(int code,int result,Intent data){
+        Activity a=getActivity();
+        if(a==null){busy.set(false);return;}
+        Uri uri=data==null?null:data.getData();
+        if(result!=Activity.RESULT_OK||uri==null){busy.set(false);emitSignal(BACKUP.getName(),"cancelled");return;}
+        new Thread(()->{
+            String status="error";
+            File path=new File(privateFolder(),"transfer.zip");
+            try{
+                if(code==EXPORT_BACKUP){
+                    if(!path.isFile()||path.length()>BACKUP_LIMIT)throw new IllegalStateException();
+                    try(InputStream in=new FileInputStream(path);OutputStream out=a.getContentResolver().openOutputStream(uri,"wt")){
+                        copyBounded(in,out);
+                    }
+                    status="exported";
+                }else{
+                    try(InputStream in=a.getContentResolver().openInputStream(uri);OutputStream out=new FileOutputStream(path)){
+                        copyBounded(in,out);
+                    }
+                    status="imported";
+                }
+            }catch(Exception e){path.delete();}
+            finally{busy.set(false);}
+            final String output=status;
+            a.runOnUiThread(()->emitSignal(BACKUP.getName(),output));
+        },"MyBalancePhotoBackup").start();
+    }
+    private static void copyBounded(InputStream in,OutputStream out)throws java.io.IOException{
+        if(in==null||out==null)throw new java.io.IOException("Stream unavailable");
+        byte[] buffer=new byte[65536];
+        long total=0;
+        int count;
+        while((count=in.read(buffer))!=-1){
+            total+=count;
+            if(total>BACKUP_LIMIT)throw new java.io.IOException("Backup too large");
+            out.write(buffer,0,count);
+        }
+        out.flush();
+        if(total==0)throw new java.io.IOException("Empty backup");
+    }
     @Override public void onMainActivityResult(int code,int result,Intent data){
+        if(code==EXPORT_BACKUP||code==IMPORT_BACKUP){backupResult(code,result,data);return;}
         if(code!=CAMERA&&code!=GALLERY)return;
         Activity a=getActivity();
         if(a==null){busy.set(false);return;}
