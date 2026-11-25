@@ -3197,7 +3197,11 @@ func _show_ready_recipes() -> void:
                 continue
             var matches = true
             for word in words:
-                if not str(item["terms"]).contains(word):
+                # Common Russian ingredient aliases, without arbitrary fuzzy matches.
+                var term: String = word
+                if term in ["курица", "курицей", "курицу", "курицы"]:
+                    term = "кур"
+                if not str(item["terms"]).contains(term):
                     matches = false
                     break
             if matches:
